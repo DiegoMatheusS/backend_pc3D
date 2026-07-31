@@ -32,6 +32,24 @@ enum CategoriaHardware {
   MICROFONE
 }
 
+enum TipoMemoria {
+  DDR3
+  DDR4
+  DDR5
+}
+
+enum FormatoMemoria {
+  DIMM
+  SO_DIMM
+}
+
+enum FormatoPlacaMae {
+  E_ATX
+  ATX
+  MICRO_ATX
+  MINI_ITX
+}
+
 model Usuario {
   id           Int          @id @default(autoincrement())
   nome         String       @db.VarChar(150)
@@ -63,22 +81,124 @@ model Sessao {
 }
 
 model Hardware {
-  id             Int               @id @default(autoincrement())
-  nome           String            @db.VarChar(200)
-  slug           String            @unique @db.VarChar(220)
-  categoria      CategoriaHardware
-  marca          String            @db.VarChar(100)
-  modelo         String            @db.VarChar(150)
-  descricao      String?           @db.Text
-  imagemUrl      String?           @map("imagem_url") @db.VarChar(500)
-  especificacoes Json?
-  publicado      Boolean           @default(false)
-  ativo          Boolean           @default(true)
-  criadoEm       DateTime          @default(now()) @map("criado_em") @db.Timestamptz(3)
-  atualizadoEm   DateTime          @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+  id                       Int                       @id @default(autoincrement())
+  nome                     String                    @db.VarChar(200)
+  slug                     String                    @unique @db.VarChar(220)
+  categoria                CategoriaHardware
+  marca                    String                    @db.VarChar(100)
+  modelo                   String                    @db.VarChar(150)
+  descricao                String?                   @db.Text
+  imagemUrl                String?                   @map("imagem_url") @db.VarChar(500)
+  especificacoes           Json?
+  publicado                Boolean                   @default(false)
+  ativo                    Boolean                   @default(true)
+  criadoEm                 DateTime                  @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm             DateTime                  @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+  especificacaoProcessador EspecificacaoProcessador?
+  especificacaoPlacaMae    EspecificacaoPlacaMae?
+  especificacaoMemoriaRam  EspecificacaoMemoriaRam?
+
+  compatibilidadesComoPlacaMae CompatibilidadeCpuPlacaMae[] @relation("PlacaMaeCpuCompatibilidade")
+
+  compatibilidadesComoProcessador CompatibilidadeCpuPlacaMae[] @relation("ProcessadorPlacaMaeCompatibilidade")
 
   @@index([categoria])
   @@index([marca])
   @@index([ativo, publicado])
   @@map("hardwares")
+}
+
+model EspecificacaoProcessador {
+  id                         Int           @id @default(autoincrement())
+  hardwareId                 Int           @unique @map("hardware_id")
+  socket                     String        @db.VarChar(50)
+  familia                    String?       @db.VarChar(100)
+  linha                      String?       @db.VarChar(100)
+  geracao                    String?       @db.VarChar(100)
+  arquitetura                String?       @db.VarChar(100)
+  nucleos                    Int?
+  threads                    Int?
+  frequenciaBaseMhz          Int?          @map("frequencia_base_mhz")
+  frequenciaTurboMhz         Int?          @map("frequencia_turbo_mhz")
+  tdpWatts                   Int?          @map("tdp_watts")
+  possuiVideoIntegrado       Boolean       @default(false) @map("possui_video_integrado")
+  modeloVideoIntegrado       String?       @map("modelo_video_integrado") @db.VarChar(150)
+  tiposMemoriaSuportados     TipoMemoria[] @map("tipos_memoria_suportados")
+  frequenciaMemoriaMaximaMhz Int?          @map("frequencia_memoria_maxima_mhz")
+  capacidadeMemoriaMaximaGb  Int?          @map("capacidade_memoria_maxima_gb")
+  canaisMemoria              Int?          @map("canais_memoria")
+  suportaEcc                 Boolean       @default(false) @map("suporta_ecc")
+
+  hardware Hardware @relation(fields: [hardwareId], references: [id], onDelete: Cascade)
+
+  @@map("especificacoes_processadores")
+}
+
+model EspecificacaoPlacaMae {
+  id                             Int             @id @default(autoincrement())
+  hardwareId                     Int             @unique @map("hardware_id")
+  socket                         String          @db.VarChar(50)
+  chipset                        String          @db.VarChar(100)
+  formato                        FormatoPlacaMae
+  revisao                        String?         @db.VarChar(50)
+  biosInicial                    String?         @map("bios_inicial") @db.VarChar(50)
+  tiposMemoriaSuportados         TipoMemoria[]   @map("tipos_memoria_suportados")
+  frequenciasMemoriaJedecMhz     Int[]           @map("frequencias_memoria_jedec_mhz")
+  frequenciasMemoriaOverclockMhz Int[]           @map("frequencias_memoria_overclock_mhz")
+  slotsMemoria                   Int             @map("slots_memoria")
+  capacidadeMaximaMemoriaGb      Int?            @map("capacidade_maxima_memoria_gb")
+  capacidadeMaximaPorSlotGb      Int?            @map("capacidade_maxima_por_slot_gb")
+  suportaXmp                     Boolean         @default(false) @map("suporta_xmp")
+  suportaExpo                    Boolean         @default(false) @map("suporta_expo")
+  suportaEcc                     Boolean         @default(false) @map("suporta_ecc")
+  saidasVideo                    String[]        @map("saidas_video")
+
+  hardware Hardware @relation(fields: [hardwareId], references: [id], onDelete: Cascade)
+
+  @@map("especificacoes_placas_mae")
+}
+
+model EspecificacaoMemoriaRam {
+  id                    Int            @id @default(autoincrement())
+  hardwareId            Int            @unique @map("hardware_id")
+  tipo                  TipoMemoria
+  formato               FormatoMemoria
+  capacidadePorModuloGb Int            @map("capacidade_por_modulo_gb")
+  quantidadeModulos     Int            @default(1) @map("quantidade_modulos")
+  frequenciaMhz         Int            @map("frequencia_mhz")
+  frequenciaJedecMhz    Int?           @map("frequencia_jedec_mhz")
+  latenciaCl            Int?           @map("latencia_cl")
+  tensaoVolts           Float?         @map("tensao_volts")
+  ecc                   Boolean        @default(false)
+  registrada            Boolean        @default(false)
+  suportaXmp            Boolean        @default(false) @map("suporta_xmp")
+  suportaExpo           Boolean        @default(false) @map("suporta_expo")
+  alturaMm              Float?         @map("altura_mm")
+
+  hardware Hardware @relation(fields: [hardwareId], references: [id], onDelete: Cascade)
+
+  @@map("especificacoes_memorias_ram")
+}
+
+model CompatibilidadeCpuPlacaMae {
+  id              Int       @id @default(autoincrement())
+  placaMaeId      Int       @map("placa_mae_id")
+  processadorId   Int       @map("processador_id")
+  revisaoPlacaMae String?   @map("revisao_placa_mae") @db.VarChar(50)
+  biosMinima      String?   @map("bios_minima") @db.VarChar(50)
+  compativel      Boolean   @default(true)
+  observacao      String?   @db.Text
+  fonteUrl        String?   @map("fonte_url") @db.VarChar(500)
+  verificadoEm    DateTime? @map("verificado_em") @db.Timestamptz(3)
+  criadoEm        DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm    DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  placaMae Hardware @relation("PlacaMaeCpuCompatibilidade", fields: [placaMaeId], references: [id], onDelete: Cascade)
+
+  processador Hardware @relation("ProcessadorPlacaMaeCompatibilidade", fields: [processadorId], references: [id], onDelete: Cascade)
+
+  @@unique([placaMaeId, processadorId, revisaoPlacaMae])
+  @@index([placaMaeId])
+  @@index([processadorId])
+  @@map("compatibilidades_cpu_placa_mae")
 }
