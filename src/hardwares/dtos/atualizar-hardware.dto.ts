@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -6,8 +7,18 @@ import {
   IsString,
   MaxLength,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 import { CategoriaHardware } from '../../generated/prisma/enums';
+import { CriarEspecificacaoArmazenamentoDto } from './especificacoes/criar-especificacao-armazenamento.dto';
+import { CriarEspecificacaoCoolerDto } from './especificacoes/criar-especificacao-cooler.dto';
+import { CriarEspecificacaoFonteDto } from './especificacoes/criar-especificacao-fonte.dto';
+import { CriarEspecificacaoGabineteDto } from './especificacoes/criar-especificacao-gabinete.dto';
+import { CriarEspecificacaoMemoriaRamDto } from './especificacoes/criar-especificacao-memoria-ram.dto';
+import { CriarEspecificacaoPlacaMaeDto } from './especificacoes/criar-especificacao-placa-mae.dto';
+import { CriarEspecificacaoPlacaVideoDto } from './especificacoes/criar-especificacao-placa-video.dto';
+import { CriarEspecificacaoProcessadorDto } from './especificacoes/criar-especificacao-processador.dto';
+import { CriarEspecificacaoVentoinhaDto } from './especificacoes/criar-especificacao-ventoinha.dto';
 
 export class AtualizarHardwareDto {
   @IsOptional()
@@ -69,9 +80,54 @@ export class AtualizarHardwareDto {
 
   @IsOptional()
   @IsObject({
-    message: 'As especificações devem ser um objeto.',
+    message: 'As especificações adicionais devem ser um objeto.',
   })
   especificacoes?: Record<string, unknown>;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoProcessadorDto)
+  especificacaoProcessador?: CriarEspecificacaoProcessadorDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoPlacaMaeDto)
+  especificacaoPlacaMae?: CriarEspecificacaoPlacaMaeDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoMemoriaRamDto)
+  especificacaoMemoriaRam?: CriarEspecificacaoMemoriaRamDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoGabineteDto)
+  especificacaoGabinete?: CriarEspecificacaoGabineteDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoFonteDto)
+  especificacaoFonte?: CriarEspecificacaoFonteDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoPlacaVideoDto)
+  especificacaoPlacaVideo?: CriarEspecificacaoPlacaVideoDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoCoolerDto)
+  especificacaoCooler?: CriarEspecificacaoCoolerDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoVentoinhaDto)
+  especificacaoVentoinha?: CriarEspecificacaoVentoinhaDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoArmazenamentoDto)
+  especificacaoArmazenamento?: CriarEspecificacaoArmazenamentoDto;
 
   @IsOptional()
   @IsBoolean({
