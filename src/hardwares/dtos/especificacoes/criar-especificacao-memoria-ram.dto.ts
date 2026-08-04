@@ -66,4 +66,13 @@ export class CriarEspecificacaoMemoriaRamDto {
   @IsNumber()
   @Min(0)
   alturaMm?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  rgb?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  consumoWatts?: number;
 }

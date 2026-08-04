@@ -15,6 +15,36 @@ enum PapelUsuario {
   USUARIO
 }
 
+enum GrupoCategoriaProduto {
+  COMPUTADORES
+  COMPONENTES
+  PERIFERICOS
+  SETUP
+  ACESSORIOS
+}
+
+enum TipoProduto {
+  HARDWARE
+  NOTEBOOK
+  BUILD
+  GENERICO
+}
+
+enum StatusAvaliacao {
+  PUBLICADA
+  OCULTA
+  EM_ANALISE
+  REMOVIDA
+}
+
+enum OrigemDadoProduto {
+  FABRICANTE
+  API_PARCEIRO
+  LOJA
+  IA_INTERPRETADA
+  MANUAL
+}
+
 enum CategoriaHardware {
   PROCESSADOR
   COOLER
@@ -141,6 +171,61 @@ enum StatusImportacao {
   FALHOU
 }
 
+enum AcaoAuditoria {
+  // Hardware
+  HARDWARE_CRIADO
+  HARDWARE_ATUALIZADO
+  HARDWARE_PUBLICADO
+  HARDWARE_DESPUBLICADO
+  HARDWARE_REMOVIDO
+  HARDWARE_REMOVIDO_PERMANENTEMENTE
+
+  // Modelo 3D
+  MODELO_3D_CRIADO
+  MODELO_3D_APROVADO
+  MODELO_3D_DESATIVADO
+
+  // Compatibilidade
+  COMPATIBILIDADE_CRIADA
+  COMPATIBILIDADE_REMOVIDA
+
+  // Usuário
+  USUARIO_CRIADO
+  USUARIO_ATUALIZADO
+  USUARIO_DESATIVADO
+  SENHA_REDEFINIDA_ADMIN
+
+  // Oferta / Parceiro
+  PARCEIRO_CRIADO
+  PARCEIRO_ATUALIZADO
+  OFERTA_CRIADA
+  OFERTA_ATUALIZADA
+  OFERTA_REMOVIDA
+
+  // Montagem
+  MONTAGEM_CRIADA
+  MONTAGEM_ATUALIZADA
+  MONTAGEM_REMOVIDA
+
+  // Catálogo / Loja
+  PRODUTO_CRIADO
+  PRODUTO_ATUALIZADO
+  PRODUTO_PUBLICADO
+  PRODUTO_REMOVIDO
+  CATEGORIA_PRODUTO_CRIADA
+  CATEGORIA_PRODUTO_ATUALIZADA
+  NOTEBOOK_CRIADO
+  NOTEBOOK_ATUALIZADO
+  NOTEBOOK_REMOVIDO
+  BUILD_CRIADA
+  BUILD_ATUALIZADA
+  BUILD_REMOVIDA
+  AVALIACAO_MODERADA
+  IMPORTACAO_PRODUTO_CRIADA
+  IMPORTACAO_PRODUTO_REVISADA
+  IA_ADMIN_UTILIZADA
+}
+
 model Usuario {
   id                   Int                  @id @default(autoincrement())
   nome                 String               @db.VarChar(150)
@@ -150,9 +235,13 @@ model Usuario {
   ativo                Boolean              @default(true)
   criadoEm             DateTime             @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm         DateTime             @updatedAt @map("atualizado_em") @db.Timestamptz(3)
-  importacoesRevisadas ImportacaoHardware[] @relation("ImportacoesRevisadas")
+  importacoesRevisadas         ImportacaoHardware[] @relation("ImportacoesRevisadas")
+  importacoesProdutosRevisadas ImportacaoProduto[]  @relation("ImportacoesProdutosRevisadas")
 
-  sessoes Sessao[]
+  sessoes       Sessao[]
+  montagens     Montagem[]
+  logsAuditoria AuditoriaLog[]
+  avaliacoes    Avaliacao[]
 
   @@map("usuarios")
 }
@@ -174,6 +263,7 @@ model Sessao {
 
 model Hardware {
   id                         Int                         @id @default(autoincrement())
+  produtoId                  Int?                        @unique @map("produto_id")
   nome                       String                      @db.VarChar(200)
   slug                       String                      @unique @db.VarChar(220)
   categoria                  CategoriaHardware
@@ -199,6 +289,15 @@ model Hardware {
   pontosEncaixe              PontoEncaixeHardware[]
   ajustesComoHardwareFilho   AjusteEncaixeHardware[]
   importacoes                ImportacaoHardware[]
+  produto                    Produto?                    @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+
+  montagensComoGabinete    Montagem[] @relation("MontagemGabinete")
+  montagensComoFonte       Montagem[] @relation("MontagemFonte")
+  montagensComoCooler      Montagem[] @relation("MontagemCooler")
+  itensMontagem            ItemMontagem[] @relation("ItensMontagem")
+  ventoinhasConfigMontagem VentoinhaConfigMontagem[] @relation("VentoinhasConfigMontagem")
+  ofertas                  Oferta[]
+  buildsComponentes        BuildComponente[]
 
   compatibilidadesComoPlacaMae CompatibilidadeCpuPlacaMae[] @relation("PlacaMaeCpuCompatibilidade")
 
@@ -222,10 +321,13 @@ model EspecificacaoProcessador {
   linha                      String?       @db.VarChar(100)
   geracao                    String?       @db.VarChar(100)
   arquitetura                String?       @db.VarChar(100)
+  litografiaNm               Float?        @map("litografia_nm")
   nucleos                    Int?
   threads                    Int?
   frequenciaBaseMhz          Int?          @map("frequencia_base_mhz")
   frequenciaTurboMhz         Int?          @map("frequencia_turbo_mhz")
+  cacheL2Mb                  Float?        @map("cache_l2_mb")
+  cacheL3Mb                  Float?        @map("cache_l3_mb")
   tdpWatts                   Int?          @map("tdp_watts")
   possuiVideoIntegrado       Boolean       @default(false) @map("possui_video_integrado")
   modeloVideoIntegrado       String?       @map("modelo_video_integrado") @db.VarChar(150)
@@ -234,6 +336,13 @@ model EspecificacaoProcessador {
   capacidadeMemoriaMaximaGb  Int?          @map("capacidade_memoria_maxima_gb")
   canaisMemoria              Int?          @map("canais_memoria")
   suportaEcc                 Boolean       @default(false) @map("suporta_ecc")
+  temperaturaMaximaC         Float?        @map("temperatura_maxima_c")
+  versaoPcie                 String?       @map("versao_pcie") @db.VarChar(20)
+  lanesPcie                  Int?          @map("lanes_pcie")
+  coolerIncluso              Boolean       @default(false) @map("cooler_incluso")
+  multiplicadorDesbloqueado  Boolean       @default(false) @map("multiplicador_desbloqueado")
+  suporteOverclock           Boolean       @default(false) @map("suporte_overclock")
+  dataLancamento             DateTime?     @map("data_lancamento") @db.Date
 
   hardware Hardware @relation(fields: [hardwareId], references: [id], onDelete: Cascade)
 
@@ -259,6 +368,12 @@ model EspecificacaoPlacaMae {
   suportaEcc                     Boolean         @default(false) @map("suporta_ecc")
   saidasVideo                    String[]        @map("saidas_video")
   portasSata                     Int             @default(0) @map("portas_sata")
+  versaoPcie                     String?         @map("versao_pcie") @db.VarChar(20)
+  wifi                           Boolean         @default(false)
+  bluetooth                      Boolean         @default(false)
+  ethernet                       String?         @db.VarChar(100)
+  biosFlashback                  Boolean         @default(false) @map("bios_flashback")
+  biosMinima                     String?         @map("bios_minima") @db.VarChar(50)
 
   slotsM2  SlotM2PlacaMae[]
   hardware Hardware         @relation(fields: [hardwareId], references: [id], onDelete: Cascade)
@@ -282,6 +397,8 @@ model EspecificacaoMemoriaRam {
   suportaXmp            Boolean        @default(false) @map("suporta_xmp")
   suportaExpo           Boolean        @default(false) @map("suporta_expo")
   alturaMm              Float?         @map("altura_mm")
+  rgb                   Boolean        @default(false)
+  consumoWatts          Float?         @map("consumo_watts")
 
   hardware Hardware @relation(fields: [hardwareId], references: [id], onDelete: Cascade)
 
@@ -348,8 +465,13 @@ model EspecificacaoPlacaVideo {
   id                            Int      @id @default(autoincrement())
   hardwareId                    Int      @unique @map("hardware_id")
   chipset                       String?  @db.VarChar(150)
+  gpu                           String?  @db.VarChar(150)
+  arquitetura                   String?  @db.VarChar(100)
   memoriaVideoGb                Int?     @map("memoria_video_gb")
   tipoMemoriaVideo              String?  @map("tipo_memoria_video") @db.VarChar(50)
+  barramentoBits                Int?     @map("barramento_bits")
+  clockBaseMhz                  Int?     @map("clock_base_mhz")
+  clockBoostMhz                 Int?     @map("clock_boost_mhz")
   geracaoPcie                   Int?     @map("geracao_pcie")
   larguraPcie                   Int?     @map("largura_pcie")
   comprimentoMm                 Float    @map("comprimento_mm")
@@ -363,6 +485,8 @@ model EspecificacaoPlacaVideo {
   conectores12vhpwr             Int      @default(0) @map("conectores_12vhpwr")
   conectores12v2x6              Int      @default(0) @map("conectores_12v_2x6")
   saidasVideo                   String[] @default([]) @map("saidas_video")
+  hdmi                          Int      @default(0)
+  displayPort                   Int      @default(0) @map("display_port")
 
   hardware Hardware @relation(fields: [hardwareId], references: [id], onDelete: Cascade)
 
@@ -387,6 +511,7 @@ model EspecificacaoCooler {
   comprimentoMangueirasMm Float?     @map("comprimento_mangueiras_mm")
   conectorBomba           String?    @map("conector_bomba") @db.VarChar(50)
   consumoBombaWatts       Float?     @map("consumo_bomba_watts")
+  consumoWatts            Float?     @map("consumo_watts")
   rgb                     Boolean    @default(false)
   argb                    Boolean    @default(false)
 
@@ -505,6 +630,7 @@ model Modelo3DHardware {
   alturaRealMm       Float?          @map("altura_real_mm")
   larguraRealMm      Float?          @map("largura_real_mm")
   profundidadeRealMm Float?          @map("profundidade_real_mm")
+  tamanhoBytes       Int?            @map("tamanho_bytes")
   posicaoCorrecaoX   Float           @default(0) @map("posicao_correcao_x")
   posicaoCorrecaoY   Float           @default(0) @map("posicao_correcao_y")
   posicaoCorrecaoZ   Float           @default(0) @map("posicao_correcao_z")
@@ -548,6 +674,7 @@ model PontoEncaixeHardware {
   criadoEm           DateTime                @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm       DateTime                @updatedAt @map("atualizado_em") @db.Timestamptz(3)
   ajustesEspecificos AjusteEncaixeHardware[]
+  itensMontagem      ItemMontagem[]
 
   hardwarePai Hardware @relation(fields: [hardwarePaiId], references: [id], onDelete: Cascade)
 
@@ -673,4 +800,448 @@ model SlotM2PlacaMae {
 
   @@unique([especificacaoPlacaMaeId, codigo])
   @@map("slots_m2_placas_mae")
+}
+
+enum StatusMontagem {
+  RASCUNHO
+  PUBLICADA
+  ARQUIVADA
+}
+
+model Montagem {
+  id          Int            @id @default(autoincrement())
+  usuarioId   Int            @map("usuario_id")
+  gabineteId  Int            @map("gabinete_id")
+  fonteId     Int?           @map("fonte_id")
+  coolerId    Int?           @map("cooler_id")
+  nome        String         @db.VarChar(200)
+  descricao   String?        @db.Text
+  slug        String         @unique @db.VarChar(220)
+  status      StatusMontagem @default(RASCUNHO)
+  publico     Boolean        @default(false)
+  criadoEm   DateTime       @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime     @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  gabinete  Hardware  @relation("MontagemGabinete",  fields: [gabineteId], references: [id])
+  fonte     Hardware? @relation("MontagemFonte",     fields: [fonteId],    references: [id])
+  cooler    Hardware? @relation("MontagemCooler",    fields: [coolerId],   references: [id])
+
+  itens      ItemMontagem[]
+  ventoinhas VentoinhaConfigMontagem[]
+
+  @@index([usuarioId])
+  @@index([status])
+  @@index([publico])
+  @@map("montagens")
+}
+
+model ItemMontagem {
+  id             Int     @id @default(autoincrement())
+  montagemId     Int     @map("montagem_id")
+  instanciaId    String  @db.VarChar(100)
+  instanciaPaiId String? @map("instancia_pai_id") @db.VarChar(100)
+  pontoEncaixeId Int     @map("ponto_encaixe_id")
+  hardwareFilhoId Int    @map("hardware_filho_id")
+
+  montagem      Montagem             @relation(fields: [montagemId], references: [id], onDelete: Cascade)
+  pontoEncaixe  PontoEncaixeHardware @relation(fields: [pontoEncaixeId], references: [id])
+  hardwareFilho Hardware             @relation("ItensMontagem", fields: [hardwareFilhoId], references: [id])
+
+  @@unique([montagemId, instanciaId])
+  @@index([montagemId])
+  @@map("itens_montagem")
+}
+
+model VentoinhaConfigMontagem {
+  id          Int                      @id @default(autoincrement())
+  montagemId  Int                      @map("montagem_id")
+  instanciaId String?                  @map("instancia_id") @db.VarChar(100)
+  ventoinhaId Int                      @map("ventoinha_id")
+  posicao    PosicaoRefrigeracaoGabinete
+  sentido    String?                  @db.VarChar(10)
+
+  montagem  Montagem @relation(fields: [montagemId], references: [id], onDelete: Cascade)
+  ventoinha Hardware @relation("VentoinhasConfigMontagem", fields: [ventoinhaId], references: [id])
+
+  @@index([montagemId])
+  @@map("ventoinhas_config_montagem")
+}
+
+enum StatusOferta {
+  ATIVA
+  INDISPONIVEL
+  DESCONTINUADA
+}
+
+model Parceiro {
+  id                  Int      @id @default(autoincrement())
+  nome                String   @db.VarChar(150)
+  slug                String   @unique @db.VarChar(160)
+  logoUrl             String?  @map("logo_url") @db.VarChar(500)
+  site                String?  @db.VarChar(500)
+  dominio             String?  @unique @db.VarChar(150)
+  programaAfiliados   Boolean  @default(false) @map("programa_afiliados")
+  observacao          String?  @db.Text
+  ativo               Boolean  @default(true)
+  criadoEm            DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm        DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  ofertas Oferta[]
+
+  @@map("parceiros")
+}
+
+model Oferta {
+  id                     Int          @id @default(autoincrement())
+  produtoId              Int          @map("produto_id")
+  hardwareId             Int?         @map("hardware_id")
+  parceiroId             Int          @map("parceiro_id")
+  vendedorNome           String?      @map("vendedor_nome") @db.VarChar(200)
+  vendedorIdentificador  String?      @map("vendedor_identificador") @db.VarChar(200)
+  urlOriginal            String       @map("url_original") @db.VarChar(500)
+  urlAfiliada            String?      @map("url_afiliada") @db.VarChar(500)
+  preco                   Decimal      @db.Decimal(10, 2)
+  precoAnterior          Decimal?     @map("preco_anterior") @db.Decimal(10, 2)
+  frete                   Decimal?     @db.Decimal(10, 2)
+  status                  StatusOferta @default(ATIVA)
+  validoAte              DateTime?    @map("valido_ate") @db.Timestamptz(3)
+  verificadoEm           DateTime?    @map("verificado_em") @db.Timestamptz(3)
+  coletadoEm             DateTime?    @map("coletado_em") @db.Timestamptz(3)
+  atualizadoEm           DateTime     @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+  criadoEm               DateTime     @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  produto   Produto   @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  hardware  Hardware? @relation(fields: [hardwareId], references: [id], onDelete: Cascade)
+  parceiro        Parceiro               @relation(fields: [parceiroId], references: [id], onDelete: Cascade)
+  historicoPrecos HistoricoPrecoOferta[]
+
+  @@unique([produtoId, parceiroId, urlOriginal])
+  @@index([produtoId, status])
+  @@index([hardwareId, status])
+  @@index([parceiroId])
+  @@index([vendedorIdentificador])
+  @@map("ofertas")
+}
+
+model HistoricoPrecoOferta {
+  id           Int      @id @default(autoincrement())
+  ofertaId     Int      @map("oferta_id")
+  preco        Decimal  @db.Decimal(10, 2)
+  frete        Decimal? @db.Decimal(10, 2)
+  verificadoEm DateTime @default(now()) @map("verificado_em") @db.Timestamptz(3)
+
+  oferta Oferta @relation(fields: [ofertaId], references: [id], onDelete: Cascade)
+
+  @@index([ofertaId, verificadoEm])
+  @@map("historico_precos_ofertas")
+}
+
+model CategoriaProduto {
+  id        Int                   @id @default(autoincrement())
+  nome      String                @db.VarChar(120)
+  slug      String                @unique @db.VarChar(140)
+  grupo     GrupoCategoriaProduto
+  ativo     Boolean               @default(true)
+  ordem     Int                   @default(0)
+  criadoEm  DateTime              @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime           @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  produtos Produto[]
+
+  @@index([grupo, ativo, ordem])
+  @@map("categorias_produtos")
+}
+
+model Produto {
+  id             Int              @id @default(autoincrement())
+  categoriaId    Int              @map("categoria_id")
+  tipo           TipoProduto      @default(GENERICO)
+  nome           String           @db.VarChar(200)
+  slug           String           @unique @db.VarChar(220)
+  marca          String?          @db.VarChar(100)
+  modelo         String?          @db.VarChar(150)
+  descricao      String?          @db.Text
+  mpn            String?          @unique @db.VarChar(150)
+  gtin           String?          @unique @db.VarChar(32)
+  imagemUrl      String?          @map("imagem_url") @db.VarChar(500)
+  imagemHoverUrl String?          @map("imagem_hover_url") @db.VarChar(500)
+  metadados      Json?
+  publicado      Boolean          @default(false)
+  ativo          Boolean          @default(true)
+  criadoEm       DateTime         @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm   DateTime         @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  categoria CategoriaProduto @relation(fields: [categoriaId], references: [id])
+  hardware Hardware?
+  notebook Notebook?
+  build Build?
+  ofertas Oferta[]
+  avaliacoes Avaliacao[]
+  importacoes ImportacaoProduto[]
+  especificacaoMonitor EspecificacaoMonitor?
+  especificacaoMouse EspecificacaoMouse?
+  especificacaoTeclado EspecificacaoTeclado?
+  especificacaoHeadset EspecificacaoHeadset?
+
+  @@index([categoriaId, ativo, publicado])
+  @@index([marca])
+  @@index([nome])
+  @@map("produtos")
+}
+
+model EspecificacaoMonitor {
+  id                    Int      @id @default(autoincrement())
+  produtoId             Int      @unique @map("produto_id")
+  tamanhoPolegadas      Float?   @map("tamanho_polegadas")
+  resolucao             String?  @db.VarChar(50)
+  taxaAtualizacaoHz     Int?     @map("taxa_atualizacao_hz")
+  tipoPainel            String?  @map("tipo_painel") @db.VarChar(50)
+  tempoRespostaMs       Float?   @map("tempo_resposta_ms")
+  brilhoNits            Int?     @map("brilho_nits")
+  hdr                   Boolean  @default(false)
+  adaptiveSync          Boolean  @default(false) @map("adaptive_sync")
+  gSync                 Boolean  @default(false) @map("g_sync")
+  freeSync              Boolean  @default(false) @map("free_sync")
+  hdmi                   Int     @default(0)
+  displayPort           Int     @default(0) @map("display_port")
+  usbC                   Int     @default(0) @map("usb_c")
+  vesa                   String? @db.VarChar(50)
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@map("especificacoes_monitores")
+}
+
+model EspecificacaoMouse {
+  id             Int      @id @default(autoincrement())
+  produtoId      Int      @unique @map("produto_id")
+  sensor         String?  @db.VarChar(100)
+  dpiMaximo      Int?     @map("dpi_maximo")
+  pollingRateHz  Int?     @map("polling_rate_hz")
+  botoes         Int?
+  pesoGramas     Float?   @map("peso_gramas")
+  conexao        String?  @db.VarChar(100)
+  bluetooth      Boolean  @default(false)
+  wireless       Boolean  @default(false)
+  cabo           Boolean  @default(true)
+  rgb            Boolean  @default(false)
+  mao            String?  @db.VarChar(50)
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@map("especificacoes_mouses")
+}
+
+model EspecificacaoTeclado {
+  id          Int      @id @default(autoincrement())
+  produtoId   Int      @unique @map("produto_id")
+  tipo        String?  @db.VarChar(80)
+  layout      String?  @db.VarChar(80)
+  switch      String?  @db.VarChar(100)
+  tamanho     String?  @db.VarChar(80)
+  abnt2       Boolean  @default(false)
+  conexao     String?  @db.VarChar(100)
+  bluetooth   Boolean  @default(false)
+  wireless    Boolean  @default(false)
+  usb         Boolean  @default(true)
+  rgb         Boolean  @default(false)
+  hotSwap     Boolean  @default(false) @map("hot_swap")
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@map("especificacoes_teclados")
+}
+
+model EspecificacaoHeadset {
+  id           Int      @id @default(autoincrement())
+  produtoId    Int      @unique @map("produto_id")
+  tipoConexao  String?  @map("tipo_conexao") @db.VarChar(100)
+  wireless     Boolean  @default(false)
+  bluetooth    Boolean  @default(false)
+  driverMm     Float?   @map("driver_mm")
+  microfone    Boolean  @default(true)
+  somSurround  Boolean  @default(false) @map("som_surround")
+  impedancia   Float?
+  pesoGramas   Float?   @map("peso_gramas")
+  bateriaHoras Float?   @map("bateria_horas")
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@map("especificacoes_headsets")
+}
+
+model Notebook {
+  id          Int      @id @default(autoincrement())
+  produtoId   Int      @unique @map("produto_id")
+  criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  especificacao EspecificacaoNotebook?
+
+  @@map("notebooks")
+}
+
+model EspecificacaoNotebook {
+  id                        Int          @id @default(autoincrement())
+  notebookId                Int          @unique @map("notebook_id")
+  processadorNome           String?      @map("processador_nome") @db.VarChar(200)
+  processadorMarca          String?      @map("processador_marca") @db.VarChar(100)
+  processadorGeracao        String?      @map("processador_geracao") @db.VarChar(100)
+  nucleos                   Int?
+  threads                   Int?
+  clockBaseMhz              Int?         @map("clock_base_mhz")
+  clockTurboMhz             Int?         @map("clock_turbo_mhz")
+  tdpWatts                  Int?         @map("tdp_watts")
+  gpuNome                   String?      @map("gpu_nome") @db.VarChar(200)
+  gpuIntegrada              Boolean      @default(false) @map("gpu_integrada")
+  gpuDedicada               Boolean      @default(false) @map("gpu_dedicada")
+  vramGb                    Int?         @map("vram_gb")
+  tgpWatts                  Int?         @map("tgp_watts")
+  ramInstaladaGb            Int?         @map("ram_instalada_gb")
+  tipoMemoria               TipoMemoria? @map("tipo_memoria")
+  frequenciaMhz             Int?         @map("frequencia_mhz")
+  ramSoldadaGb              Int?         @map("ram_soldada_gb")
+  slotsRamTotal             Int?         @map("slots_ram_total")
+  slotsRamLivres            Int?         @map("slots_ram_livres")
+  ramMaximaGb               Int?         @map("ram_maxima_gb")
+  upgradeRam                Boolean      @default(false) @map("upgrade_ram")
+  armazenamentoGb           Int?         @map("armazenamento_gb")
+  tipoArmazenamento         String?      @map("tipo_armazenamento") @db.VarChar(80)
+  slotsM2Total              Int?         @map("slots_m2_total")
+  slotsM2Livres             Int?         @map("slots_m2_livres")
+  upgradeArmazenamento      Boolean      @default(false) @map("upgrade_armazenamento")
+  tamanhoTelaPolegadas      Float?       @map("tamanho_tela_polegadas")
+  resolucaoLargura          Int?         @map("resolucao_largura")
+  resolucaoAltura           Int?         @map("resolucao_altura")
+  taxaAtualizacaoHz         Int?         @map("taxa_atualizacao_hz")
+  tipoPainel                String?      @map("tipo_painel") @db.VarChar(80)
+  brilhoNits                Int?         @map("brilho_nits")
+  touch                     Boolean      @default(false)
+  bateriaWh                 Float?       @map("bateria_wh")
+  autonomiaInformadaHoras   Float?       @map("autonomia_informada_horas")
+  potenciaCarregadorWatts   Int?         @map("potencia_carregador_watts")
+  pesoKg                    Float?       @map("peso_kg")
+  larguraMm                 Float?       @map("largura_mm")
+  alturaMm                  Float?       @map("altura_mm")
+  profundidadeMm            Float?       @map("profundidade_mm")
+  wifi                      String?      @db.VarChar(100)
+  bluetooth                 String?      @db.VarChar(100)
+  usbA                      Int          @default(0) @map("usb_a")
+  usbC                      Int          @default(0) @map("usb_c")
+  thunderbolt               Int          @default(0)
+  hdmi                      Int          @default(0)
+  displayPort               Int          @default(0) @map("display_port")
+  ethernet                  Boolean      @default(false)
+  leitorCartao              Boolean      @default(false) @map("leitor_cartao")
+  sistemaOperacional        String?      @map("sistema_operacional") @db.VarChar(150)
+  webcam                    Boolean      @default(false)
+  resolucaoWebcam           String?      @map("resolucao_webcam") @db.VarChar(80)
+  tecladoIluminado          Boolean      @default(false) @map("teclado_iluminado")
+  tecladoNumerico           Boolean      @default(false) @map("teclado_numerico")
+  leitorDigital             Boolean      @default(false) @map("leitor_digital")
+
+  notebook Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+
+  @@map("especificacoes_notebooks")
+}
+
+model Build {
+  id                      Int      @id @default(autoincrement())
+  produtoId               Int      @unique @map("produto_id")
+  categoria               String?  @db.VarChar(100)
+  finalidade              String?  @db.VarChar(150)
+  resolucaoRecomendada    String?  @map("resolucao_recomendada") @db.VarChar(80)
+  consumoEstimadoWatts    Float?   @map("consumo_estimado_watts")
+  fonteRecomendadaWatts   Int?     @map("fonte_recomendada_watts")
+  configuracao3D          Json?    @map("configuracao_3d")
+  criadoEm                DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm            DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  componentes BuildComponente[]
+
+  @@map("builds")
+}
+
+model BuildComponente {
+  id          Int               @id @default(autoincrement())
+  buildId     Int               @map("build_id")
+  hardwareId  Int               @map("hardware_id")
+  categoria   CategoriaHardware
+  quantidade  Int               @default(1)
+  posicao     String?           @db.VarChar(100)
+  ordem       Int               @default(0)
+
+  build Build @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  hardware Hardware @relation(fields: [hardwareId], references: [id])
+
+  @@index([buildId, ordem])
+  @@index([hardwareId])
+  @@map("build_componentes")
+}
+
+model Avaliacao {
+  id          Int              @id @default(autoincrement())
+  usuarioId   Int              @map("usuario_id")
+  produtoId   Int              @map("produto_id")
+  nota        Int
+  titulo      String?          @db.VarChar(200)
+  comentario  String           @db.VarChar(3000)
+  status      StatusAvaliacao  @default(PUBLICADA)
+  criadoEm    DateTime         @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime        @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, produtoId])
+  @@index([produtoId, status, criadoEm])
+  @@map("avaliacoes")
+}
+
+model ImportacaoProduto {
+  id                   Int               @id @default(autoincrement())
+  produtoId            Int?              @map("produto_id")
+  revisadoPorId        Int?              @map("revisado_por_id")
+  urlOrigem            String            @map("url_origem") @db.VarChar(500)
+  status               StatusImportacao  @default(PENDENTE)
+  origemPrincipal      OrigemDadoProduto @default(MANUAL) @map("origem_principal")
+  conteudoBruto        Json?              @map("conteudo_bruto")
+  dadosNormalizados    Json?              @map("dados_normalizados")
+  camposNaoEncontrados String[]           @default([]) @map("campos_nao_encontrados")
+  hashConteudo         String?            @map("hash_conteudo") @db.VarChar(64)
+  erro                 String?            @db.Text
+  coletadoEm           DateTime?          @map("coletado_em") @db.Timestamptz(3)
+  revisadoEm           DateTime?          @map("revisado_em") @db.Timestamptz(3)
+  criadoEm             DateTime           @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm         DateTime           @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  produto Produto? @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+  revisadoPor Usuario? @relation("ImportacoesProdutosRevisadas", fields: [revisadoPorId], references: [id], onDelete: SetNull)
+
+  @@index([produtoId])
+  @@index([status])
+  @@map("importacoes_produtos")
+}
+
+model AuditoriaLog {
+  id            Int            @id @default(autoincrement())
+  usuarioId     Int?           @map("usuario_id")
+  acao          AcaoAuditoria
+  entidade      String         @db.VarChar(100)
+  entidadeId    String?        @map("entidade_id") @db.VarChar(100)
+  dadosAntigos  Json?          @map("dados_antigos")
+  dadosNovos    Json?          @map("dados_novos")
+  ip            String?        @db.VarChar(45)
+  criadoEm      DateTime       @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([acao])
+  @@index([entidade, entidadeId])
+  @@index([usuarioId])
+  @@index([criadoEm])
+  @@map("auditoria_logs")
 }

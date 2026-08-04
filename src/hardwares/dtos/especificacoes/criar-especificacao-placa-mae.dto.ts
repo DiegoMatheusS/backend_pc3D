@@ -95,6 +95,33 @@ export class CriarEspecificacaoPlacaMaeDto {
   portasSata?: number;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  versaoPcie?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  wifi?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  bluetooth?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  ethernet?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  biosFlashback?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  biosMinima?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CriarSlotM2PlacaMaeDto)

@@ -9,10 +9,13 @@ import {
   Res,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dtos/login.dto';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -39,6 +42,8 @@ export class AuthController {
     return typeof token === 'string' ? token : undefined;
   }
 
+  @ApiOperation({ summary: 'Autenticar usuário e criar sessão (cookie)' })
+  @Throttle({ global: { limit: 10, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -64,6 +69,9 @@ export class AuthController {
     };
   }
 
+  @ApiOperation({
+    summary: 'Retorna dados do usuário autenticado pela sessão ativa',
+  })
   @Get('perfil')
   perfil(@Req() requisicao: Request) {
     const token = this.obterTokenCookie(requisicao);
@@ -71,6 +79,7 @@ export class AuthController {
     return this.authService.perfil(token);
   }
 
+  @ApiOperation({ summary: 'Encerrar sessão do usuário' })
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(

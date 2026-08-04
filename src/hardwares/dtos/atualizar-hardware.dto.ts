@@ -70,6 +70,16 @@ export class AtualizarHardwareDto {
   descricao?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  mpn?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  gtin?: string;
+
+  @IsOptional()
   @IsString({
     message: 'A URL da imagem deve ser um texto.',
   })
@@ -77,6 +87,11 @@ export class AtualizarHardwareDto {
     message: 'A URL da imagem deve ter no máximo 500 caracteres.',
   })
   imagemUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imagemHoverUrl?: string;
 
   @IsOptional()
   @IsObject({

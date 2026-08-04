@@ -3,15 +3,27 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
-import { AdminGuard } from '../auth/admin.guard';
+import type { Request } from 'express';
+import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
+import { PapelGuard } from '../auth/papel.guard';
+import { Papeis } from '../auth/papeis.decorator';
+import { UsuarioAtual } from '../auth/usuario-atual.decorator';
+import { PapelUsuario } from '../generated/prisma/enums';
+import { AcaoAuditoria } from '../generated/prisma/enums';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 import { AtualizarHardwareDto } from './dtos/atualizar-hardware.dto';
+import { ImportarProdutoDto } from './dtos/importar-produto.dto';
 import { HardwaresService } from './hardwares.service';
 import { CriarCompatibilidadeCpuPlacaMaeDto } from './dtos/criar-compatibilidade-cpu-placa-mae.dto';
 import { CriarCompatibilidadeMemoriaPlacaMaeDto } from './dtos/criar-compatibilidade-memoria-placa-mae.dto';
@@ -23,48 +35,150 @@ import { CriarAjusteEncaixeHardwareDto } from './dtos/modelos-3d/criar-ajuste-en
 import { AtualizarPontoEncaixeHardwareDto } from './dtos/modelos-3d/atualizar-ponto-encaixe-hardware.dto';
 import { AtualizarAjusteEncaixeHardwareDto } from './dtos/modelos-3d/atualizar-ajuste-encaixe-hardware.dto';
 
+type UsuarioReq = { id: number; papel: string } | null;
+
+// Guard base: autenticado + verifica papel via @Papeis
+// O controller exige autenticação; cada rota define quais papéis têm acesso.
+@ApiTags('Hardwares Admin')
 @Controller('admin/hardwares')
-@UseGuards(AuthGuard, AdminGuard)
+@UseGuards(AuthGuard, PapelGuard)
 export class HardwaresAdminController {
-  constructor(private readonly hardwaresService: HardwaresService) {}
+  constructor(
+    private readonly hardwaresService: HardwaresService,
+    private readonly auditoriaService: AuditoriaService,
+  ) {}
+
+  // ── Leitura — ADMIN, EDITOR, REVISOR ─────────────────────────────────────
 
   @Get()
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   listarTodos() {
     return this.hardwaresService.listarTodos();
   }
 
+  @Get(':id')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
+  buscarPorId(@Param('id', ParseIntPipe) id: number) {
+    return this.hardwaresService.buscarPorIdAdmin(id);
+  }
+
+  @Get(':hardwarePaiId/pontos-encaixe')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
+  listarPontosEncaixeHardwareAdmin(
+    @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,
+  ) {
+    return this.hardwaresService.listarPontosEncaixeHardwareAdmin(
+      hardwarePaiId,
+    );
+  }
+
   @Get(':hardwareId/modelos-3d')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   listarModelos3DHardwareAdmin(
     @Param('hardwareId', ParseIntPipe) hardwareId: number,
   ) {
     return this.hardwaresService.listarModelos3DHardwareAdmin(hardwareId);
   }
 
-  @Post(':hardwareId/modelos-3d')
-  criarModelo3DHardware(
-    @Param('hardwareId', ParseIntPipe) hardwareId: number,
-    @Body() dados: CriarModelo3DHardwareDto,
-  ) {
-    return this.hardwaresService.criarModelo3DHardware(hardwareId, dados);
+  @Get('compatibilidades/cpu-placa-mae')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
+  listarCompatibilidadesCpuPlacaMae() {
+    return this.hardwaresService.listarCompatibilidadesCpuPlacaMae();
   }
 
-  @Patch('modelos-3d/:modeloId/aprovar')
-  aprovarModelo3DHardware(@Param('modeloId', ParseIntPipe) modeloId: number) {
-    return this.hardwaresService.aprovarModelo3DHardware(modeloId);
+  @Get('compatibilidades/memoria-placa-mae')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
+  listarCompatibilidadesMemoriaPlacaMae() {
+    return this.hardwaresService.listarCompatibilidadesMemoriaPlacaMae();
   }
 
-  @Patch('modelos-3d/:modeloId/status')
-  atualizarStatusModelo3DHardware(
-    @Param('modeloId', ParseIntPipe) modeloId: number,
-    @Body() dados: AtualizarStatusModelo3DDto,
+  @Get('compatibilidades/memoria-placa-mae/:placaMaeId/:memoriaRamId')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
+  verificarCompatibilidadeMemoriaPlacaMae(
+    @Param('placaMaeId', ParseIntPipe) placaMaeId: number,
+    @Param('memoriaRamId', ParseIntPipe) memoriaRamId: number,
   ) {
-    return this.hardwaresService.atualizarStatusModelo3DHardware(
-      modeloId,
-      dados,
+    return this.hardwaresService.verificarCompatibilidadeMemoriaPlacaMae(
+      placaMaeId,
+      memoriaRamId,
     );
   }
 
+  // ── Importação por URL — ADMIN e EDITOR ──────────────────────────────────
+
+  @Post('importar')
+  @HttpCode(HttpStatus.OK)
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  importarProduto(@Body() dados: ImportarProdutoDto) {
+    return this.hardwaresService.importarProdutoPorUrl(dados.urlOriginal);
+  }
+
+  // ── Criação/edição — ADMIN e EDITOR ──────────────────────────────────────
+
+  @Patch(':id')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  async atualizar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dados: AtualizarHardwareDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.hardwaresService.atualizar(id, dados);
+
+    const acaoPublicacao =
+      dados.publicado === true
+        ? AcaoAuditoria.HARDWARE_PUBLICADO
+        : dados.publicado === false
+          ? AcaoAuditoria.HARDWARE_DESPUBLICADO
+          : null;
+
+    if (acaoPublicacao) {
+      void this.auditoriaService.registrar({
+        usuarioId: usuario?.id,
+        acao: acaoPublicacao,
+        entidade: 'Hardware',
+        entidadeId: id,
+        dadosNovos: { publicado: dados.publicado },
+        ip: req.ip,
+      });
+    }
+
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.HARDWARE_ATUALIZADO,
+      entidade: 'Hardware',
+      entidadeId: id,
+      ip: req.ip,
+    });
+
+    return resultado;
+  }
+
+  @Post(':hardwareId/modelos-3d')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  async criarModelo3DHardware(
+    @Param('hardwareId', ParseIntPipe) hardwareId: number,
+    @Body() dados: CriarModelo3DHardwareDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.hardwaresService.criarModelo3DHardware(
+      hardwareId,
+      dados,
+    );
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.MODELO_3D_CRIADO,
+      entidade: 'Modelo3DHardware',
+      entidadeId: resultado.id,
+      dadosNovos: { hardwareId },
+      ip: req.ip,
+    });
+    return resultado;
+  }
+
   @Patch('modelos-3d/:modeloId')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   atualizarModelo3DHardware(
     @Param('modeloId', ParseIntPipe) modeloId: number,
     @Body() dados: AtualizarModelo3DHardwareDto,
@@ -73,6 +187,7 @@ export class HardwaresAdminController {
   }
 
   @Post(':hardwarePaiId/pontos-encaixe')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   criarPontoEncaixeHardware(
     @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,
     @Body() dados: CriarPontoEncaixeHardwareDto,
@@ -83,27 +198,8 @@ export class HardwaresAdminController {
     );
   }
 
-  @Get(':hardwarePaiId/pontos-encaixe')
-  listarPontosEncaixeHardwareAdmin(
-    @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,
-  ) {
-    return this.hardwaresService.listarPontosEncaixeHardwareAdmin(
-      hardwarePaiId,
-    );
-  }
-
-  @Post('pontos-encaixe/:pontoEncaixeId/ajustes')
-  criarAjusteEncaixeHardware(
-    @Param('pontoEncaixeId', ParseIntPipe) pontoEncaixeId: number,
-    @Body() dados: CriarAjusteEncaixeHardwareDto,
-  ) {
-    return this.hardwaresService.criarAjusteEncaixeHardware(
-      pontoEncaixeId,
-      dados,
-    );
-  }
-
   @Patch('pontos-encaixe/:pontoEncaixeId')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   atualizarPontoEncaixeHardware(
     @Param('pontoEncaixeId', ParseIntPipe) pontoEncaixeId: number,
     @Body() dados: AtualizarPontoEncaixeHardwareDto,
@@ -114,7 +210,20 @@ export class HardwaresAdminController {
     );
   }
 
+  @Post('pontos-encaixe/:pontoEncaixeId/ajustes')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  criarAjusteEncaixeHardware(
+    @Param('pontoEncaixeId', ParseIntPipe) pontoEncaixeId: number,
+    @Body() dados: CriarAjusteEncaixeHardwareDto,
+  ) {
+    return this.hardwaresService.criarAjusteEncaixeHardware(
+      pontoEncaixeId,
+      dados,
+    );
+  }
+
   @Patch('ajustes-encaixe/:ajusteId')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   atualizarAjusteEncaixeHardware(
     @Param('ajusteId', ParseIntPipe) ajusteId: number,
     @Body() dados: AtualizarAjusteEncaixeHardwareDto,
@@ -126,60 +235,132 @@ export class HardwaresAdminController {
   }
 
   @Post('compatibilidades/cpu-placa-mae')
-  criarCompatibilidadeCpuPlacaMae(
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  async criarCompatibilidadeCpuPlacaMae(
     @Body() dados: CriarCompatibilidadeCpuPlacaMaeDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
   ) {
-    return this.hardwaresService.criarCompatibilidadeCpuPlacaMae(dados);
-  }
-
-  @Get('compatibilidades/cpu-placa-mae')
-  listarCompatibilidadesCpuPlacaMae() {
-    return this.hardwaresService.listarCompatibilidadesCpuPlacaMae();
+    const resultado =
+      await this.hardwaresService.criarCompatibilidadeCpuPlacaMae(dados);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.COMPATIBILIDADE_CRIADA,
+      entidade: 'CompatibilidadeCpuPlacaMae',
+      dadosNovos: {
+        placaMaeId: dados.placaMaeId,
+        processadorId: dados.processadorId,
+      },
+      ip: req.ip,
+    });
+    return resultado;
   }
 
   @Post('compatibilidades/memoria-placa-mae')
-  criarCompatibilidadeMemoriaPlacaMae(
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  async criarCompatibilidadeMemoriaPlacaMae(
     @Body() dados: CriarCompatibilidadeMemoriaPlacaMaeDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
   ) {
-    return this.hardwaresService.criarCompatibilidadeMemoriaPlacaMae(dados);
+    const resultado =
+      await this.hardwaresService.criarCompatibilidadeMemoriaPlacaMae(dados);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.COMPATIBILIDADE_CRIADA,
+      entidade: 'CompatibilidadeMemoriaPlacaMae',
+      dadosNovos: {
+        placaMaeId: dados.placaMaeId,
+        memoriaRamId: dados.memoriaRamId,
+      },
+      ip: req.ip,
+    });
+    return resultado;
   }
 
-  @Get('compatibilidades/memoria-placa-mae')
-  listarCompatibilidadesMemoriaPlacaMae() {
-    return this.hardwaresService.listarCompatibilidadesMemoriaPlacaMae();
-  }
+  // ── Aprovação — ADMIN e REVISOR ───────────────────────────────────────────
 
-  @Get('compatibilidades/memoria-placa-mae/:placaMaeId/:memoriaRamId')
-  verificarCompatibilidadeMemoriaPlacaMae(
-    @Param('placaMaeId', ParseIntPipe) placaMaeId: number,
-    @Param('memoriaRamId', ParseIntPipe) memoriaRamId: number,
+  @Patch('modelos-3d/:modeloId/aprovar')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.REVISOR)
+  async aprovarModelo3DHardware(
+    @Param('modeloId', ParseIntPipe) modeloId: number,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
   ) {
-    return this.hardwaresService.verificarCompatibilidadeMemoriaPlacaMae(
-      placaMaeId,
-      memoriaRamId,
-    );
+    const resultado =
+      await this.hardwaresService.aprovarModelo3DHardware(modeloId);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.MODELO_3D_APROVADO,
+      entidade: 'Modelo3DHardware',
+      entidadeId: modeloId,
+      ip: req.ip,
+    });
+    return resultado;
   }
 
-  @Get(':id')
-  buscarPorId(@Param('id', ParseIntPipe) id: number) {
-    return this.hardwaresService.buscarPorIdAdmin(id);
+  @Patch('modelos-3d/:modeloId/status')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.REVISOR)
+  async atualizarStatusModelo3DHardware(
+    @Param('modeloId', ParseIntPipe) modeloId: number,
+    @Body() dados: AtualizarStatusModelo3DDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado =
+      await this.hardwaresService.atualizarStatusModelo3DHardware(
+        modeloId,
+        dados,
+      );
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao:
+        dados.ativo === false
+          ? AcaoAuditoria.MODELO_3D_DESATIVADO
+          : AcaoAuditoria.MODELO_3D_APROVADO,
+      entidade: 'Modelo3DHardware',
+      entidadeId: modeloId,
+      dadosNovos: { ativo: dados.ativo },
+      ip: req.ip,
+    });
+    return resultado;
   }
 
-  @Patch(':id')
-  atualizar(
+  // ── Exclusão — somente ADMIN ──────────────────────────────────────────────
+
+  @Delete(':id')
+  @UseGuards(AdminGuard)
+  async remover(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dados: AtualizarHardwareDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
   ) {
-    return this.hardwaresService.atualizar(id, dados);
+    const resultado = await this.hardwaresService.remover(id);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.HARDWARE_REMOVIDO,
+      entidade: 'Hardware',
+      entidadeId: id,
+      ip: req.ip,
+    });
+    return resultado;
   }
 
   @Delete(':id/permanente')
-  removerPermanentemente(@Param('id', ParseIntPipe) id: number) {
-    return this.hardwaresService.removerPermanentemente(id);
-  }
-
-  @Delete(':id')
-  remover(@Param('id', ParseIntPipe) id: number) {
-    return this.hardwaresService.remover(id);
+  @UseGuards(AdminGuard)
+  async removerPermanentemente(
+    @Param('id', ParseIntPipe) id: number,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.hardwaresService.removerPermanentemente(id);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.HARDWARE_REMOVIDO_PERMANENTEMENTE,
+      entidade: 'Hardware',
+      entidadeId: id,
+      ip: req.ip,
+    });
+    return resultado;
   }
 }

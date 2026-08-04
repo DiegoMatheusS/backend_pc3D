@@ -1,10 +1,13 @@
 import {
   IsEmail,
+  IsEnum,
+  IsOptional,
   IsString,
   IsStrongPassword,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { PapelUsuario } from '../../generated/prisma/enums';
 
 export class CriarUsuarioDto {
   @IsString({
@@ -49,4 +52,10 @@ export class CriarUsuarioDto {
     message: 'A senha deve ter no máximo 128 caracteres.',
   })
   senha!: string;
+
+  @IsOptional()
+  @IsEnum(PapelUsuario, {
+    message: 'O papel deve ser ADMIN, EDITOR, REVISOR ou USUARIO.',
+  })
+  papel?: PapelUsuario;
 }

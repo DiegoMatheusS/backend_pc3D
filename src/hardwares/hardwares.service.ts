@@ -1,3 +1,5 @@
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import {
   BadRequestException,
   ConflictException,
@@ -9,11 +11,16 @@ import {
   CategoriaHardware,
   ChaveM2,
   FormatoArmazenamento,
+  GrupoCategoriaProduto,
   InterfaceArmazenamento,
-  TipoCooler,
   PosicaoRefrigeracaoGabinete,
+  StatusAvaliacao,
+  StatusOferta,
+  TipoCooler,
+  TipoProduto,
 } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizarEspecificacoesHardwarePublicas } from '../produtos/normalizar-especificacoes-hardware';
 import { AtualizarHardwareDto } from './dtos/atualizar-hardware.dto';
 import { CriarCompatibilidadeCpuPlacaMaeDto } from './dtos/criar-compatibilidade-cpu-placa-mae.dto';
 import { CriarCompatibilidadeMemoriaPlacaMaeDto } from './dtos/criar-compatibilidade-memoria-placa-mae.dto';
@@ -21,6 +28,7 @@ import { CriarHardwareDto } from './dtos/criar-hardware.dto';
 import type { SuporteRadiadorGabinete } from '../generated/prisma/client';
 import {
   SentidoFluxoAr,
+  VentoinhaMontagemDto,
   VerificarCompatibilidadeMontagemDto,
 } from './dtos/verificar-compatibilidade-montagem.dto';
 import { CriarModelo3DHardwareDto } from './dtos/modelos-3d/criar-modelo-3d-hardware.dto';
@@ -31,10 +39,152 @@ import { CriarAjusteEncaixeHardwareDto } from './dtos/modelos-3d/criar-ajuste-en
 import { AtualizarPontoEncaixeHardwareDto } from './dtos/modelos-3d/atualizar-ponto-encaixe-hardware.dto';
 import { AtualizarAjusteEncaixeHardwareDto } from './dtos/modelos-3d/atualizar-ajuste-encaixe-hardware.dto';
 import { ResolverMontagem3DDto } from './dtos/modelos-3d/resolver-montagem-3d.dto';
+import { ResolverMontagemCompletaDto } from './dtos/modelos-3d/resolver-montagem-completa.dto';
+import { FiltrarHardwaresDto } from './dtos/filtrar-hardwares.dto';
 
 @Injectable()
 export class HardwaresService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private enderecoIpPrivado(endereco: string): boolean {
+    const ip = endereco.replace(/^\[|\]$/g, '').toLowerCase();
+    const versao = isIP(ip);
+
+    if (versao === 4) {
+      const partes = ip.split('.').map(Number);
+      const [a, b] = partes;
+
+      return (
+        a === 0 ||
+        a === 10 ||
+        a === 127 ||
+        (a === 100 && b >= 64 && b <= 127) ||
+        (a === 169 && b === 254) ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        a >= 224
+      );
+    }
+
+    if (versao === 6) {
+      if (
+        ip === '::' ||
+        ip === '::1' ||
+        ip.startsWith('fc') ||
+        ip.startsWith('fd') ||
+        /^fe[89ab]/.test(ip) ||
+        ip.startsWith('ff')
+      ) {
+        return true;
+      }
+
+      if (ip.startsWith('::ffff:')) {
+        return this.enderecoIpPrivado(ip.slice('::ffff:'.length));
+      }
+    }
+
+    return false;
+  }
+
+  private async validarUrlPublicaImportacao(valor: string): Promise<URL> {
+    let url: URL;
+
+    try {
+      url = new URL(valor);
+    } catch {
+      throw new BadRequestException('A URL informada é inválida.');
+    }
+
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new BadRequestException(
+        'A importação aceita apenas endereços HTTP ou HTTPS.',
+      );
+    }
+
+    if (url.username || url.password) {
+      throw new BadRequestException(
+        'URLs com credenciais embutidas não são permitidas.',
+      );
+    }
+
+    const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+
+    if (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      this.enderecoIpPrivado(hostname)
+    ) {
+      throw new BadRequestException(
+        'O endereço informado não pode apontar para uma rede interna.',
+      );
+    }
+
+    try {
+      const enderecos = await lookup(hostname, { all: true, verbatim: true });
+
+      if (
+        enderecos.length === 0 ||
+        enderecos.some(({ address }) => this.enderecoIpPrivado(address))
+      ) {
+        throw new BadRequestException(
+          'O endereço informado não pode apontar para uma rede interna.',
+        );
+      }
+    } catch (erro) {
+      if (erro instanceof BadRequestException) {
+        throw erro;
+      }
+
+      throw new BadRequestException(
+        'Não foi possível resolver o endereço informado.',
+      );
+    }
+
+    return url;
+  }
+
+  private async lerHtmlLimitado(
+    resposta: Response,
+    limiteBytes = 2_000_000,
+  ): Promise<string> {
+    const tamanhoInformado = Number(
+      resposta.headers.get('content-length') ?? '0',
+    );
+
+    if (tamanhoInformado > limiteBytes) {
+      throw new BadRequestException(
+        'A página informada é grande demais para importação automática.',
+      );
+    }
+
+    if (!resposta.body) {
+      return '';
+    }
+
+    const leitor = resposta.body.getReader();
+    const decoder = new TextDecoder();
+    let totalBytes = 0;
+    let html = '';
+
+    while (true) {
+      const { done, value } = await leitor.read();
+      if (done) break;
+
+      totalBytes += value.byteLength;
+      if (totalBytes > limiteBytes) {
+        await leitor.cancel();
+        throw new BadRequestException(
+          'A página informada é grande demais para importação automática.',
+        );
+      }
+
+      html += decoder.decode(value, { stream: true });
+    }
+
+    html += decoder.decode();
+    return html;
+  }
 
   private criarSlug(texto: string): string {
     const slug = texto
@@ -74,6 +224,82 @@ export class HardwaresService {
       slug = `${slugBase}-${numero}`;
       numero++;
     }
+  }
+
+  private async criarSlugProdutoUnico(
+    texto: string,
+    ignorarProdutoId?: number,
+  ): Promise<string> {
+    const slugBase = this.criarSlug(texto);
+    let slug = slugBase;
+    let numero = 2;
+
+    while (true) {
+      const produtoExistente = await this.prisma.produto.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+
+      if (!produtoExistente || produtoExistente.id === ignorarProdutoId) {
+        return slug;
+      }
+
+      slug = `${slugBase}-${numero}`;
+      numero++;
+    }
+  }
+
+  private categoriaParticipaMontagem3D(categoria: CategoriaHardware): boolean {
+    return new Set<CategoriaHardware>([
+      CategoriaHardware.PROCESSADOR,
+      CategoriaHardware.PLACA_MAE,
+      CategoriaHardware.MEMORIA_RAM,
+      CategoriaHardware.PLACA_VIDEO,
+      CategoriaHardware.ARMAZENAMENTO,
+      CategoriaHardware.FONTE,
+      CategoriaHardware.GABINETE,
+      CategoriaHardware.COOLER,
+      CategoriaHardware.VENTOINHA,
+    ]).has(categoria);
+  }
+
+  private dadosCategoriaProdutoHardware(categoria: CategoriaHardware): {
+    nome: string;
+    slug: string;
+    grupo: GrupoCategoriaProduto;
+  } {
+    const perifericos = new Set<CategoriaHardware>([
+      CategoriaHardware.MONITOR,
+      CategoriaHardware.MOUSE,
+      CategoriaHardware.TECLADO,
+      CategoriaHardware.FONE,
+      CategoriaHardware.MICROFONE,
+    ]);
+
+    const nomes: Record<CategoriaHardware, string> = {
+      PROCESSADOR: 'Processadores',
+      COOLER: 'Coolers',
+      PLACA_MAE: 'Placas-mãe',
+      MEMORIA_RAM: 'Memórias RAM',
+      PLACA_VIDEO: 'Placas de vídeo',
+      ARMAZENAMENTO: 'Armazenamento',
+      FONTE: 'Fontes',
+      GABINETE: 'Gabinetes',
+      VENTOINHA: 'Ventoinhas',
+      MONITOR: 'Monitores',
+      MOUSE: 'Mouses',
+      TECLADO: 'Teclados',
+      FONE: 'Fones',
+      MICROFONE: 'Microfones',
+    };
+
+    return {
+      nome: nomes[categoria],
+      slug: this.criarSlug(nomes[categoria]),
+      grupo: perifericos.has(categoria)
+        ? GrupoCategoriaProduto.PERIFERICOS
+        : GrupoCategoriaProduto.COMPONENTES,
+    };
   }
 
   private validarEspecificacaoDaCategoria(dados: CriarHardwareDto): void {
@@ -175,6 +401,7 @@ export class HardwaresService {
         especificacaoCooler: true,
         especificacaoVentoinha: true,
         especificacaoArmazenamento: true,
+        produto: { include: { categoria: true } },
         modelos3D: true,
         pontosEncaixe: true,
       },
@@ -212,6 +439,7 @@ export class HardwaresService {
         especificacaoCooler: true,
         especificacaoVentoinha: true,
         especificacaoArmazenamento: true,
+        produto: { include: { categoria: true } },
         modelos3D: true,
         pontosEncaixe: true,
       },
@@ -223,11 +451,25 @@ export class HardwaresService {
 
     return hardware;
   }
-  listarPublicados() {
+  listarPublicados(filtros: FiltrarHardwaresDto = {}) {
     return this.prisma.hardware.findMany({
       where: {
         ativo: true,
         publicado: true,
+        ...(filtros.categoria !== undefined && {
+          categoria: filtros.categoria,
+        }),
+        ...(filtros.marca && {
+          marca: { equals: filtros.marca, mode: 'insensitive' },
+        }),
+        ...(filtros.busca && {
+          OR: [
+            { nome: { contains: filtros.busca, mode: 'insensitive' } },
+            { marca: { contains: filtros.busca, mode: 'insensitive' } },
+            { modelo: { contains: filtros.busca, mode: 'insensitive' } },
+            { descricao: { contains: filtros.busca, mode: 'insensitive' } },
+          ],
+        }),
       },
       include: {
         especificacaoProcessador: true,
@@ -252,6 +494,30 @@ export class HardwaresService {
         especificacaoCooler: true,
         especificacaoVentoinha: true,
         especificacaoArmazenamento: true,
+        produto: {
+          select: {
+            id: true,
+            slug: true,
+            mpn: true,
+            gtin: true,
+            imagemHoverUrl: true,
+            categoria: true,
+            ofertas: {
+              where: {
+                status: StatusOferta.ATIVA,
+                parceiro: { ativo: true },
+                OR: [{ validoAte: null }, { validoAte: { gte: new Date() } }],
+              },
+              orderBy: { preco: 'asc' },
+              take: 1,
+              include: {
+                parceiro: {
+                  select: { id: true, nome: true, slug: true, logoUrl: true },
+                },
+              },
+            },
+          },
+        },
       },
       orderBy: {
         nome: 'asc',
@@ -289,6 +555,35 @@ export class HardwaresService {
         especificacaoCooler: true,
         especificacaoVentoinha: true,
         especificacaoArmazenamento: true,
+        modelos3D: {
+          where: { ativo: true, aprovado: true },
+          orderBy: [{ atualizadoEm: 'desc' }, { id: 'desc' }],
+          take: 1,
+        },
+        produto: {
+          include: {
+            categoria: true,
+            ofertas: {
+              where: {
+                status: StatusOferta.ATIVA,
+                parceiro: { ativo: true },
+                OR: [{ validoAte: null }, { validoAte: { gte: new Date() } }],
+              },
+              orderBy: { preco: 'asc' },
+              include: {
+                parceiro: {
+                  select: {
+                    id: true,
+                    nome: true,
+                    slug: true,
+                    logoUrl: true,
+                    programaAfiliados: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -296,17 +591,87 @@ export class HardwaresService {
       throw new NotFoundException('Hardware não encontrado.');
     }
 
-    return hardware;
+    const avaliacao = hardware.produtoId
+      ? await this.prisma.avaliacao.aggregate({
+          where: {
+            produtoId: hardware.produtoId,
+            status: StatusAvaliacao.PUBLICADA,
+          },
+          _avg: { nota: true },
+          _count: { _all: true },
+        })
+      : null;
+
+    const especificacoesTecnicas =
+      hardware.especificacaoProcessador ??
+      hardware.especificacaoPlacaMae ??
+      hardware.especificacaoMemoriaRam ??
+      hardware.especificacaoPlacaVideo ??
+      hardware.especificacaoArmazenamento ??
+      hardware.especificacaoFonte ??
+      hardware.especificacaoGabinete ??
+      hardware.especificacaoCooler ??
+      hardware.especificacaoVentoinha ??
+      hardware.especificacoes;
+
+    return {
+      ...hardware,
+      mpn: hardware.produto?.mpn ?? null,
+      gtin: hardware.produto?.gtin ?? null,
+      imagemHoverUrl: hardware.produto?.imagemHoverUrl ?? null,
+      especificacoes: normalizarEspecificacoesHardwarePublicas(
+        hardware.categoria,
+        especificacoesTecnicas,
+      ),
+      possuiModelo3D: hardware.modelos3D.length > 0,
+      ofertas: hardware.produto?.ofertas ?? [],
+      avaliacao: {
+        media: avaliacao?._avg.nota ?? 0,
+        quantidade: avaliacao?._count._all ?? 0,
+      },
+    };
   }
 
   async criar(dados: CriarHardwareDto) {
+    if (!this.categoriaParticipaMontagem3D(dados.categoria)) {
+      throw new BadRequestException(
+        `A categoria ${dados.categoria} agora pertence ao catálogo geral da Loja. Cadastre-a pela rota de produtos, não como Hardware técnico.`,
+      );
+    }
+
     this.validarEspecificacaoDaCategoria(dados);
 
     const nome = dados.nome.trim();
     const marca = dados.marca.trim();
     const modelo = dados.modelo.trim();
 
+    const duplicadoProduto = await this.prisma.produto.findFirst({
+      where: {
+        OR: [
+          ...(dados.mpn?.trim() ? [{ mpn: dados.mpn.trim() }] : []),
+          ...(dados.gtin?.trim() ? [{ gtin: dados.gtin.trim() }] : []),
+          {
+            marca: { equals: marca, mode: 'insensitive' },
+            modelo: { equals: modelo, mode: 'insensitive' },
+          },
+        ],
+      },
+      select: { id: true, nome: true },
+    });
+
+    if (duplicadoProduto) {
+      throw new ConflictException(
+        `Possível produto duplicado: ID ${duplicadoProduto.id} — ${duplicadoProduto.nome}. Cadastre uma nova oferta no produto existente se for o mesmo item.`,
+      );
+    }
+
     const slug = await this.criarSlugUnico(`${marca} ${modelo} ${nome}`);
+    const slugProduto = await this.criarSlugProdutoUnico(
+      `${marca} ${modelo} ${nome}`,
+    );
+    const categoriaProduto = this.dadosCategoriaProdutoHardware(
+      dados.categoria,
+    );
 
     const dadosGabinete = dados.especificacaoGabinete
       ? (() => {
@@ -343,6 +708,28 @@ export class HardwaresService {
             Prisma.InputJsonValue | undefined,
           publicado: dados.publicado ?? false,
           ativo: dados.ativo ?? true,
+          produto: {
+            create: {
+              tipo: TipoProduto.HARDWARE,
+              nome,
+              slug: slugProduto,
+              marca,
+              modelo,
+              descricao: dados.descricao?.trim() ?? null,
+              mpn: dados.mpn?.trim() || null,
+              gtin: dados.gtin?.trim() || null,
+              imagemUrl: dados.imagemUrl?.trim() ?? null,
+              imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
+              publicado: dados.publicado ?? false,
+              ativo: dados.ativo ?? true,
+              categoria: {
+                connectOrCreate: {
+                  where: { slug: categoriaProduto.slug },
+                  create: categoriaProduto,
+                },
+              },
+            },
+          },
 
           especificacaoProcessador: dados.especificacaoProcessador
             ? {
@@ -434,6 +821,7 @@ export class HardwaresService {
           especificacaoCooler: true,
           especificacaoVentoinha: true,
           especificacaoArmazenamento: true,
+          produto: { include: { categoria: true } },
         },
       });
     } catch (erro: unknown) {
@@ -550,6 +938,16 @@ export class HardwaresService {
       ? await this.criarSlugUnico(`${marca} ${modelo} ${nome}`, id)
       : hardwareAtual.slug;
 
+    const slugProduto = deveAtualizarSlug
+      ? await this.criarSlugProdutoUnico(
+          `${marca} ${modelo} ${nome}`,
+          hardwareAtual.produtoId ?? undefined,
+        )
+      : hardwareAtual.produto?.slug;
+    const categoriaProduto = this.dadosCategoriaProdutoHardware(
+      hardwareAtual.categoria,
+    );
+
     const dadosGabinete = dados.especificacaoGabinete
       ? (() => {
           const { suportesFans, suportesRadiador, ...gabinete } =
@@ -608,6 +1006,60 @@ export class HardwaresService {
               : (dados.especificacoes as Prisma.InputJsonValue),
           publicado: dados.publicado,
           ativo: dados.ativo,
+          produto: hardwareAtual.produtoId
+            ? {
+                update: {
+                  nome,
+                  ...(slugProduto !== undefined && { slug: slugProduto }),
+                  marca,
+                  modelo,
+                  ...(dados.descricao !== undefined && {
+                    descricao: dados.descricao.trim() || null,
+                  }),
+                  ...(dados.mpn !== undefined && {
+                    mpn: dados.mpn.trim() || null,
+                  }),
+                  ...(dados.gtin !== undefined && {
+                    gtin: dados.gtin.trim() || null,
+                  }),
+                  ...(dados.imagemUrl !== undefined && {
+                    imagemUrl: dados.imagemUrl.trim() || null,
+                  }),
+                  ...(dados.imagemHoverUrl !== undefined && {
+                    imagemHoverUrl: dados.imagemHoverUrl.trim() || null,
+                  }),
+                  ...(dados.publicado !== undefined && {
+                    publicado: dados.publicado,
+                  }),
+                  ...(dados.ativo !== undefined && { ativo: dados.ativo }),
+                },
+              }
+            : {
+                create: {
+                  tipo: TipoProduto.HARDWARE,
+                  nome,
+                  slug:
+                    slugProduto ??
+                    (await this.criarSlugProdutoUnico(
+                      `${marca} ${modelo} ${nome}`,
+                    )),
+                  marca,
+                  modelo,
+                  descricao: dados.descricao?.trim() ?? hardwareAtual.descricao,
+                  mpn: dados.mpn?.trim() || null,
+                  gtin: dados.gtin?.trim() || null,
+                  imagemUrl: dados.imagemUrl?.trim() ?? hardwareAtual.imagemUrl,
+                  imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
+                  publicado: dados.publicado ?? hardwareAtual.publicado,
+                  ativo: dados.ativo ?? hardwareAtual.ativo,
+                  categoria: {
+                    connectOrCreate: {
+                      where: { slug: categoriaProduto.slug },
+                      create: categoriaProduto,
+                    },
+                  },
+                },
+              },
 
           especificacaoProcessador: dados.especificacaoProcessador
             ? {
@@ -753,16 +1205,20 @@ export class HardwaresService {
   }
 
   async remover(id: number) {
-    await this.buscarPorIdAdmin(id);
+    const hardware = await this.buscarPorIdAdmin(id);
 
-    await this.prisma.hardware.update({
-      where: {
-        id,
-      },
-      data: {
-        ativo: false,
-        publicado: false,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.hardware.update({
+        where: { id },
+        data: { ativo: false, publicado: false },
+      });
+
+      if (hardware.produtoId !== null) {
+        await tx.produto.update({
+          where: { id: hardware.produtoId },
+          data: { ativo: false, publicado: false },
+        });
+      }
     });
 
     return {
@@ -771,13 +1227,15 @@ export class HardwaresService {
   }
 
   async removerPermanentemente(id: number) {
-    await this.buscarPorIdAdmin(id);
+    const hardware = await this.buscarPorIdAdmin(id);
 
     try {
-      await this.prisma.hardware.delete({
-        where: {
-          id,
-        },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.hardware.delete({ where: { id } });
+
+        if (hardware.produtoId !== null) {
+          await tx.produto.delete({ where: { id: hardware.produtoId } });
+        }
       });
 
       return {
@@ -1271,6 +1729,7 @@ export class HardwaresService {
   async verificarCompatibilidadeMemoriaPlacaMae(
     placaMaeId: number,
     memoriaRamId: number,
+    quantidadeModulosOverride?: number,
   ) {
     const [placaMae, memoriaRam] = await Promise.all([
       this.prisma.hardware.findUnique({
@@ -1330,10 +1789,10 @@ export class HardwaresService {
       };
     }
 
-    if (
-      especificacaoMemoria.quantidadeModulos >
-      especificacaoPlacaMae.slotsMemoria
-    ) {
+    const quantidadeModulos =
+      quantidadeModulosOverride ?? especificacaoMemoria.quantidadeModulos;
+
+    if (quantidadeModulos > especificacaoPlacaMae.slotsMemoria) {
       return {
         compativel: false,
         status: 'INCOMPATIVEL',
@@ -1354,8 +1813,7 @@ export class HardwaresService {
     }
 
     const capacidadeTotal =
-      especificacaoMemoria.capacidadePorModuloGb *
-      especificacaoMemoria.quantidadeModulos;
+      especificacaoMemoria.capacidadePorModuloGb * quantidadeModulos;
 
     if (
       especificacaoPlacaMae.capacidadeMaximaMemoriaGb !== null &&
@@ -1418,11 +1876,16 @@ export class HardwaresService {
     placaMaeId: number,
     processadorId: number,
     memoriaRamId: number,
+    quantidadeModulosRam?: number,
   ) {
     const [resultadoCpu, resultadoMemoria, processador, placaMae, memoriaRam] =
       await Promise.all([
         this.verificarCompatibilidadeCpuPlacaMae(placaMaeId, processadorId),
-        this.verificarCompatibilidadeMemoriaPlacaMae(placaMaeId, memoriaRamId),
+        this.verificarCompatibilidadeMemoriaPlacaMae(
+          placaMaeId,
+          memoriaRamId,
+          quantidadeModulosRam,
+        ),
         this.prisma.hardware.findUnique({
           where: { id: processadorId },
           include: { especificacaoProcessador: true },
@@ -1466,8 +1929,8 @@ export class HardwaresService {
       erros.push('O processador não suporta o tipo DDR da memória.');
     }
 
-    const capacidadeTotal =
-      memoria.capacidadePorModuloGb * memoria.quantidadeModulos;
+    const quantidadeModulos = quantidadeModulosRam ?? memoria.quantidadeModulos;
+    const capacidadeTotal = memoria.capacidadePorModuloGb * quantidadeModulos;
 
     if (
       cpu.capacidadeMemoriaMaximaGb !== null &&
@@ -2858,7 +3321,20 @@ export class HardwaresService {
       );
     }
 
-    const consumoArmazenamentosWatts = armazenamentos.reduce(
+    const armazenamentosPorId = new Map(
+      armazenamentos.map((armazenamento) => [armazenamento.id, armazenamento]),
+    );
+
+    // Recria a lista seguindo exatamente os IDs recebidos para preservar
+    // múltiplas instâncias físicas do mesmo produto (ex.: dois SSDs iguais).
+    const armazenamentosDaMontagem = (dados.armazenamentoIds ?? []).flatMap(
+      (armazenamentoId) => {
+        const armazenamento = armazenamentosPorId.get(armazenamentoId);
+        return armazenamento ? [armazenamento] : [];
+      },
+    );
+
+    const consumoArmazenamentosWatts = armazenamentosDaMontagem.reduce(
       (total, armazenamento) => {
         const consumo = armazenamento.especificacaoArmazenamento?.consumoWatts;
 
@@ -2970,6 +3446,150 @@ export class HardwaresService {
     };
   }
 
+  /**
+   * Verifica se os slots físicos da placa-mãe e da fonte são suficientes
+   * para o número real de módulos/dispositivos na montagem.
+   *
+   * Valida:
+   * - Slots de memória RAM (placa-mãe vs quantidadeModulosRam)
+   * - Portas SATA (placa-mãe vs SSDs SATA na montagem)
+   * - Conectores SATA da fonte vs SSDs SATA
+   * - Slots M.2 disponíveis vs NVMes/M.2 SATA na montagem
+   */
+  private async verificarMultiplicidadeSlots(
+    dados: VerificarCompatibilidadeMontagemDto,
+  ) {
+    const erros: string[] = [];
+    const alertas: string[] = [];
+
+    // ── Buscar especificações da placa-mãe ────────────────────────────────
+    const placaMae = await this.prisma.hardware.findUnique({
+      where: { id: dados.placaMaeId },
+      include: {
+        especificacaoPlacaMae: {
+          include: { slotsM2: { where: { ativo: true } } },
+        },
+      },
+    });
+
+    const espPlaca = placaMae?.especificacaoPlacaMae;
+
+    // ── Buscar especificações da fonte ────────────────────────────────────
+    const fonte = await this.prisma.hardware.findUnique({
+      where: { id: dados.fonteId },
+      include: { especificacaoFonte: true },
+    });
+    const espFonte = fonte?.especificacaoFonte;
+
+    // ── Módulos RAM ───────────────────────────────────────────────────────
+    const quantidadeModulosRamFisicos =
+      dados.quantidadeModulosRamTotal ?? dados.quantidadeModulosRam;
+
+    if (espPlaca && quantidadeModulosRamFisicos !== undefined) {
+      const slotsDisponiveis = espPlaca.slotsMemoria;
+      const modulosNaMontagem = quantidadeModulosRamFisicos;
+
+      if (modulosNaMontagem > slotsDisponiveis) {
+        erros.push(
+          `A placa-mãe possui apenas ${slotsDisponiveis} slot(s) de memória, mas a montagem utiliza ${modulosNaMontagem} módulo(s).`,
+        );
+      } else if (modulosNaMontagem === slotsDisponiveis) {
+        alertas.push(
+          `Todos os ${slotsDisponiveis} slot(s) de memória da placa-mãe estão ocupados — upgrades futuros exigirão substituição.`,
+        );
+      }
+    }
+
+    // ── Armazenamentos ────────────────────────────────────────────────────
+    if ((dados.armazenamentoIds ?? []).length > 0 && espPlaca) {
+      // Buscar specs de todos os armazenamentos de uma vez
+      const armazenamentos = await this.prisma.hardware.findMany({
+        where: { id: { in: dados.armazenamentoIds } },
+        include: { especificacaoArmazenamento: true },
+      });
+
+      const especificacoesPorHardwareId = new Map(
+        armazenamentos.map((armazenamento) => [
+          armazenamento.id,
+          armazenamento.especificacaoArmazenamento,
+        ]),
+      );
+
+      // Mantém a multiplicidade informada no DTO. O findMany retorna cada
+      // hardware uma única vez, mas a montagem pode ter duas instâncias iguais.
+      const espArms = (dados.armazenamentoIds ?? []).flatMap(
+        (armazenamentoId) => {
+          const especificacao =
+            especificacoesPorHardwareId.get(armazenamentoId);
+          return especificacao ? [especificacao] : [];
+        },
+      );
+
+      // Contar por tipo de interface/formato
+      const sataFisicos = espArms.filter(
+        (e) =>
+          e.interface === InterfaceArmazenamento.SATA && e.tamanhoM2Mm === null,
+      ).length;
+
+      const m2Total = espArms.filter((e) => e.tamanhoM2Mm !== null).length;
+
+      // Verificar portas SATA da placa-mãe
+      if (sataFisicos > 0) {
+        if (espPlaca.portasSata < sataFisicos) {
+          erros.push(
+            `A placa-mãe possui ${espPlaca.portasSata} porta(s) SATA, mas a montagem usa ${sataFisicos} dispositivo(s) SATA.`,
+          );
+        }
+        // Verificar conectores SATA da fonte
+        if (espFonte && espFonte.conectoresSata < sataFisicos) {
+          erros.push(
+            `A fonte possui ${espFonte.conectoresSata} conector(es) SATA de energia, mas a montagem usa ${sataFisicos} dispositivo(s) SATA.`,
+          );
+        }
+      }
+
+      // Verificar slots M.2 disponíveis
+      if (m2Total > 0) {
+        const slotsM2Ativos = espPlaca.slotsM2.length;
+        if (m2Total > slotsM2Ativos) {
+          erros.push(
+            `A placa-mãe possui ${slotsM2Ativos} slot(s) M.2, mas a montagem usa ${m2Total} dispositivo(s) M.2.`,
+          );
+        } else if (m2Total === slotsM2Ativos && slotsM2Ativos > 0) {
+          alertas.push(
+            `Todos os ${slotsM2Ativos} slot(s) M.2 da placa-mãe estão ocupados.`,
+          );
+        }
+
+        // Alertar sobre slots M.2 que compartilham recursos com SATA
+        const slotsComCompartilhamento = espPlaca.slotsM2.filter(
+          (s) => s.compartilhaCom,
+        );
+        if (slotsComCompartilhamento.length > 0 && sataFisicos > 0) {
+          alertas.push(
+            'Alguns slots M.2 da placa-mãe compartilham recursos com portas SATA e podem desabilitar conectores SATA ao serem utilizados.',
+          );
+        }
+      }
+    }
+
+    const compativel = erros.length === 0;
+    return {
+      compativel,
+      status: compativel ? 'COMPATIVEL' : 'INCOMPATIVEL',
+      erros,
+      alertas,
+      resumo: {
+        slotsRamDisponiveis: espPlaca?.slotsMemoria ?? null,
+        modulosRamNaMontagem: quantidadeModulosRamFisicos ?? null,
+        portasSataDisponiveis: espPlaca?.portasSata ?? null,
+        slotsM2Disponiveis: espPlaca?.slotsM2.length ?? null,
+        qtdArmazenamentosNaMontagem: (dados.armazenamentoIds ?? []).length,
+        conectoresSataFonte: espFonte?.conectoresSata ?? null,
+      },
+    };
+  }
+
   async verificarCompatibilidadeMontagem(
     dados: VerificarCompatibilidadeMontagemDto,
   ) {
@@ -3023,6 +3643,7 @@ export class HardwaresService {
         dados.placaMaeId,
         dados.processadorId,
         dados.memoriaRamId,
+        dados.quantidadeModulosRam,
       ),
     );
 
@@ -3101,6 +3722,12 @@ export class HardwaresService {
       );
     }
 
+    // ── Verificação de multiplicidade de slots ──────────────────────────────
+    adicionarResultado(
+      'MULTIPLICIDADE_SLOTS',
+      await this.verificarMultiplicidadeSlots(dados),
+    );
+
     const consumoEnergia = await this.calcularConsumoEstimadoMontagem(dados);
 
     adicionarResultado('CONSUMO_FONTE', consumoEnergia);
@@ -3165,6 +3792,12 @@ export class HardwaresService {
       throw new NotFoundException('Hardware não encontrado.');
     }
 
+    if (!this.categoriaParticipaMontagem3D(hardware.categoria)) {
+      throw new BadRequestException(
+        `A categoria ${hardware.categoria} não participa da montagem física do PC e não pode receber modelo 3D do montador.`,
+      );
+    }
+
     return this.prisma.modelo3DHardware.create({
       data: {
         hardwareId,
@@ -3175,6 +3808,7 @@ export class HardwaresService {
         alturaRealMm: dados.alturaRealMm,
         larguraRealMm: dados.larguraRealMm,
         profundidadeRealMm: dados.profundidadeRealMm,
+        tamanhoBytes: dados.tamanhoBytes,
         posicaoCorrecaoX: dados.posicaoCorrecaoX ?? 0,
         posicaoCorrecaoY: dados.posicaoCorrecaoY ?? 0,
         posicaoCorrecaoZ: dados.posicaoCorrecaoZ ?? 0,
@@ -3360,6 +3994,7 @@ export class HardwaresService {
         alturaRealMm: dados.alturaRealMm,
         larguraRealMm: dados.larguraRealMm,
         profundidadeRealMm: dados.profundidadeRealMm,
+        tamanhoBytes: dados.tamanhoBytes,
         posicaoCorrecaoX: dados.posicaoCorrecaoX,
         posicaoCorrecaoY: dados.posicaoCorrecaoY,
         posicaoCorrecaoZ: dados.posicaoCorrecaoZ,
@@ -3399,6 +4034,18 @@ export class HardwaresService {
 
     if (!hardwarePai) {
       throw new NotFoundException('Hardware pai não encontrado.');
+    }
+
+    if (!this.categoriaParticipaMontagem3D(hardwarePai.categoria)) {
+      throw new BadRequestException(
+        `A categoria ${hardwarePai.categoria} não participa da montagem física do PC e não pode possuir pontos de encaixe do montador.`,
+      );
+    }
+
+    if (!this.categoriaParticipaMontagem3D(dados.categoriaAceita)) {
+      throw new BadRequestException(
+        `A categoria ${dados.categoriaAceita} não participa da montagem física do PC e não pode ser usada como categoria de encaixe.`,
+      );
     }
 
     const pontoExistente = await this.prisma.pontoEncaixeHardware.findUnique({
@@ -3851,6 +4498,7 @@ export class HardwaresService {
               alturaRealMm: true,
               larguraRealMm: true,
               profundidadeRealMm: true,
+              tamanhoBytes: true,
               posicaoCorrecaoX: true,
               posicaoCorrecaoY: true,
               posicaoCorrecaoZ: true,
@@ -3898,6 +4546,7 @@ export class HardwaresService {
               alturaRealMm: true,
               larguraRealMm: true,
               profundidadeRealMm: true,
+              tamanhoBytes: true,
               posicaoCorrecaoX: true,
               posicaoCorrecaoY: true,
               posicaoCorrecaoZ: true,
@@ -4090,6 +4739,7 @@ export class HardwaresService {
             alturaRealMm: true,
             larguraRealMm: true,
             profundidadeRealMm: true,
+            tamanhoBytes: true,
             posicaoCorrecaoX: true,
             posicaoCorrecaoY: true,
             posicaoCorrecaoZ: true,
@@ -4109,74 +4759,399 @@ export class HardwaresService {
         'Hardware pai não encontrado ou não publicado.',
       );
     }
+
     const modelo3DHardwarePai = hardwarePai.modelos3D[0] ?? null;
 
-    const pontosEncaixeIds = dados.itens.map((item) => item.pontoEncaixeId);
+    const instanciaRaizId = `hardware-raiz-${hardwarePaiId}`;
 
-    const pontosDuplicados = pontosEncaixeIds.filter(
-      (pontoEncaixeId, indice) =>
-        pontosEncaixeIds.indexOf(pontoEncaixeId) !== indice,
+    const instanciaRaizInformada = dados.itens.find(
+      (item) => item.instanciaId === instanciaRaizId,
     );
 
-    if (pontosDuplicados.length > 0) {
+    if (instanciaRaizInformada) {
       throw new BadRequestException(
-        'Não é permitido enviar mais de uma peça para o mesmo ponto de encaixe.',
+        `O instanciaId "${instanciaRaizId}" é reservado para o hardware principal da montagem e não pode ser usado nos itens.`,
       );
     }
 
+    const itensNormalizados = dados.itens.map((item, indice) => ({
+      ...item,
+      instanciaId: item.instanciaId ?? `item-${indice + 1}`,
+    }));
+
+    const instanciaIdsInformadas = itensNormalizados.map(
+      (item) => item.instanciaId,
+    );
+
+    const instanciaIdsDuplicadas = instanciaIdsInformadas.filter(
+      (instanciaId, indice) =>
+        instanciaIdsInformadas.indexOf(instanciaId) !== indice,
+    );
+
+    if (instanciaIdsDuplicadas.length > 0) {
+      throw new BadRequestException(
+        'Cada instância física da montagem deve possuir um instanciaId único.',
+      );
+    }
+    const pontosEncaixeIds = itensNormalizados.map(
+      (item) => item.pontoEncaixeId,
+    );
+
+    const pontosEncaixeIdsUnicos = [...new Set(pontosEncaixeIds)];
+
+    const pontosEncaixe = await this.prisma.pontoEncaixeHardware.findMany({
+      where: {
+        id: {
+          in: pontosEncaixeIdsUnicos,
+        },
+        ativo: true,
+      },
+      select: {
+        id: true,
+        hardwarePaiId: true,
+        codigo: true,
+        nome: true,
+        obrigatorio: true,
+      },
+    });
+
+    if (pontosEncaixe.length !== pontosEncaixeIdsUnicos.length) {
+      throw new BadRequestException(
+        'Um ou mais pontos de encaixe não existem ou estão inativos.',
+      );
+    }
+
+    const pontosPorId = new Map(
+      pontosEncaixe.map((ponto) => [ponto.id, ponto]),
+    );
+
+    const itensPorInstanciaId = new Map(
+      itensNormalizados.map((item) => [item.instanciaId, item]),
+    );
+
+    const itensComPaiResolvido = itensNormalizados.map((item) => {
+      const ponto = pontosPorId.get(item.pontoEncaixeId);
+
+      if (!ponto) {
+        throw new BadRequestException(
+          `Ponto de encaixe ${item.pontoEncaixeId} não encontrado ou inativo.`,
+        );
+      }
+
+      if (ponto.hardwarePaiId === hardwarePaiId) {
+        if (
+          item.instanciaPaiId !== undefined &&
+          item.instanciaPaiId !== instanciaRaizId
+        ) {
+          throw new BadRequestException(
+            `O ponto ${ponto.codigo} pertence ao hardware principal da montagem.`,
+          );
+        }
+
+        return {
+          ...item,
+          instanciaPaiId: instanciaRaizId,
+          hardwarePaiDoPontoId: ponto.hardwarePaiId,
+        };
+      }
+
+      if (item.instanciaPaiId !== undefined) {
+        const instanciaPai = itensPorInstanciaId.get(item.instanciaPaiId);
+
+        if (!instanciaPai) {
+          throw new BadRequestException(
+            `A instância pai ${item.instanciaPaiId} não foi encontrada na montagem.`,
+          );
+        }
+
+        if (instanciaPai.hardwareFilhoId !== ponto.hardwarePaiId) {
+          throw new BadRequestException(
+            `A instância ${item.instanciaPaiId} não corresponde ao hardware pai exigido pelo ponto ${ponto.codigo}.`,
+          );
+        }
+
+        return {
+          ...item,
+          hardwarePaiDoPontoId: ponto.hardwarePaiId,
+        };
+      }
+
+      const candidatosPai = itensNormalizados.filter(
+        (possivelPai) => possivelPai.hardwareFilhoId === ponto.hardwarePaiId,
+      );
+
+      if (candidatosPai.length === 0) {
+        throw new BadRequestException(
+          `Nenhuma instância do hardware pai ${ponto.hardwarePaiId} foi encontrada para o ponto ${ponto.codigo}.`,
+        );
+      }
+
+      if (candidatosPai.length > 1) {
+        throw new BadRequestException(
+          `Há mais de uma instância possível como pai do ponto ${ponto.codigo}. Informe instanciaPaiId.`,
+        );
+      }
+
+      return {
+        ...item,
+        instanciaPaiId: candidatosPai[0].instanciaId,
+        hardwarePaiDoPontoId: ponto.hardwarePaiId,
+      };
+    });
+
+    const ocupacoesEncaixe = new Set<string>();
+
+    for (const item of itensComPaiResolvido) {
+      if (!item.instanciaPaiId) {
+        throw new BadRequestException(
+          `Não foi possível determinar a instância pai de ${item.instanciaId}.`,
+        );
+      }
+
+      const chaveOcupacao = `${item.instanciaPaiId}:${item.pontoEncaixeId}`;
+
+      if (ocupacoesEncaixe.has(chaveOcupacao)) {
+        throw new BadRequestException(
+          'Não é permitido ocupar o mesmo ponto de encaixe mais de uma vez na mesma instância pai.',
+        );
+      }
+
+      ocupacoesEncaixe.add(chaveOcupacao);
+    }
+
+    let itensPendentes = itensComPaiResolvido.map((item) => {
+      const ponto = pontosPorId.get(item.pontoEncaixeId);
+
+      if (!ponto) {
+        throw new BadRequestException(
+          `Ponto de encaixe ${item.pontoEncaixeId} não encontrado ou inativo.`,
+        );
+      }
+
+      return {
+        item,
+        ponto,
+      };
+    });
+
+    const grafoMontagem = new Map<string, string[]>();
+
+    for (const { item } of itensPendentes) {
+      const instanciaPaiId = item.instanciaPaiId;
+
+      if (!instanciaPaiId) {
+        throw new BadRequestException(
+          `Não foi possível determinar a instância pai de ${item.instanciaId}.`,
+        );
+      }
+
+      const filhos = grafoMontagem.get(instanciaPaiId) ?? [];
+
+      filhos.push(item.instanciaId);
+
+      grafoMontagem.set(instanciaPaiId, filhos);
+    }
+
+    const instanciasVisitando = new Set<string>();
+    const instanciasVisitadas = new Set<string>();
+
+    const possuiCiclo = (instanciaId: string): boolean => {
+      if (instanciasVisitando.has(instanciaId)) {
+        return true;
+      }
+
+      if (instanciasVisitadas.has(instanciaId)) {
+        return false;
+      }
+
+      instanciasVisitando.add(instanciaId);
+
+      const filhos = grafoMontagem.get(instanciaId) ?? [];
+
+      for (const instanciaFilhoId of filhos) {
+        if (possuiCiclo(instanciaFilhoId)) {
+          return true;
+        }
+      }
+
+      instanciasVisitando.delete(instanciaId);
+      instanciasVisitadas.add(instanciaId);
+
+      return false;
+    };
+
+    const todasInstancias = new Set<string>([
+      instanciaRaizId,
+      ...itensPendentes.map(({ item }) => item.instanciaId),
+    ]);
+
+    for (const instanciaId of todasInstancias) {
+      if (possuiCiclo(instanciaId)) {
+        throw new BadRequestException(
+          'A montagem possui uma dependência circular entre as instâncias dos hardwares.',
+        );
+      }
+    }
+
+    const itensOrdenados: typeof itensPendentes = [];
+
+    const instanciasConectadas = new Set<string>([instanciaRaizId]);
+
+    const niveisInstancia = new Map<string, number>([[instanciaRaizId, 0]]);
+
+    while (itensPendentes.length > 0) {
+      const itensConectaveis = itensPendentes.filter(
+        ({ item }) =>
+          item.instanciaPaiId !== undefined &&
+          instanciasConectadas.has(item.instanciaPaiId),
+      );
+
+      if (itensConectaveis.length === 0) {
+        throw new BadRequestException(
+          'A montagem possui instâncias que não estão conectadas ao hardware principal.',
+        );
+      }
+
+      for (const itemConectavel of itensConectaveis) {
+        const instanciaPaiId = itemConectavel.item.instanciaPaiId;
+
+        if (!instanciaPaiId) {
+          throw new BadRequestException(
+            `Não foi possível determinar a instância pai de ${itemConectavel.item.instanciaId}.`,
+          );
+        }
+
+        if (instanciaPaiId === itemConectavel.item.instanciaId) {
+          throw new BadRequestException(
+            'Uma instância não pode ser encaixada nela mesma.',
+          );
+        }
+
+        if (
+          itemConectavel.ponto.hardwarePaiId ===
+          itemConectavel.item.hardwareFilhoId
+        ) {
+          throw new BadRequestException(
+            'Um hardware não pode ser encaixado nele mesmo.',
+          );
+        }
+
+        itensOrdenados.push(itemConectavel);
+
+        const nivelPai = niveisInstancia.get(instanciaPaiId) ?? 0;
+
+        instanciasConectadas.add(itemConectavel.item.instanciaId);
+
+        niveisInstancia.set(itemConectavel.item.instanciaId, nivelPai + 1);
+      }
+
+      const instanciasProcessadas = new Set(
+        itensConectaveis.map(({ item }) => item.instanciaId),
+      );
+
+      itensPendentes = itensPendentes.filter(
+        ({ item }) => !instanciasProcessadas.has(item.instanciaId),
+      );
+    }
+
+    // Mapa: instanciaId → hardwarePaiId do ponto (para validação de obrigatórios por instância)
+    // instanciaRaizId representa o hardware principal da montagem
+    const instanciasConectadasComHardware = new Map<string, number>();
+    instanciasConectadasComHardware.set(instanciaRaizId, hardwarePaiId);
+
+    for (const { item } of itensOrdenados) {
+      instanciasConectadasComHardware.set(
+        item.instanciaId,
+        item.hardwareFilhoId,
+      );
+    }
+
+    // Pontos obrigatórios validados por instância pai + pontoEncaixeId
+    // Para cada hardware que aparece na montagem, verificamos em cada instância física
     const pontosObrigatorios = await this.prisma.pontoEncaixeHardware.findMany({
       where: {
-        hardwarePaiId,
+        hardwarePaiId: {
+          in: Array.from(instanciasConectadasComHardware.values()),
+        },
         ativo: true,
         obrigatorio: true,
       },
       select: {
         id: true,
+        hardwarePaiId: true,
         codigo: true,
         nome: true,
       },
     });
 
-    const pontosInformados = new Set(
-      dados.itens.map((item) => item.pontoEncaixeId),
-    );
+    // Para cada ponto obrigatório, verificar se CADA instância do hardware correspondente o preencheu
+    const pontosObrigatoriosAusentes: {
+      codigo: string;
+      instanciaId: string;
+    }[] = [];
 
-    const pontosObrigatoriosAusentes = pontosObrigatorios.filter(
-      (ponto) => !pontosInformados.has(ponto.id),
-    );
+    for (const pontoObrigatorio of pontosObrigatorios) {
+      const instanciasDessePai = [...instanciasConectadasComHardware.entries()]
+        .filter(([, hwId]) => hwId === pontoObrigatorio.hardwarePaiId)
+        .map(([instId]) => instId);
+
+      for (const instanciaId of instanciasDessePai) {
+        const chave = `${instanciaId}:${pontoObrigatorio.id}`;
+        if (!ocupacoesEncaixe.has(chave)) {
+          pontosObrigatoriosAusentes.push({
+            codigo: pontoObrigatorio.codigo,
+            instanciaId,
+          });
+        }
+      }
+    }
 
     if (pontosObrigatoriosAusentes.length > 0) {
-      const codigosAusentes = pontosObrigatoriosAusentes
-        .map((ponto) => ponto.codigo)
+      const descricoes = pontosObrigatoriosAusentes
+        .map(
+          ({ codigo, instanciaId }) => `${codigo} (instância ${instanciaId})`,
+        )
         .join(', ');
 
       throw new BadRequestException(
-        `Pontos de encaixe obrigatórios não informados: ${codigosAusentes}.`,
+        `Pontos de encaixe obrigatórios não informados: ${descricoes}.`,
       );
     }
 
-    const resultados = await Promise.all(
-      dados.itens.map((item) =>
+    // Resolver cada encaixe preservando o par item ↔ resultado pelo índice
+    const resultadosPorItem = await Promise.all(
+      itensOrdenados.map(({ item, ponto }) =>
         this.resolverEncaixeHardwarePublico(
-          hardwarePaiId,
+          ponto.hardwarePaiId,
           item.pontoEncaixeId,
           item.hardwareFilhoId,
-        ),
+        ).then((resultado) => ({ item, resultado })),
       ),
     );
 
-    const itensSemModelo3D = resultados
-      .filter((resultado) => resultado.hardwareFilho.modelo3D === null)
-      .map((resultado) => ({
-        hardwareId: resultado.hardwareFilho.id,
-        nome: resultado.hardwareFilho.nome,
-        categoria: resultado.hardwareFilho.categoria,
-      }));
+    const itensSemModelo3D = resultadosPorItem.flatMap(
+      ({ item, resultado }) => {
+        if (resultado.hardwareFilho.modelo3D !== null) {
+          return [];
+        }
+
+        return [
+          {
+            instanciaId: item.instanciaId,
+            instanciaPaiId: item.instanciaPaiId ?? null,
+            hardwareId: resultado.hardwareFilho.id,
+            nome: resultado.hardwareFilho.nome,
+            categoria: resultado.hardwareFilho.categoria,
+          },
+        ];
+      },
+    );
 
     const hardwarePaiSemModelo3D = hardwarePai.modelos3D.length === 0;
 
     return {
       hardwarePai: {
+        instanciaId: instanciaRaizId,
         id: hardwarePai.id,
         nome: hardwarePai.nome,
         categoria: hardwarePai.categoria,
@@ -4196,13 +5171,30 @@ export class HardwaresService {
           escalaZ: modelo3DHardwarePai?.escalaCorrecaoZ ?? 1,
         },
       },
-      total: resultados.length,
+
+      total: resultadosPorItem.length,
+
       montagemRenderizavel:
         !hardwarePaiSemModelo3D && itensSemModelo3D.length === 0,
 
       hardwarePaiSemModelo3D,
       itensSemModelo3D,
-      itens: resultados.map((resultado) => ({
+
+      itens: resultadosPorItem.map(({ item, resultado }) => ({
+        instanciaId: item.instanciaId,
+
+        instanciaPaiId: item.instanciaPaiId ?? null,
+
+        nivelHierarquico: niveisInstancia.get(item.instanciaId) ?? 0,
+
+        referenciaTransformacao: 'HARDWARE_PAI',
+
+        hardwarePai: {
+          id: resultado.hardwarePai.id,
+          nome: resultado.hardwarePai.nome,
+          categoria: resultado.hardwarePai.categoria,
+        },
+
         hardwareFilho: resultado.hardwareFilho,
         pontoEncaixe: resultado.pontoEncaixe,
         ajusteEspecificoAplicado: resultado.ajusteEspecificoAplicado,
@@ -4211,6 +5203,474 @@ export class HardwaresService {
         transformacaoRenderizacaoFinal:
           resultado.transformacaoRenderizacaoFinal,
       })),
+    };
+  }
+
+  async resolverMontagemCompleta(
+    gabineteId: number,
+    dados: ResolverMontagemCompletaDto,
+  ) {
+    // ── 1. Resolver estrutura 3D completa ─────────────────────────────────
+    // Esta etapa valida instâncias, hierarquia, ciclos, ocupação e pontos
+    // obrigatórios antes de qualquer diagnóstico de compatibilidade.
+    const montagem3D = await this.resolverMontagem3DPublica(gabineteId, {
+      itens: dados.itens,
+    });
+
+    const itensMontagem = montagem3D.itens;
+    const itensDaCategoria = (categoria: CategoriaHardware) =>
+      itensMontagem.filter(
+        (item) => item.hardwareFilho.categoria === categoria,
+      );
+
+    const placasMae = itensDaCategoria(CategoriaHardware.PLACA_MAE);
+    const processadores = itensDaCategoria(CategoriaHardware.PROCESSADOR);
+    const memoriasRam = itensDaCategoria(CategoriaHardware.MEMORIA_RAM);
+    const placasVideo = itensDaCategoria(CategoriaHardware.PLACA_VIDEO);
+    const armazenamentos = itensDaCategoria(CategoriaHardware.ARMAZENAMENTO);
+    const ventoinhas = itensDaCategoria(CategoriaHardware.VENTOINHA);
+
+    if (placasMae.length === 0) {
+      throw new BadRequestException(
+        'A montagem não possui placa-mãe. Adicione uma placa-mãe antes de verificar a compatibilidade.',
+      );
+    }
+
+    if (processadores.length === 0) {
+      throw new BadRequestException(
+        'A montagem não possui processador. Adicione um processador antes de verificar a compatibilidade.',
+      );
+    }
+
+    if (memoriasRam.length === 0) {
+      throw new BadRequestException(
+        'A montagem não possui memória RAM. Adicione ao menos um módulo antes de verificar a compatibilidade.',
+      );
+    }
+
+    // ── 2. Ventoinhas: preservar quantidade física por hardware ───────────
+    const configuracoesVentoinhas = dados.ventoinhas ?? [];
+
+    const configuracoesPorInstancia = new Map<
+      string,
+      (typeof configuracoesVentoinhas)[number]
+    >();
+
+    for (const config of configuracoesVentoinhas) {
+      if (!config.instanciaId) {
+        continue;
+      }
+
+      if (configuracoesPorInstancia.has(config.instanciaId)) {
+        throw new BadRequestException(
+          `A instância de ventoinha ${config.instanciaId} possui mais de uma configuração.`,
+        );
+      }
+
+      const instanciaVentoinha = ventoinhas.find(
+        (item) => item.instanciaId === config.instanciaId,
+      );
+
+      if (!instanciaVentoinha) {
+        throw new BadRequestException(
+          `A instância de ventoinha ${config.instanciaId} não foi encontrada na montagem.`,
+        );
+      }
+
+      if (instanciaVentoinha.hardwareFilho.id !== config.ventoinhaId) {
+        throw new BadRequestException(
+          `A instância ${config.instanciaId} não corresponde ao hardware de ventoinha ${config.ventoinhaId}.`,
+        );
+      }
+
+      configuracoesPorInstancia.set(config.instanciaId, config);
+    }
+
+    const ventoinhasDto: VentoinhaMontagemDto[] = [];
+
+    const ventoinhasSemConfiguracaoExplicita = new Map<
+      number,
+      typeof ventoinhas
+    >();
+
+    for (const item of ventoinhas) {
+      const config = configuracoesPorInstancia.get(item.instanciaId);
+
+      if (config) {
+        ventoinhasDto.push({
+          ventoinhaId: item.hardwareFilho.id,
+          posicao: config.posicao,
+          ...(config.sentido !== undefined && {
+            sentido: config.sentido,
+          }),
+          quantidade: 1,
+        });
+
+        continue;
+      }
+
+      const hardwareId = item.hardwareFilho.id;
+      const instancias =
+        ventoinhasSemConfiguracaoExplicita.get(hardwareId) ?? [];
+
+      instancias.push(item);
+
+      ventoinhasSemConfiguracaoExplicita.set(hardwareId, instancias);
+    }
+
+    /*
+     * Compatibilidade com o formato antigo:
+     * configurações sem instanciaId continuam sendo distribuídas entre
+     * as instâncias físicas daquele mesmo hardware.
+     */
+    for (const [
+      ventoinhaId,
+      instancias,
+    ] of ventoinhasSemConfiguracaoExplicita) {
+      const configsLegadas = configuracoesVentoinhas.filter(
+        (config) =>
+          config.instanciaId === undefined &&
+          config.ventoinhaId === ventoinhaId,
+      );
+
+      if (configsLegadas.length === 0) {
+        ventoinhasDto.push({
+          ventoinhaId,
+          posicao: PosicaoRefrigeracaoGabinete.FRENTE,
+          quantidade: instancias.length,
+        });
+
+        continue;
+      }
+
+      const quantidadeBase = Math.floor(
+        instancias.length / configsLegadas.length,
+      );
+
+      const resto = instancias.length % configsLegadas.length;
+
+      for (const [indice, config] of configsLegadas.entries()) {
+        const quantidade = quantidadeBase + (indice < resto ? 1 : 0);
+
+        if (quantidade === 0) {
+          continue;
+        }
+
+        ventoinhasDto.push({
+          ventoinhaId,
+          posicao: config.posicao,
+          ...(config.sentido !== undefined && {
+            sentido: config.sentido,
+          }),
+          quantidade,
+        });
+      }
+    }
+
+    // ── 3. Compatibilidade respeitando a árvore de instâncias ──────────────
+    // Antes o código fazia um produto cartesiano entre todas as placas-mãe,
+    // CPUs e memórias. Isso podia comparar uma peça com uma placa-mãe à qual
+    // ela não estava fisicamente ligada. Agora cada placa-mãe usa somente as
+    // instâncias filhas dela. Em montagens com uma única placa-mãe, componentes
+    // ligados diretamente ao gabinete continuam sendo aceitos como fallback.
+    const verificacoesCompatibilidade: Awaited<
+      ReturnType<HardwaresService['verificarCompatibilidadeMontagem']>
+    >[] = [];
+
+    for (const placaMae of placasMae) {
+      const filhosDiretos = itensMontagem.filter(
+        (item) => item.instanciaPaiId === placaMae.instanciaId,
+      );
+
+      const processadoresDaPlaca = filhosDiretos.filter(
+        (item) =>
+          item.hardwareFilho.categoria === CategoriaHardware.PROCESSADOR,
+      );
+      const memoriasDaPlaca = filhosDiretos.filter(
+        (item) =>
+          item.hardwareFilho.categoria === CategoriaHardware.MEMORIA_RAM,
+      );
+      const placasVideoDaPlaca = filhosDiretos.filter(
+        (item) =>
+          item.hardwareFilho.categoria === CategoriaHardware.PLACA_VIDEO,
+      );
+      const armazenamentosDaPlaca = filhosDiretos.filter(
+        (item) =>
+          item.hardwareFilho.categoria === CategoriaHardware.ARMAZENAMENTO,
+      );
+
+      const processadoresAssociados =
+        processadoresDaPlaca.length > 0
+          ? processadoresDaPlaca
+          : placasMae.length === 1
+            ? processadores
+            : [];
+      const memoriasAssociadas =
+        memoriasDaPlaca.length > 0
+          ? memoriasDaPlaca
+          : placasMae.length === 1
+            ? memoriasRam
+            : [];
+      const placasVideoAssociadas =
+        placasVideoDaPlaca.length > 0
+          ? placasVideoDaPlaca
+          : placasMae.length === 1
+            ? placasVideo
+            : [];
+      const armazenamentosAssociados =
+        armazenamentosDaPlaca.length > 0
+          ? armazenamentosDaPlaca
+          : placasMae.length === 1
+            ? armazenamentos
+            : [];
+
+      if (processadoresAssociados.length === 0) {
+        throw new BadRequestException(
+          `Não foi possível associar um processador à instância ${placaMae.instanciaId} da placa-mãe.`,
+        );
+      }
+
+      if (memoriasAssociadas.length === 0) {
+        throw new BadRequestException(
+          `Não foi possível associar memória RAM à instância ${placaMae.instanciaId} da placa-mãe.`,
+        );
+      }
+
+      const memoriaRamIds = [
+        ...new Set(memoriasAssociadas.map((item) => item.hardwareFilho.id)),
+      ];
+      const quantidadePorMemoriaRam = new Map<number, number>();
+      for (const memoria of memoriasAssociadas) {
+        const hardwareId = memoria.hardwareFilho.id;
+        quantidadePorMemoriaRam.set(
+          hardwareId,
+          (quantidadePorMemoriaRam.get(hardwareId) ?? 0) + 1,
+        );
+      }
+
+      const armazenamentoIds = armazenamentosAssociados.map(
+        (item) => item.hardwareFilho.id,
+      );
+      const quantidadeModulosRamTotal = memoriasAssociadas.length;
+      const placaVideoId = placasVideoAssociadas[0]?.hardwareFilho.id;
+
+      for (const processador of processadoresAssociados) {
+        for (const memoriaRamId of memoriaRamIds) {
+          verificacoesCompatibilidade.push(
+            await this.verificarCompatibilidadeMontagem({
+              placaMaeId: placaMae.hardwareFilho.id,
+              processadorId: processador.hardwareFilho.id,
+              memoriaRamId,
+              quantidadeModulosRam:
+                quantidadePorMemoriaRam.get(memoriaRamId) ?? 1,
+              quantidadeModulosRamTotal,
+              gabineteId,
+              fonteId: dados.fonteId,
+              placaVideoId,
+              coolerId: dados.coolerId,
+              armazenamentoIds,
+              ventoinhas: ventoinhasDto,
+            }),
+          );
+        }
+      }
+    }
+
+    // ── 4. Resumo físico da configuração ──────────────────────────────────
+    // A árvore 3D é a fonte de verdade para quantidades físicas. Isso evita
+    // perder 2× RAM/SSD/fans quando várias instâncias usam o mesmo hardwareId.
+    const memoriaIdsUnicos = [
+      ...new Set(memoriasRam.map((item) => item.hardwareFilho.id)),
+    ];
+    const memoriasComEspecificacao =
+      memoriaIdsUnicos.length === 0
+        ? []
+        : await this.prisma.hardware.findMany({
+            where: { id: { in: memoriaIdsUnicos } },
+            select: {
+              id: true,
+              especificacaoMemoriaRam: {
+                select: { capacidadePorModuloGb: true },
+              },
+            },
+          });
+    const capacidadeModuloPorHardware = new Map(
+      memoriasComEspecificacao.map((hardware) => [
+        hardware.id,
+        hardware.especificacaoMemoriaRam?.capacidadePorModuloGb ?? 0,
+      ]),
+    );
+    const capacidadeMemoriaTotalGb = memoriasRam.reduce(
+      (total, item) =>
+        total + (capacidadeModuloPorHardware.get(item.hardwareFilho.id) ?? 0),
+      0,
+    );
+
+    const resumoFisico = {
+      modulosRam: memoriasRam.length,
+      capacidadeMemoriaTotalGb,
+      armazenamentos: armazenamentos.length,
+      ventoinhas: ventoinhas.length,
+    };
+
+    // ── 5. Consolidar resultado ─────────────────────────────────────────────
+    const compatibilidade =
+      verificacoesCompatibilidade.length === 1
+        ? verificacoesCompatibilidade[0]
+        : {
+            compativel: verificacoesCompatibilidade.every(
+              (verificacao) => verificacao.compativel,
+            ),
+            status: verificacoesCompatibilidade.every(
+              (verificacao) => verificacao.compativel,
+            )
+              ? verificacoesCompatibilidade.some(
+                  (verificacao) => (verificacao.alertas?.length ?? 0) > 0,
+                )
+                ? 'COMPATIVEL_COM_ALERTAS'
+                : 'COMPATIVEL'
+              : 'INCOMPATIVEL',
+            resumo: {
+              totalVerificacoes: verificacoesCompatibilidade.reduce(
+                (soma, verificacao) =>
+                  soma + verificacao.resumo.totalVerificacoes,
+                0,
+              ),
+              totalErros: verificacoesCompatibilidade.reduce(
+                (soma, verificacao) => soma + verificacao.resumo.totalErros,
+                0,
+              ),
+              totalAlertas: verificacoesCompatibilidade.reduce(
+                (soma, verificacao) => soma + verificacao.resumo.totalAlertas,
+                0,
+              ),
+            },
+            erros: verificacoesCompatibilidade.flatMap(
+              (verificacao) => verificacao.erros,
+            ),
+            alertas: verificacoesCompatibilidade.flatMap(
+              (verificacao) => verificacao.alertas,
+            ),
+            consumoEnergia: verificacoesCompatibilidade[0].consumoEnergia,
+            fluxoAr: verificacoesCompatibilidade[0].fluxoAr,
+            resultados: verificacoesCompatibilidade.flatMap(
+              (verificacao) => verificacao.resultados,
+            ),
+          };
+
+    return {
+      montagem3D,
+      resumoFisico,
+      compatibilidade,
+    };
+  }
+
+  // ── Importação de produto por URL ─────────────────────────────────────────
+
+  async importarProdutoPorUrl(
+    urlOriginal: string,
+  ): Promise<Record<string, unknown>> {
+    let html: string;
+    let urlAtual = await this.validarUrlPublicaImportacao(urlOriginal);
+
+    try {
+      let resposta: Response | null = null;
+
+      // Redirect manual para validar novamente cada destino e impedir que uma
+      // URL pública redirecione o servidor para localhost/rede privada.
+      for (
+        let redirecionamentos = 0;
+        redirecionamentos <= 3;
+        redirecionamentos++
+      ) {
+        resposta = await fetch(urlAtual, {
+          redirect: 'manual',
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (compatible; PCBuilderBot/1.0; +https://pcbuilder.app)',
+            Accept: 'text/html,application/xhtml+xml',
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+          },
+          signal: AbortSignal.timeout(12_000),
+        });
+
+        if (
+          resposta.status >= 300 &&
+          resposta.status < 400 &&
+          resposta.headers.has('location')
+        ) {
+          if (redirecionamentos === 3) {
+            throw new BadRequestException(
+              'A página realizou redirecionamentos demais.',
+            );
+          }
+
+          const destino = new URL(
+            resposta.headers.get('location') ?? '',
+            urlAtual,
+          );
+          urlAtual = await this.validarUrlPublicaImportacao(destino.toString());
+          continue;
+        }
+
+        break;
+      }
+
+      if (!resposta?.ok) {
+        throw new BadRequestException(
+          `A página retornou o status ${resposta?.status ?? 'desconhecido'}. Verifique o endereço.`,
+        );
+      }
+
+      const tipo = resposta.headers.get('content-type') ?? '';
+      if (
+        !tipo.includes('text/html') &&
+        !tipo.includes('application/xhtml+xml')
+      ) {
+        throw new BadRequestException(
+          'O endereço não retornou uma página HTML de produto.',
+        );
+      }
+
+      html = await this.lerHtmlLimitado(resposta);
+    } catch (erro) {
+      if (erro instanceof BadRequestException) throw erro;
+      throw new BadRequestException(
+        'Não foi possível acessar a página. A loja pode estar bloqueando requisições externas.',
+      );
+    }
+
+    // Extrai blocos JSON-LD
+    const jsonLdBlocos: string[] = [];
+    const reJsonLd =
+      /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = reJsonLd.exec(html)) !== null) {
+      jsonLdBlocos.push(m[1].trim());
+    }
+
+    // Extrai meta tags Open Graph e produto
+    const metaMap: Record<string, string> = {};
+    const reMeta =
+      /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']+)["'][^>]*>/gi;
+    while ((m = reMeta.exec(html)) !== null) {
+      metaMap[m[1].toLowerCase()] = m[2];
+    }
+
+    // Extrai texto da página limitado (para a IA)
+    const textoLimpo = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .slice(0, 8000); // máximo 8 KB de texto
+
+    return {
+      urlOriginal,
+      jsonLd: jsonLdBlocos,
+      meta: metaMap,
+      textoExtraido: textoLimpo,
     };
   }
 }

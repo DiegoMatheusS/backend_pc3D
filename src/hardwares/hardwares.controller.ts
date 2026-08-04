@@ -10,20 +10,25 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { CriarHardwareDto } from './dtos/criar-hardware.dto';
 import { HardwaresService } from './hardwares.service';
 import { VerificarCompatibilidadeMontagemDto } from './dtos/verificar-compatibilidade-montagem.dto';
 import { ResolverMontagem3DDto } from './dtos/modelos-3d/resolver-montagem-3d.dto';
+import { ResolverMontagemCompletaDto } from './dtos/modelos-3d/resolver-montagem-completa.dto';
+import { FiltrarHardwaresDto } from './dtos/filtrar-hardwares.dto';
 
+@ApiTags('Hardwares')
 @Controller('hardwares')
 export class HardwaresController {
   constructor(private readonly hardwaresService: HardwaresService) {}
 
+  @ApiOperation({ summary: 'Listar todos os hardwares publicados' })
   @Get()
-  listarPublicados() {
-    return this.hardwaresService.listarPublicados();
+  listarPublicados(@Query() filtros: FiltrarHardwaresDto) {
+    return this.hardwaresService.listarPublicados(filtros);
   }
 
   @Get('compatibilidades/cpu-placa-mae/:placaMaeId/:processadorId')
@@ -159,6 +164,9 @@ export class HardwaresController {
     );
   }
 
+  @ApiOperation({
+    summary: 'Verificar compatibilidade completa de uma montagem',
+  })
   @Post('compatibilidades/montagem')
   @HttpCode(HttpStatus.OK)
   verificarCompatibilidadeMontagem(
@@ -189,6 +197,23 @@ export class HardwaresController {
     );
   }
 
+  @ApiTags('Montagem 3D')
+  @ApiOperation({
+    summary: 'Resolver montagem 3D + compatibilidade + consumo em uma chamada',
+  })
+  @Post(':gabineteId/montagem-completa/resolver')
+  @HttpCode(HttpStatus.OK)
+  resolverMontagemCompleta(
+    @Param('gabineteId', ParseIntPipe) gabineteId: number,
+    @Body() dados: ResolverMontagemCompletaDto,
+  ) {
+    return this.hardwaresService.resolverMontagemCompleta(gabineteId, dados);
+  }
+
+  @ApiTags('Montagem 3D')
+  @ApiOperation({
+    summary: 'Resolver estrutura 3D hierárquica por instâncias físicas',
+  })
   @Post(':hardwarePaiId/montagem-3d/resolver')
   @HttpCode(HttpStatus.OK)
   resolverMontagem3DPublica(

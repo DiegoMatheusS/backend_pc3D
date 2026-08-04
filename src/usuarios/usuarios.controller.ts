@@ -10,8 +10,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { ApiTags } from '@nestjs/swagger';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard } from '../auth/auth.guard';
+import { UsuarioAtual } from '../auth/usuario-atual.decorator';
+import { AcaoAuditoria } from '../generated/prisma/enums';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 import { AlterarMinhaSenhaDto } from './dtos/alterar-minha-senha.dto';
 import { AtualizarMeuPerfilDto } from './dtos/atualizar-meu-perfil.dto';
 import { AtualizarUsuarioDto } from './dtos/atualizar-usuario.dto';
@@ -25,10 +29,16 @@ type RequisicaoAutenticada = Request & {
   };
 };
 
+type UsuarioReq = { id: number; papel: string } | null;
+
+@ApiTags('Usuários')
 @Controller('usuarios')
 @UseGuards(AuthGuard)
 export class UsuariosController {
-  constructor(private readonly usuariosService: UsuariosService) {}
+  constructor(
+    private readonly usuariosService: UsuariosService,
+    private readonly auditoriaService: AuditoriaService,
+  ) {}
 
   @Get()
   @UseGuards(AdminGuard)
@@ -63,26 +73,66 @@ export class UsuariosController {
 
   @Patch(':id/senha')
   @UseGuards(AdminGuard)
-  redefinirSenha(
+  async redefinirSenha(
     @Param('id', ParseIntPipe) id: number,
     @Body() dados: RedefinirSenhaUsuarioDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
   ) {
-    return this.usuariosService.redefinirSenha(id, dados);
+    const resultado = await this.usuariosService.redefinirSenha(id, dados);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.SENHA_REDEFINIDA_ADMIN,
+      entidade: 'Usuario',
+      entidadeId: id,
+      ip: req.ip,
+    });
+    return resultado;
   }
 
   @Patch(':id')
   @UseGuards(AdminGuard)
-  atualizar(
+  async atualizar(
     @Req() requisicao: RequisicaoAutenticada,
     @Param('id', ParseIntPipe) id: number,
     @Body() dados: AtualizarUsuarioDto,
+    @UsuarioAtual() usuario: UsuarioReq,
   ) {
-    return this.usuariosService.atualizar(id, dados, requisicao.usuario.id);
+    const resultado = await this.usuariosService.atualizar(
+      id,
+      dados,
+      requisicao.usuario.id,
+    );
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao:
+        dados.ativo === false
+          ? AcaoAuditoria.USUARIO_DESATIVADO
+          : AcaoAuditoria.USUARIO_ATUALIZADO,
+      entidade: 'Usuario',
+      entidadeId: id,
+      dadosNovos:
+        dados.ativo !== undefined ? { ativo: dados.ativo } : undefined,
+    });
+    return resultado;
   }
 
   @Post()
   @UseGuards(AdminGuard)
-  criar(@Body() dados: CriarUsuarioDto) {
-    return this.usuariosService.criar(dados);
+  async criar(
+    @Body() dados: CriarUsuarioDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.usuariosService.criar(dados);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.USUARIO_CRIADO,
+      entidade: 'Usuario',
+      entidadeId: resultado.id,
+      dadosNovos: { email: dados.email, papel: dados.papel },
+      ip: req.ip,
+    });
+    return resultado;
   }
 }

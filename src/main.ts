@@ -1,17 +1,49 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { FiltroHttpExcecoes } from './common/filters/http-excecoes.filter';
 import cookieParser from 'cookie-parser';
+import { json } from 'express';
+import helmet from 'helmet';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
   const port = Number(configService.get<string>('PORT') ?? 3000);
+  const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
+
+  // ── Segurança: headers HTTP seguros ──────────────────────────────────────
+  app.use(
+    helmet({
+      // Permite o Swagger UI carregar em dev; em produção recomenda-se CSP mais restrito
+      contentSecurityPolicy: nodeEnv === 'production' ? undefined : false,
+    }),
+  );
+
+  // ── CORS ─────────────────────────────────────────────────────────────────
+  const allowedOrigins = (
+    configService.get<string>('CORS_ORIGINS') ?? 'http://localhost:5173'
+  )
+    .split(',')
+    .map((origem) => origem.trim())
+    .filter(Boolean);
+
+  app.enableCors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Accept'],
+  });
 
   app.use(cookieParser());
   app.setGlobalPrefix('api');
+
+  // ── Limite de payload JSON ────────────────────────────────────────────────
+  // O NestJS usa express por padrão — podemos ajustar via bodyParser
+  app.use(json({ limit: '1mb' }));
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -21,11 +53,69 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
+  app.useGlobalFilters(new FiltroHttpExcecoes());
+
+  // ── Swagger / OpenAPI ────────────────────────────────────────────────────
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('PC Builder API')
+    .setDescription(
+      'API do sistema CriaByte PC Builder — hardware, compatibilidade, montagem 3D, ofertas e muito mais.',
+    )
+    .setVersion('1.0')
+    .addCookieAuth('sessao', {
+      type: 'apiKey',
+      in: 'cookie',
+      name: 'sessao',
+    })
+    .addTag('Auth', 'Autenticação e sessão')
+    .addTag('Usuários', 'Gestão de usuários')
+    .addTag('Hardwares', 'Catálogo de hardwares (público)')
+    .addTag('Hardwares Admin', 'Gestão administrativa de hardwares')
+    .addTag('Modelos 3D', 'Modelos 3D dos hardwares')
+    .addTag('Montagem 3D', 'Resolução e renderização de montagens 3D')
+    .addTag('Montagens', 'Montagens salvas dos usuários')
+    .addTag(
+      'Compatibilidade',
+      'Verificação de compatibilidade entre componentes',
+    )
+    .addTag('Ofertas', 'Ofertas de lojas parceiras')
+    .addTag('Loja', 'Catálogo público de produtos')
+    .addTag('Loja Admin', 'Gestão administrativa do catálogo da loja')
+    .addTag('Notebooks', 'Catálogo público de notebooks')
+    .addTag('Notebooks Admin', 'Gestão administrativa de notebooks')
+    .addTag('PCs Montados', 'Catálogo público de PCs montados')
+    .addTag('PCs Montados Admin', 'Gestão administrativa de PCs montados')
+    .addTag('Avaliações', 'Comentários e avaliações de produtos')
+    .addTag('Auditoria', 'Logs de auditoria administrativa')
+    .addTag(
+      'IA Pública',
+      'Assistente público usando catálogo e regras reais do backend',
+    )
+    .addTag(
+      'IA Admin',
+      'Ferramentas administrativas de interpretação e organização com IA',
+    )
+    .build();
+
+  const swaggerHabilitado =
+    nodeEnv !== 'production' ||
+    configService.get<string>('SWAGGER_ENABLED') === 'true';
+
+  if (swaggerHabilitado) {
+    const documento = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, documento, {
+      swaggerOptions: { persistAuthorization: true },
+    });
+  }
+
   app.enableShutdownHooks();
 
   await app.listen(port);
 
   console.log(`PC Builder API: http://localhost:${port}/api`);
+  if (swaggerHabilitado) {
+    console.log(`Swagger UI:      http://localhost:${port}/api/docs`);
+  }
 }
 
 void bootstrap();

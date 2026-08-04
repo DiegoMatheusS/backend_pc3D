@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -42,6 +43,11 @@ export class AtualizarModelo3DHardwareDto {
   @IsNumber()
   @Min(0)
   profundidadeRealMm?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  tamanhoBytes?: number;
 
   @IsOptional()
   @IsNumber()

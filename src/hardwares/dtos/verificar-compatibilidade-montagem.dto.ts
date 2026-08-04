@@ -1,6 +1,5 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayUnique,
   IsArray,
   IsEnum,
   IsInt,
@@ -45,6 +44,28 @@ export class VerificarCompatibilidadeMontagemDto {
   @Min(1)
   memoriaRamId!: number;
 
+  /**
+   * Quantidade física de módulos deste modelo de memória RAM.
+   * Na montagem completa, o backend agrupa as instâncias por hardwareId e
+   * usa este valor para QVL e capacidade deste modelo. Em chamadas antigas
+   * sem quantidadeModulosRamTotal, ele também continua servindo como total
+   * físico para a checagem de slots.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quantidadeModulosRam?: number;
+
+  /**
+   * Quantidade total de módulos RAM físicos, somando modelos diferentes.
+   * É usada para validar ocupação de slots. Quando omitida, o backend usa
+   * quantidadeModulosRam, preservando compatibilidade com o contrato antigo.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quantidadeModulosRamTotal?: number;
+
   @IsInt()
   @Min(1)
   gabineteId!: number;
@@ -65,7 +86,6 @@ export class VerificarCompatibilidadeMontagemDto {
 
   @IsOptional()
   @IsArray()
-  @ArrayUnique()
   @IsInt({ each: true })
   @Min(1, { each: true })
   armazenamentoIds?: number[];

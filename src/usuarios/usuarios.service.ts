@@ -73,6 +73,7 @@ export class UsuariosService {
           nome,
           email,
           senhaHash,
+          ...(dados.papel !== undefined && { papel: dados.papel }),
         },
         select: {
           id: true,

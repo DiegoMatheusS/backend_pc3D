@@ -89,6 +89,11 @@ export class CriarEspecificacaoCoolerDto {
   consumoBombaWatts?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  consumoWatts?: number;
+
+  @IsOptional()
   @IsBoolean()
   rgb?: boolean;
 
