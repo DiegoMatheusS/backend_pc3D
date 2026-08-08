@@ -49,9 +49,9 @@ describe('Guards de papéis (e2e)', () => {
     expect([401, 403]).toContain(res.status);
   });
 
-  it('GET /api/admin/ofertas/parceiros/1 — sem cookie → 401 ou 403', async () => {
+  it('GET /api/admin/ofertas/parceiros/:id — sem cookie → 401 ou 403', async () => {
     const res = await request(app.getHttpServer()).get(
-      '/api/admin/ofertas/parceiros/1',
+      '/api/admin/ofertas/parceiros/2147483000',
     );
     expect([401, 403]).toContain(res.status);
   });

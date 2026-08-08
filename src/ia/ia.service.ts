@@ -13,6 +13,13 @@ import { ChatAdminIaDto } from './dtos/chat-admin-ia.dto';
 import { MontarPcIaDto } from './dtos/montar-pc-ia.dto';
 import { RecomendarLojaIaDto } from './dtos/recomendar-loja-ia.dto';
 import {
+  AcaoMontagemGuiadaIa,
+  ComponenteSnapshotIaDto,
+  EtapaMontagemGuiadaIa,
+  MontagemGuiadaIaDto,
+  OrigemComponenteIa,
+} from './dtos/montagem-guiada-ia.dto';
+import {
   AnalisarProdutoIaDto,
   GerarDescricaoIaDto,
   NormalizarProdutoIaDto,
@@ -24,6 +31,42 @@ import {
 
 const LIMITE_HISTORICO = 10;
 const TAMANHO_MAXIMO_CATALOGO = 60;
+
+type StatusCompatibilidadeIa =
+  | 'COMPATIVEL'
+  | 'INCOMPATIVEL'
+  | 'COMPATIBILIDADE_PARCIAL'
+  | 'DADOS_INSUFICIENTES';
+
+type ResultadoCompatibilidadeIa = {
+  status: StatusCompatibilidadeIa;
+  erros: string[];
+  alertas: string[];
+  verificacoesRealizadas: number;
+  verificacoesPendentes: number;
+};
+
+const ORDEM_ETAPAS_IA: EtapaMontagemGuiadaIa[] = [
+  EtapaMontagemGuiadaIa.PROCESSADOR,
+  EtapaMontagemGuiadaIa.PLACA_MAE,
+  EtapaMontagemGuiadaIa.MEMORIA_RAM,
+  EtapaMontagemGuiadaIa.PLACA_VIDEO,
+  EtapaMontagemGuiadaIa.ARMAZENAMENTO,
+  EtapaMontagemGuiadaIa.FONTE,
+  EtapaMontagemGuiadaIa.GABINETE,
+  EtapaMontagemGuiadaIa.COOLER,
+  EtapaMontagemGuiadaIa.VENTOINHA,
+  EtapaMontagemGuiadaIa.RESUMO,
+];
+
+const CATEGORIAS_UNITARIAS_IA = new Set<CategoriaHardware>([
+  CategoriaHardware.PROCESSADOR,
+  CategoriaHardware.PLACA_MAE,
+  CategoriaHardware.PLACA_VIDEO,
+  CategoriaHardware.FONTE,
+  CategoriaHardware.GABINETE,
+  CategoriaHardware.COOLER,
+]);
 
 @Injectable()
 export class IaService {
@@ -39,6 +82,750 @@ export class IaService {
 
   private ehRegistro(valor: unknown): valor is Record<string, unknown> {
     return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
+  }
+
+  private textoSpec(
+    specs: Record<string, unknown> | undefined,
+    chave: string,
+  ): string | undefined {
+    const valor = specs?.[chave];
+    return typeof valor === 'string' && valor.trim().length > 0
+      ? valor.trim()
+      : undefined;
+  }
+
+  private numeroSpec(
+    specs: Record<string, unknown> | undefined,
+    chave: string,
+  ): number | undefined {
+    const valor = specs?.[chave];
+    return typeof valor === 'number' && Number.isFinite(valor)
+      ? valor
+      : undefined;
+  }
+
+  private booleanoSpec(
+    specs: Record<string, unknown> | undefined,
+    chave: string,
+  ): boolean | undefined {
+    const valor = specs?.[chave];
+    return typeof valor === 'boolean' ? valor : undefined;
+  }
+
+  private listaTextoSpec(
+    specs: Record<string, unknown> | undefined,
+    chave: string,
+  ): string[] {
+    const valor = specs?.[chave];
+    return Array.isArray(valor)
+      ? valor.filter(
+          (item): item is string =>
+            typeof item === 'string' && item.trim().length > 0,
+        )
+      : [];
+  }
+
+  private etapaParaCategoria(
+    etapa: EtapaMontagemGuiadaIa,
+  ): CategoriaHardware | null {
+    if (etapa === EtapaMontagemGuiadaIa.RESUMO) return null;
+    return etapa;
+  }
+
+  private proximaEtapa(atual: EtapaMontagemGuiadaIa): EtapaMontagemGuiadaIa {
+    const indice = ORDEM_ETAPAS_IA.indexOf(atual);
+    return ORDEM_ETAPAS_IA[Math.min(indice + 1, ORDEM_ETAPAS_IA.length - 1)];
+  }
+
+  private etapaAnterior(atual: EtapaMontagemGuiadaIa): EtapaMontagemGuiadaIa {
+    const indice = ORDEM_ETAPAS_IA.indexOf(atual);
+    return ORDEM_ETAPAS_IA[Math.max(indice - 1, 0)];
+  }
+
+  private adicionarOuSubstituirComponente(
+    atuais: ComponenteSnapshotIaDto[],
+    novo: ComponenteSnapshotIaDto,
+  ): ComponenteSnapshotIaDto[] {
+    if (!CATEGORIAS_UNITARIAS_IA.has(novo.categoria)) {
+      return [...atuais, { ...novo, quantidade: novo.quantidade ?? 1 }];
+    }
+
+    return [
+      ...atuais.filter((item) => item.categoria !== novo.categoria),
+      { ...novo, quantidade: novo.quantidade ?? 1 },
+    ];
+  }
+
+  /**
+   * Validação técnica para snapshots que ainda não existem no catálogo.
+   * Ela só afirma COMPATIVEL quando existem dados suficientes para as relações
+   * que podem ser verificadas. Ausência de informação nunca vira "compatível".
+   */
+  private verificarCompatibilidadeSnapshots(
+    componentes: ComponenteSnapshotIaDto[],
+    exigirSaidaVideo = false,
+  ): ResultadoCompatibilidadeIa {
+    const erros: string[] = [];
+    const alertas: string[] = [];
+    let verificacoesRealizadas = 0;
+    let verificacoesPendentes = 0;
+
+    const primeiro = (categoria: CategoriaHardware) =>
+      componentes.find((item) => item.categoria === categoria);
+    const todos = (categoria: CategoriaHardware) =>
+      componentes.filter((item) => item.categoria === categoria);
+
+    const cpu = primeiro(CategoriaHardware.PROCESSADOR);
+    const placaMae = primeiro(CategoriaHardware.PLACA_MAE);
+    const gpu = primeiro(CategoriaHardware.PLACA_VIDEO);
+    const fonte = primeiro(CategoriaHardware.FONTE);
+    const gabinete = primeiro(CategoriaHardware.GABINETE);
+    const cooler = primeiro(CategoriaHardware.COOLER);
+    const memorias = todos(CategoriaHardware.MEMORIA_RAM);
+    const armazenamentos = todos(CategoriaHardware.ARMAZENAMENTO);
+
+    if (cpu && placaMae) {
+      const socketCpu = this.textoSpec(cpu.especificacoes, 'socket');
+      const socketPlaca = this.textoSpec(placaMae.especificacoes, 'socket');
+      if (socketCpu && socketPlaca) {
+        verificacoesRealizadas++;
+        if (socketCpu.toUpperCase() !== socketPlaca.toUpperCase()) {
+          erros.push(
+            `CPU usa socket ${socketCpu}, mas a placa-mãe usa ${socketPlaca}.`,
+          );
+        }
+      } else {
+        verificacoesPendentes++;
+        alertas.push(
+          'Socket de CPU/placa-mãe incompleto; essa relação ainda não pode ser confirmada.',
+        );
+      }
+    }
+
+    if (placaMae && memorias.length > 0) {
+      const tiposSuportados = this.listaTextoSpec(
+        placaMae.especificacoes,
+        'tiposMemoriaSuportados',
+      ).map((item) => item.toUpperCase());
+      const formatosSuportados = this.listaTextoSpec(
+        placaMae.especificacoes,
+        'formatosMemoriaSuportados',
+      ).map((item) => item.toUpperCase());
+      const slotsMemoria = this.numeroSpec(
+        placaMae.especificacoes,
+        'slotsMemoria',
+      );
+      const capacidadeMaxima = this.numeroSpec(
+        placaMae.especificacoes,
+        'capacidadeMaximaMemoriaGb',
+      );
+
+      let modulosTotais = 0;
+      let capacidadeTotal = 0;
+      let dadosCapacidadeCompletos = true;
+
+      for (const memoria of memorias) {
+        const tipo = this.textoSpec(memoria.especificacoes, 'tipo');
+        const formato = this.textoSpec(memoria.especificacoes, 'formato');
+        const capacidade = this.numeroSpec(
+          memoria.especificacoes,
+          'capacidadePorModuloGb',
+        );
+        const modulosPorKit =
+          this.numeroSpec(memoria.especificacoes, 'quantidadeModulos') ?? 1;
+        const quantidadeKits = memoria.quantidade ?? 1;
+
+        modulosTotais += modulosPorKit * quantidadeKits;
+        if (capacidade !== undefined) {
+          capacidadeTotal += capacidade * modulosPorKit * quantidadeKits;
+        } else {
+          dadosCapacidadeCompletos = false;
+        }
+
+        if (tipo && tiposSuportados.length > 0) {
+          verificacoesRealizadas++;
+          if (!tiposSuportados.includes(tipo.toUpperCase())) {
+            erros.push(
+              `A memória ${memoria.nome} é ${tipo}, não suportada pela placa-mãe selecionada.`,
+            );
+          }
+        } else {
+          verificacoesPendentes++;
+          alertas.push(`Tipo de memória não confirmado para ${memoria.nome}.`);
+        }
+
+        if (formato && formatosSuportados.length > 0) {
+          verificacoesRealizadas++;
+          if (!formatosSuportados.includes(formato.toUpperCase())) {
+            erros.push(
+              `O formato ${formato} de ${memoria.nome} não é suportado pela placa-mãe.`,
+            );
+          }
+        }
+      }
+
+      if (slotsMemoria !== undefined) {
+        verificacoesRealizadas++;
+        if (modulosTotais > slotsMemoria) {
+          erros.push(
+            `A build usa ${modulosTotais} módulos de RAM, mas a placa-mãe possui ${slotsMemoria} slots.`,
+          );
+        }
+      }
+
+      if (capacidadeMaxima !== undefined && dadosCapacidadeCompletos) {
+        verificacoesRealizadas++;
+        if (capacidadeTotal > capacidadeMaxima) {
+          erros.push(
+            `A build soma ${capacidadeTotal} GB de RAM, acima do limite de ${capacidadeMaxima} GB da placa-mãe.`,
+          );
+        }
+      }
+    }
+
+    if (placaMae && gabinete) {
+      const formatoPlaca = this.textoSpec(placaMae.especificacoes, 'formato');
+      const formatosGabinete = this.listaTextoSpec(
+        gabinete.especificacoes,
+        'formatosPlacaMaeSuportados',
+      ).map((item) => item.toUpperCase());
+      if (formatoPlaca && formatosGabinete.length > 0) {
+        verificacoesRealizadas++;
+        if (!formatosGabinete.includes(formatoPlaca.toUpperCase())) {
+          erros.push(
+            `O gabinete não suporta placa-mãe no formato ${formatoPlaca}.`,
+          );
+        }
+      } else {
+        verificacoesPendentes++;
+      }
+    }
+
+    if (gpu && gabinete) {
+      const comprimentoGpu = this.numeroSpec(
+        gpu.especificacoes,
+        'comprimentoMm',
+      );
+      const maxGpu = this.numeroSpec(
+        gabinete.especificacoes,
+        'comprimentoMaximoGpuMm',
+      );
+      if (comprimentoGpu !== undefined && maxGpu !== undefined) {
+        verificacoesRealizadas++;
+        if (comprimentoGpu > maxGpu) {
+          erros.push(
+            `A GPU possui ${comprimentoGpu} mm e excede o limite de ${maxGpu} mm do gabinete.`,
+          );
+        }
+      } else {
+        verificacoesPendentes++;
+      }
+
+      const slotsGpu = this.numeroSpec(gpu.especificacoes, 'slotsOcupados');
+      const slotsMax = this.numeroSpec(
+        gabinete.especificacoes,
+        'slotsMaximosGpu',
+      );
+      if (slotsGpu !== undefined && slotsMax !== undefined) {
+        verificacoesRealizadas++;
+        if (slotsGpu > slotsMax) {
+          erros.push(
+            `A GPU ocupa ${slotsGpu} slots e o gabinete suporta até ${slotsMax}.`,
+          );
+        }
+      }
+    }
+
+    if (fonte && gabinete) {
+      const formatoFonte = this.textoSpec(fonte.especificacoes, 'formato');
+      const formatosFonteGabinete = this.listaTextoSpec(
+        gabinete.especificacoes,
+        'formatosFonteSuportados',
+      ).map((item) => item.toUpperCase());
+      if (formatoFonte && formatosFonteGabinete.length > 0) {
+        verificacoesRealizadas++;
+        if (!formatosFonteGabinete.includes(formatoFonte.toUpperCase())) {
+          erros.push(
+            `A fonte no formato ${formatoFonte} não é suportada pelo gabinete.`,
+          );
+        }
+      }
+    }
+
+    if (gpu && fonte) {
+      const potenciaFonte = this.numeroSpec(
+        fonte.especificacoes,
+        'potenciaWatts',
+      );
+      const recomendadaGpu = this.numeroSpec(
+        gpu.especificacoes,
+        'potenciaFonteRecomendadaWatts',
+      );
+      if (potenciaFonte !== undefined && recomendadaGpu !== undefined) {
+        verificacoesRealizadas++;
+        if (potenciaFonte < recomendadaGpu) {
+          erros.push(
+            `A GPU recomenda fonte de ${recomendadaGpu} W, mas a fonte selecionada possui ${potenciaFonte} W.`,
+          );
+        }
+      } else {
+        verificacoesPendentes++;
+      }
+    }
+
+    if (cpu && cooler) {
+      const socketCpu = this.textoSpec(cpu.especificacoes, 'socket');
+      const socketsCooler = this.listaTextoSpec(
+        cooler.especificacoes,
+        'socketsSuportados',
+      ).map((item) => item.toUpperCase());
+      if (socketCpu && socketsCooler.length > 0) {
+        verificacoesRealizadas++;
+        if (!socketsCooler.includes(socketCpu.toUpperCase())) {
+          erros.push(
+            `O cooler não informa suporte ao socket ${socketCpu} da CPU.`,
+          );
+        }
+      } else {
+        verificacoesPendentes++;
+      }
+
+      const tdpCpu = this.numeroSpec(cpu.especificacoes, 'tdpWatts');
+      const capacidadeCooler = this.numeroSpec(
+        cooler.especificacoes,
+        'capacidadeTermicaWatts',
+      );
+      if (tdpCpu !== undefined && capacidadeCooler !== undefined) {
+        verificacoesRealizadas++;
+        if (capacidadeCooler < tdpCpu) {
+          erros.push(
+            `O cooler suporta ${capacidadeCooler} W, abaixo do TDP informado da CPU (${tdpCpu} W).`,
+          );
+        }
+      }
+    }
+
+    if (cooler && gabinete) {
+      const tipoCooler = this.textoSpec(cooler.especificacoes, 'tipo');
+      const alturaCooler = this.numeroSpec(cooler.especificacoes, 'alturaMm');
+      const alturaMax = this.numeroSpec(
+        gabinete.especificacoes,
+        'alturaMaximaCoolerCpuMm',
+      );
+      if (
+        tipoCooler === 'AIR_COOLER' &&
+        alturaCooler !== undefined &&
+        alturaMax !== undefined
+      ) {
+        verificacoesRealizadas++;
+        if (alturaCooler > alturaMax) {
+          erros.push(
+            `O cooler possui ${alturaCooler} mm de altura e excede o limite de ${alturaMax} mm do gabinete.`,
+          );
+        }
+      }
+    }
+
+    if (placaMae && armazenamentos.length > 0) {
+      const portasSata = this.numeroSpec(placaMae.especificacoes, 'portasSata');
+      const slotsM2Raw = placaMae.especificacoes?.['slotsM2'];
+      const slotsM2 = Array.isArray(slotsM2Raw) ? slotsM2Raw.length : undefined;
+      let usadosSata = 0;
+      let usadosM2 = 0;
+      for (const armazenamento of armazenamentos) {
+        const formato = this.textoSpec(armazenamento.especificacoes, 'formato');
+        const interfaceArmazenamento = this.textoSpec(
+          armazenamento.especificacoes,
+          'interface',
+        );
+        const quantidade = armazenamento.quantidade ?? 1;
+        if (formato === 'M2') usadosM2 += quantidade;
+        if (interfaceArmazenamento === 'SATA' && formato !== 'M2') {
+          usadosSata += quantidade;
+        }
+      }
+      if (portasSata !== undefined) {
+        verificacoesRealizadas++;
+        if (usadosSata > portasSata) {
+          erros.push(
+            `A build precisa de ${usadosSata} portas SATA e a placa-mãe possui ${portasSata}.`,
+          );
+        }
+      }
+      if (slotsM2 !== undefined) {
+        verificacoesRealizadas++;
+        if (usadosM2 > slotsM2) {
+          erros.push(
+            `A build usa ${usadosM2} unidades M.2 e a placa-mãe possui ${slotsM2} slots M.2.`,
+          );
+        }
+      }
+    }
+
+    if (exigirSaidaVideo && cpu && !gpu) {
+      const videoIntegrado = this.booleanoSpec(
+        cpu.especificacoes,
+        'possuiVideoIntegrado',
+      );
+      if (videoIntegrado === false) {
+        verificacoesRealizadas++;
+        erros.push(
+          'A CPU informa que não possui vídeo integrado e nenhuma placa de vídeo foi selecionada.',
+        );
+      } else if (videoIntegrado === undefined) {
+        verificacoesPendentes++;
+        alertas.push(
+          'Não foi possível confirmar se a CPU possui vídeo integrado; sem GPU dedicada, confirme esse dado antes de concluir.',
+        );
+      }
+    }
+
+    let status: StatusCompatibilidadeIa;
+    if (erros.length > 0) {
+      status = 'INCOMPATIVEL';
+    } else if (verificacoesRealizadas === 0) {
+      status = 'DADOS_INSUFICIENTES';
+    } else if (verificacoesPendentes > 0) {
+      status = 'COMPATIBILIDADE_PARCIAL';
+    } else {
+      status = 'COMPATIVEL';
+    }
+
+    return {
+      status,
+      erros,
+      alertas,
+      verificacoesRealizadas,
+      verificacoesPendentes,
+    };
+  }
+
+  private async carregarOpcoesMontagemGuiada(
+    categoria: CategoriaHardware,
+    componentesAtuais: ComponenteSnapshotIaDto[],
+    filtro?: string,
+    pagina = 0,
+  ) {
+    const agora = new Date();
+    const candidatos = await this.prisma.hardware.findMany({
+      where: {
+        ativo: true,
+        publicado: true,
+        categoria,
+        ...(filtro?.trim()
+          ? {
+              OR: [
+                { nome: { contains: filtro.trim(), mode: 'insensitive' } },
+                { marca: { contains: filtro.trim(), mode: 'insensitive' } },
+                { modelo: { contains: filtro.trim(), mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        especificacaoProcessador: true,
+        especificacaoPlacaMae: { include: { slotsM2: true } },
+        especificacaoMemoriaRam: true,
+        especificacaoPlacaVideo: true,
+        especificacaoArmazenamento: true,
+        especificacaoFonte: true,
+        especificacaoGabinete: {
+          include: { suportesFans: true, suportesRadiador: true },
+        },
+        especificacaoCooler: true,
+        especificacaoVentoinha: true,
+        modelos3D: {
+          where: { ativo: true, aprovado: true },
+          orderBy: [{ atualizadoEm: 'desc' }, { id: 'desc' }],
+          take: 1,
+        },
+        produto: {
+          select: {
+            ofertas: {
+              where: {
+                status: StatusOferta.ATIVA,
+                parceiro: { ativo: true },
+                OR: [{ validoAte: null }, { validoAte: { gte: agora } }],
+              },
+              orderBy: { preco: 'asc' },
+              take: 1,
+              select: { preco: true },
+            },
+          },
+        },
+      },
+      orderBy: [{ marca: 'asc' }, { nome: 'asc' }],
+      take: 80,
+    });
+
+    const opcoes = candidatos.flatMap((hardware) => {
+      const especificacoesTecnicas =
+        hardware.especificacaoProcessador ??
+        hardware.especificacaoPlacaMae ??
+        hardware.especificacaoMemoriaRam ??
+        hardware.especificacaoPlacaVideo ??
+        hardware.especificacaoArmazenamento ??
+        hardware.especificacaoFonte ??
+        hardware.especificacaoGabinete ??
+        hardware.especificacaoCooler ??
+        hardware.especificacaoVentoinha ??
+        hardware.especificacoes;
+
+      const especificacoes = this.ehRegistro(especificacoesTecnicas)
+        ? { ...especificacoesTecnicas }
+        : undefined;
+
+      const snapshot: ComponenteSnapshotIaDto = {
+        categoria: hardware.categoria,
+        hardwareId: hardware.id,
+        nome: hardware.nome,
+        marca: hardware.marca,
+        modelo: hardware.modelo,
+        imagemUrl: hardware.imagemUrl ?? undefined,
+        modelo3dUrl: hardware.modelos3D[0]?.arquivoUrl,
+        quantidade: 1,
+        origem: OrigemComponenteIa.CATALOGO,
+        especificacoes,
+      };
+
+      const estadoComCandidato = this.adicionarOuSubstituirComponente(
+        componentesAtuais,
+        snapshot,
+      );
+      const compatibilidade =
+        this.verificarCompatibilidadeSnapshots(estadoComCandidato);
+
+      if (compatibilidade.status === 'INCOMPATIVEL') return [];
+
+      const preco = hardware.produto?.ofertas[0]
+        ? Number(hardware.produto.ofertas[0].preco)
+        : null;
+
+      return [
+        {
+          id: `hardware:${hardware.id}`,
+          tipo: 'HARDWARE' as const,
+          titulo: hardware.nome,
+          subtitulo: `${hardware.marca} ${hardware.modelo}`.trim(),
+          categoria: hardware.categoria,
+          hardwareId: hardware.id,
+          imagemUrl: hardware.imagemUrl,
+          preco,
+          compravel: preco !== null,
+          origem: OrigemComponenteIa.CATALOGO,
+          compatibilidade: compatibilidade.status,
+          possuiModelo3D: hardware.modelos3D.length > 0,
+          selecao: snapshot,
+        },
+      ];
+    });
+
+    const tamanhoPagina = 6;
+    const inicio = pagina * tamanhoPagina;
+    return {
+      opcoes: opcoes.slice(inicio, inicio + tamanhoPagina),
+      temMais: inicio + tamanhoPagina < opcoes.length,
+      totalCompativeisConhecidos: opcoes.length,
+    };
+  }
+
+  private extrairFiltrosRapidosCpu(
+    opcoes: Array<{ titulo: string; subtitulo: string }>,
+  ): string[] {
+    const padroes = [
+      /Ryzen\s+[3579]/i,
+      /Core\s+Ultra\s+[579]/i,
+      /Core\s+i[3579]/i,
+    ];
+    const encontrados = new Set<string>();
+    for (const opcao of opcoes) {
+      const texto = `${opcao.titulo} ${opcao.subtitulo}`;
+      for (const padrao of padroes) {
+        const match = texto.match(padrao)?.[0];
+        if (match) encontrados.add(match.replace(/\s+/g, ' ').trim());
+      }
+    }
+    return [...encontrados].slice(0, 8);
+  }
+
+  private async validarEstadoComMotorOficial(
+    componentes: ComponenteSnapshotIaDto[],
+    exigirSaidaVideo = false,
+  ): Promise<ResultadoCompatibilidadeIa> {
+    const snapshot = this.verificarCompatibilidadeSnapshots(
+      componentes,
+      exigirSaidaVideo,
+    );
+    if (snapshot.status === 'INCOMPATIVEL') return snapshot;
+
+    const primeiro = (categoria: CategoriaHardware) =>
+      componentes.find(
+        (item) => item.categoria === categoria && item.hardwareId !== undefined,
+      );
+    const todos = (categoria: CategoriaHardware) =>
+      componentes.filter(
+        (item) => item.categoria === categoria && item.hardwareId !== undefined,
+      );
+
+    const cpu = primeiro(CategoriaHardware.PROCESSADOR);
+    const placaMae = primeiro(CategoriaHardware.PLACA_MAE);
+    const gabinete = primeiro(CategoriaHardware.GABINETE);
+    const fonte = primeiro(CategoriaHardware.FONTE);
+    const memorias = todos(CategoriaHardware.MEMORIA_RAM);
+
+    const existeExterno = componentes.some(
+      (item) => item.hardwareId === undefined,
+    );
+    if (
+      existeExterno ||
+      !cpu?.hardwareId ||
+      !placaMae?.hardwareId ||
+      !gabinete?.hardwareId ||
+      !fonte?.hardwareId ||
+      memorias.length === 0
+    ) {
+      return snapshot;
+    }
+
+    try {
+      const memoriaPrincipal = memorias[0];
+      if (!memoriaPrincipal.hardwareId) return snapshot;
+
+      const quantidadeModulosRamTotal = memorias.reduce((total, memoria) => {
+        const modulos =
+          this.numeroSpec(memoria.especificacoes, 'quantidadeModulos') ?? 1;
+        return total + modulos * (memoria.quantidade ?? 1);
+      }, 0);
+
+      const resultado =
+        await this.hardwaresService.verificarCompatibilidadeMontagem({
+          placaMaeId: placaMae.hardwareId,
+          processadorId: cpu.hardwareId,
+          memoriaRamId: memoriaPrincipal.hardwareId,
+          quantidadeModulosRam:
+            (this.numeroSpec(
+              memoriaPrincipal.especificacoes,
+              'quantidadeModulos',
+            ) ?? 1) * (memoriaPrincipal.quantidade ?? 1),
+          quantidadeModulosRamTotal,
+          gabineteId: gabinete.hardwareId,
+          fonteId: fonte.hardwareId,
+          placaVideoId: primeiro(CategoriaHardware.PLACA_VIDEO)?.hardwareId,
+          coolerId: primeiro(CategoriaHardware.COOLER)?.hardwareId,
+          armazenamentoIds: todos(CategoriaHardware.ARMAZENAMENTO).flatMap(
+            (item) => (item.hardwareId ? [item.hardwareId] : []),
+          ),
+        });
+
+      return {
+        status: !resultado.compativel
+          ? 'INCOMPATIVEL'
+          : resultado.confirmado && resultado.alertas.length === 0
+            ? 'COMPATIVEL'
+            : 'COMPATIBILIDADE_PARCIAL',
+        erros: resultado.erros.map((erro) => erro.mensagem),
+        alertas: resultado.alertas.map((alerta) => alerta.mensagem),
+        verificacoesRealizadas: resultado.resumo.totalVerificacoes,
+        verificacoesPendentes: resultado.resumo.totalNaoConfirmados,
+      };
+    } catch {
+      return {
+        ...snapshot,
+        status:
+          snapshot.status === 'COMPATIVEL'
+            ? 'COMPATIBILIDADE_PARCIAL'
+            : snapshot.status,
+        alertas: [
+          ...snapshot.alertas,
+          'O motor oficial não conseguiu concluir a validação desta combinação.',
+        ],
+        verificacoesPendentes: snapshot.verificacoesPendentes + 1,
+      };
+    }
+  }
+
+  private async resumirCompraMontagemIa(
+    componentes: ComponenteSnapshotIaDto[],
+  ) {
+    const ids = [
+      ...new Set(
+        componentes.flatMap((item) =>
+          item.hardwareId !== undefined ? [item.hardwareId] : [],
+        ),
+      ),
+    ];
+
+    const hardwares = ids.length
+      ? await this.prisma.hardware.findMany({
+          where: { id: { in: ids }, ativo: true, publicado: true },
+          select: {
+            id: true,
+            produto: {
+              select: {
+                ofertas: {
+                  where: {
+                    status: StatusOferta.ATIVA,
+                    parceiro: { ativo: true },
+                    OR: [
+                      { validoAte: null },
+                      { validoAte: { gte: new Date() } },
+                    ],
+                  },
+                  orderBy: { preco: 'asc' },
+                  take: 1,
+                  select: { preco: true },
+                },
+              },
+            },
+          },
+        })
+      : [];
+
+    const precoPorHardware = new Map<number, number | null>(
+      hardwares.map((hardware): [number, number | null] => [
+        hardware.id,
+        hardware.produto?.ofertas[0]
+          ? Number(hardware.produto.ofertas[0].preco)
+          : null,
+      ]),
+    );
+
+    let total = 0;
+    let completo = componentes.length > 0;
+    const itens = componentes.map((item) => {
+      const precoUnitario =
+        item.hardwareId !== undefined
+          ? (precoPorHardware.get(item.hardwareId) ?? null)
+          : null;
+      const quantidade = item.quantidade ?? 1;
+      const compravel = item.hardwareId !== undefined && precoUnitario !== null;
+      if (!compravel) completo = false;
+      if (precoUnitario !== null) total += precoUnitario * quantidade;
+      return {
+        categoria: item.categoria,
+        nome: item.nome,
+        hardwareId: item.hardwareId ?? null,
+        origem: item.origem,
+        quantidade,
+        precoUnitario,
+        subtotal:
+          precoUnitario === null
+            ? null
+            : Number((precoUnitario * quantidade).toFixed(2)),
+        compravel,
+        motivoIndisponivel: compravel
+          ? null
+          : item.hardwareId === undefined
+            ? 'Peça não cadastrada no catálogo; não há compra/oferta disponível.'
+            : 'Hardware sem oferta ativa no momento.',
+      };
+    });
+
+    return {
+      completo,
+      valorTotal: Number(total.toFixed(2)),
+      itens,
+    };
   }
 
   private async carregarCatalogoCurto() {
@@ -266,9 +1053,100 @@ export class IaService {
     return produto;
   }
 
+  private async normalizarSelecaoMontagemGuiada(
+    selecao: ComponenteSnapshotIaDto,
+  ): Promise<ComponenteSnapshotIaDto> {
+    if (selecao.hardwareId !== undefined) {
+      const hardware = await this.hardwaresService.buscarPublicadoPorId(
+        selecao.hardwareId,
+      );
+      if (hardware.categoria !== selecao.categoria) {
+        throw new BadRequestException(
+          'A categoria selecionada não corresponde ao Hardware informado.',
+        );
+      }
+
+      return {
+        categoria: hardware.categoria,
+        hardwareId: hardware.id,
+        nome: hardware.nome,
+        marca: hardware.marca,
+        modelo: hardware.modelo,
+        imagemUrl: hardware.imagemUrl ?? undefined,
+        modelo3dUrl: hardware.modelos3D[0]?.arquivoUrl,
+        quantidade: selecao.quantidade ?? 1,
+        origem: OrigemComponenteIa.CATALOGO,
+        especificacoes: this.ehRegistro(hardware.especificacoes)
+          ? hardware.especificacoes
+          : undefined,
+      };
+    }
+
+    if (selecao.origem === OrigemComponenteIa.CATALOGO) {
+      throw new BadRequestException(
+        'Uma peça do catálogo precisa informar hardwareId.',
+      );
+    }
+
+    return {
+      ...selecao,
+      hardwareId: undefined,
+      nome: selecao.nome.trim(),
+      marca: selecao.marca?.trim() || undefined,
+      modelo: selecao.modelo?.trim() || undefined,
+      quantidade: selecao.quantidade ?? 1,
+    };
+  }
+
+  private mensagemEtapaMontagem(etapa: EtapaMontagemGuiadaIa): string {
+    const mensagens: Record<EtapaMontagemGuiadaIa, string> = {
+      PROCESSADOR:
+        'Escolha o processador. Você pode filtrar por família ou informar uma peça que ainda não esteja no catálogo.',
+      PLACA_MAE:
+        'Agora escolha a placa-mãe. Opções incompatíveis conhecidas são removidas da lista.',
+      MEMORIA_RAM:
+        'Escolha a memória RAM. O backend verifica tipo, formato, slots e capacidade quando esses dados estão disponíveis.',
+      PLACA_VIDEO:
+        'Escolha uma placa de vídeo ou pule esta etapa se não precisar de GPU dedicada.',
+      ARMAZENAMENTO:
+        'Escolha o armazenamento. Você pode adicionar mais de uma unidade.',
+      FONTE:
+        'Escolha a fonte. Potência, formato e requisitos conhecidos serão verificados.',
+      GABINETE:
+        'Escolha o gabinete. Formato da placa-mãe e dimensões conhecidas serão conferidos.',
+      COOLER: 'Escolha o cooler ou pule se a solução atual já for suficiente.',
+      VENTOINHA: 'Adicione ventoinhas se desejar ou avance para o resumo.',
+      RESUMO:
+        'A configuração está pronta para revisão. Peças fora do catálogo podem permanecer na build, mas não possuem compra/oferta.',
+    };
+    return mensagens[etapa];
+  }
+
   // ─── Endpoints públicos ───────────────────────────────────────────────────
 
-  async chat(dados: ChatIaDto): Promise<{ resposta: string }> {
+  async chat(dados: ChatIaDto): Promise<{
+    resposta: string;
+    fluxoGuiado?: Awaited<ReturnType<IaService['montagemGuiada']>>;
+  }> {
+    const pedeMontagem =
+      /(?:quero|vamos|preciso|me ajuda|ajude).*montar.*(?:pc|computador)|montar\s+(?:um\s+)?(?:pc|computador)/i.test(
+        dados.mensagem,
+      );
+
+    if (pedeMontagem) {
+      const fluxoGuiado = await this.montagemGuiada({
+        acao: AcaoMontagemGuiadaIa.INICIAR,
+        componentes: [],
+        orcamento: dados.orcamento,
+        uso: dados.uso,
+      });
+      return {
+        resposta:
+          'Vamos montar por etapas. Começamos pelo processador; você pode escolher uma opção, filtrar, informar uma peça fora do catálogo ou deixar o sistema decidir.',
+        fluxoGuiado,
+      };
+    }
+
     const contextoPartes: string[] = [];
 
     if (dados.buildAtual && Object.keys(dados.buildAtual).length > 0) {
@@ -287,19 +1165,208 @@ export class IaService {
     return { resposta };
   }
 
+  async montagemGuiada(dados: MontagemGuiadaIaDto) {
+    let componentes = [...(dados.componentes ?? [])];
+    let etapa =
+      dados.acao === AcaoMontagemGuiadaIa.INICIAR
+        ? EtapaMontagemGuiadaIa.PROCESSADOR
+        : (dados.etapaAtual ?? EtapaMontagemGuiadaIa.PROCESSADOR);
+    let pagina = dados.pagina ?? 0;
+
+    if (dados.acao === AcaoMontagemGuiadaIa.VOLTAR) {
+      etapa = this.etapaAnterior(etapa);
+      pagina = 0;
+    }
+
+    if (dados.acao === AcaoMontagemGuiadaIa.PULAR) {
+      const permitidas = new Set<EtapaMontagemGuiadaIa>([
+        EtapaMontagemGuiadaIa.PLACA_VIDEO,
+        EtapaMontagemGuiadaIa.COOLER,
+        EtapaMontagemGuiadaIa.VENTOINHA,
+      ]);
+      if (!permitidas.has(etapa)) {
+        throw new BadRequestException(
+          `A etapa ${etapa} é necessária para uma build completa e não deve ser pulada.`,
+        );
+      }
+      etapa = this.proximaEtapa(etapa);
+      pagina = 0;
+    }
+
+    if (dados.acao === AcaoMontagemGuiadaIa.SELECIONAR) {
+      if (!dados.selecao) {
+        throw new BadRequestException('Informe a peça selecionada.');
+      }
+      const categoriaEtapa = this.etapaParaCategoria(etapa);
+      if (categoriaEtapa && dados.selecao.categoria !== categoriaEtapa) {
+        throw new BadRequestException(
+          `A etapa atual espera ${categoriaEtapa}, mas foi enviada ${dados.selecao.categoria}.`,
+        );
+      }
+      const selecao = await this.normalizarSelecaoMontagemGuiada(dados.selecao);
+      componentes = this.adicionarOuSubstituirComponente(componentes, selecao);
+      etapa = this.proximaEtapa(etapa);
+      pagina = 0;
+    }
+
+    if (dados.acao === AcaoMontagemGuiadaIa.VER_MAIS) {
+      pagina += 1;
+    }
+
+    if (dados.acao === AcaoMontagemGuiadaIa.FILTRAR) {
+      pagina = 0;
+    }
+
+    let dadosOpcoes = {
+      opcoes: [] as Awaited<
+        ReturnType<IaService['carregarOpcoesMontagemGuiada']>
+      >['opcoes'],
+      temMais: false,
+      totalCompativeisConhecidos: 0,
+    };
+
+    const categoriaAtual = this.etapaParaCategoria(etapa);
+    if (categoriaAtual) {
+      dadosOpcoes = await this.carregarOpcoesMontagemGuiada(
+        categoriaAtual,
+        componentes,
+        dados.filtro,
+        pagina,
+      );
+    }
+
+    if (dados.acao === AcaoMontagemGuiadaIa.IA_DECIDIR) {
+      const escolha = dadosOpcoes.opcoes[0]?.selecao;
+      if (!escolha) {
+        throw new BadRequestException(
+          'Não existe opção conhecida e compatível no catálogo para esta etapa. Informe uma peça manualmente ou fora do catálogo.',
+        );
+      }
+      componentes = this.adicionarOuSubstituirComponente(componentes, escolha);
+      etapa = this.proximaEtapa(etapa);
+      pagina = 0;
+      const proximaCategoria = this.etapaParaCategoria(etapa);
+      dadosOpcoes = proximaCategoria
+        ? await this.carregarOpcoesMontagemGuiada(
+            proximaCategoria,
+            componentes,
+            undefined,
+            0,
+          )
+        : {
+            opcoes: [],
+            temMais: false,
+            totalCompativeisConhecidos: 0,
+          };
+    }
+
+    const compatibilidade = await this.validarEstadoComMotorOficial(
+      componentes,
+      etapa === EtapaMontagemGuiadaIa.RESUMO,
+    );
+    const compra = await this.resumirCompraMontagemIa(componentes);
+
+    const filtrosRapidos =
+      etapa === EtapaMontagemGuiadaIa.PROCESSADOR
+        ? this.extrairFiltrosRapidosCpu(dadosOpcoes.opcoes)
+        : [];
+
+    const componentesResposta = componentes.map((item) => ({
+      ...item,
+      hardwareId: item.hardwareId ?? null,
+      compravel:
+        item.hardwareId !== undefined &&
+        compra.itens.some(
+          (compraItem) =>
+            compraItem.hardwareId === item.hardwareId && compraItem.compravel,
+        ),
+      representacao3D: item.modelo3dUrl
+        ? { tipo: 'MODELO_URL' as const, url: item.modelo3dUrl }
+        : {
+            tipo: 'PLACEHOLDER_PROCEDURAL' as const,
+            url: null,
+            aviso:
+              'Sem modelo 3D verificado. O frontend pode usar um placeholder até existir modelo próprio/externo.',
+          },
+    }));
+
+    return {
+      tipo: 'MONTAGEM_GUIADA' as const,
+      etapa,
+      mensagem: this.mensagemEtapaMontagem(etapa),
+      pagina,
+      filtrosRapidos,
+      opcoes: dadosOpcoes.opcoes.map(({ selecao, ...opcao }) => ({
+        ...opcao,
+        selecao: {
+          categoria: selecao.categoria,
+          hardwareId: selecao.hardwareId,
+          nome: selecao.nome,
+          origem: selecao.origem,
+          quantidade: 1,
+        },
+      })),
+      temMais: dadosOpcoes.temMais,
+      totalOpcoesCompativeisConhecidas: dadosOpcoes.totalCompativeisConhecidos,
+      componentes: componentesResposta,
+      compatibilidade,
+      compra,
+      acoes: [
+        ...(dadosOpcoes.temMais ? ['VER_MAIS'] : []),
+        ...(filtrosRapidos.length > 0 ? ['FILTRAR'] : []),
+        ...(etapa !== EtapaMontagemGuiadaIa.RESUMO
+          ? ['ESCOLHER_MANUALMENTE', 'ADICIONAR_FORA_CATALOGO', 'IA_DECIDIR']
+          : ['SALVAR_BUILD', 'ABRIR_3D']),
+        ...(etapa !== EtapaMontagemGuiadaIa.PROCESSADOR ? ['VOLTAR'] : []),
+        ...([
+          EtapaMontagemGuiadaIa.PLACA_VIDEO,
+          EtapaMontagemGuiadaIa.COOLER,
+          EtapaMontagemGuiadaIa.VENTOINHA,
+        ].includes(etapa)
+          ? ['PULAR']
+          : []),
+      ],
+      buildComunidade: {
+        podeSalvar: componentes.length > 0,
+        componentes: componentes.map((item) => ({
+          ...(item.hardwareId !== undefined && { hardwareId: item.hardwareId }),
+          categoria: item.categoria,
+          nome: item.nome,
+          marca: item.marca,
+          modelo: item.modelo,
+          imagemUrl: item.imagemUrl,
+          quantidade: item.quantidade ?? 1,
+          especificacoes: item.especificacoes,
+          fonteDadosUrl: item.fonteDadosUrl,
+          modelo3dUrl: item.modelo3dUrl,
+        })),
+      },
+      observacao:
+        'Peças sem hardwareId podem compor e ser salvas na build, mas não possuem preço/oferta/compra até serem cadastradas no catálogo.',
+    };
+  }
+
   async montarPc(dados: MontarPcIaDto): Promise<{
     resposta: string;
     componentes?: Array<{ categoria: string; hardwareId: number }>;
     valorTotal?: number;
     consumoWatts?: number;
     acoes?: string[];
+    fluxoGuiado?: Awaited<ReturnType<IaService['montagemGuiada']>>;
   }> {
     const catalogo = await this.carregarCatalogoCurto();
 
     if (catalogo.length === 0) {
       return {
         resposta:
-          'O catálogo de produtos não possui itens publicados no momento. Não é possível montar uma configuração.',
+          'O catálogo ainda não possui peças publicadas. A montagem pode continuar pelo fluxo guiado com peças externas; elas ficarão sem preço/oferta até existirem no catálogo.',
+        acoes: ['MONTAGEM_GUIADA'],
+        fluxoGuiado: await this.montagemGuiada({
+          acao: AcaoMontagemGuiadaIa.INICIAR,
+          componentes: [],
+          orcamento: dados.orcamento,
+          uso: dados.uso,
+        }),
       };
     }
 
@@ -764,6 +1831,84 @@ Ao final retorne também:
 
   // ─── Endpoints administrativos ────────────────────────────────────────────
 
+  async importarLinkAdmin(url: string) {
+    const coleta = await this.hardwaresService.importarProdutoPorUrl(url);
+
+    const conteudoParaIa = JSON.stringify(
+      {
+        url,
+        jsonLd: coleta.jsonLd,
+        meta: coleta.meta,
+        textoExtraido: coleta.textoExtraido,
+      },
+      null,
+      2,
+    ).slice(0, 50000);
+
+    let normalizacao: Awaited<
+      ReturnType<IaService['normalizarProduto']>
+    > | null = null;
+    let iaDisponivel = this.iaProvider.estaDisponivel();
+    let avisoIa: string | null = null;
+
+    if (iaDisponivel) {
+      try {
+        normalizacao = await this.normalizarProduto({
+          conteudoBruto: conteudoParaIa,
+          urlOrigem: url,
+        });
+      } catch (erro) {
+        iaDisponivel = false;
+        avisoIa =
+          'A página foi coletada, mas a IA não conseguiu normalizar os dados. O ADMIN ainda pode revisar o conteúdo extraído manualmente.';
+        this.logger.warn(
+          `Falha ao normalizar importação por link: ${erro instanceof Error ? erro.message : 'erro desconhecido'}`,
+        );
+      }
+    } else {
+      avisoIa =
+        'GEMINI_API_KEY não está disponível. A coleta foi concluída sem normalização por IA.';
+    }
+
+    const categoria = normalizacao?.camposNormalizados['categoria'];
+    const categoriaTexto =
+      typeof categoria === 'string' ? categoria.toUpperCase() : null;
+    const categoriasHardware = new Set<string>(
+      Object.values(CategoriaHardware),
+    );
+
+    return {
+      status: 'AGUARDANDO_CONFIRMACAO' as const,
+      urlOrigem: url,
+      coleta: {
+        meta: coleta.meta,
+        jsonLd: coleta.jsonLd,
+        textoExtraido: coleta.textoExtraido,
+      },
+      normalizacao,
+      iaDisponivel,
+      avisoIa,
+      destinoSugerido:
+        categoriaTexto && categoriasHardware.has(categoriaTexto)
+          ? 'HARDWARE'
+          : 'PRODUTO',
+      confirmacaoSugerida:
+        categoriaTexto && categoriasHardware.has(categoriaTexto)
+          ? { metodo: 'POST', rota: '/api/hardwares' }
+          : { metodo: 'POST', rota: '/api/admin/produtos' },
+      confirmacaoObrigatoria: true,
+      nenhumRegistroCriado: true,
+      proximosPassos: [
+        'Revisar nome, marca, modelo, categoria e especificações.',
+        'Corrigir campos marcados como ausentes ou interpretados.',
+        'Confirmar o cadastro usando a rota administrativa de Hardware/Produto correspondente.',
+        'Cadastrar Oferta separadamente quando a URL representar uma loja com preço real.',
+      ],
+      aviso:
+        'A importação por link nunca publica nem cadastra automaticamente. Os dados precisam ser revisados pelo ADMIN antes do cadastro definitivo.',
+    };
+  }
+
   async analisarProduto(
     dados: AnalisarProdutoIaDto,
   ): Promise<{ analise: string }> {
@@ -804,7 +1949,7 @@ Analise o seguinte conteúdo bruto extraído de uma página de produto${dados.ur
 
 ${dados.conteudoBruto}
 
-Extraia e normalize os campos para o sistema PC Builder.
+Extraia e normalize os campos para o sistema CriaByte.
 Retorne OBRIGATORIAMENTE um JSON no seguinte formato (dentro de bloco \`\`\`json):
 
 \`\`\`json
@@ -822,12 +1967,24 @@ Retorne OBRIGATORIAMENTE um JSON no seguinte formato (dentro de bloco \`\`\`json
 \`\`\`
 
 Onde:
-- "categoria" pode representar componente, notebook, monitor, mouse, teclado, headset ou outra categoria da Loja identificada no conteúdo
-- Para componentes internos, prefira: PROCESSADOR, PLACA_MAE, MEMORIA_RAM, PLACA_VIDEO, FONTE, GABINETE, ARMAZENAMENTO, COOLER ou VENTOINHA
-- Para a Loja, também podem aparecer MONITOR, MOUSE, TECLADO, HEADSET, NOTEBOOK e outras categorias claramente presentes na fonte
-- "specs" contém somente especificações encontradas na fonte; valores ausentes devem permanecer null ou ser listados em "ausentes"
-- "alertas" são inconsistências encontradas
-- "ausentes" são campos importantes que não foram encontrados
+- "categoria" pode representar componente, notebook, monitor, mouse, teclado, headset ou outra categoria da Loja identificada no conteúdo.
+- Para componentes internos, prefira: PROCESSADOR, PLACA_MAE, MEMORIA_RAM, PLACA_VIDEO, FONTE, GABINETE, ARMAZENAMENTO, COOLER ou VENTOINHA.
+- Para a Loja, também podem aparecer MONITOR, MOUSE, TECLADO, HEADSET, NOTEBOOK e outras categorias claramente presentes na fonte.
+- "specs" contém SOMENTE especificações encontradas na fonte. Não preencha por conhecimento geral.
+- Use, quando aplicável, os mesmos nomes técnicos do backend:
+  PROCESSADOR: socket, familia, linha, geracao, nucleos, threads, frequenciaBaseMhz, frequenciaTurboMhz, tdpWatts, possuiVideoIntegrado, modeloVideoIntegrado, tiposMemoriaSuportados.
+  PLACA_MAE: socket, chipset, formato, tiposMemoriaSuportados, formatosMemoriaSuportados, frequenciasMemoriaJedecMhz, frequenciasMemoriaOverclockMhz, slotsMemoria, capacidadeMaximaMemoriaGb, saidasVideo, portasSata, slotsM2.
+  MEMORIA_RAM: tipo, formato, capacidadePorModuloGb, quantidadeModulos, frequenciaMhz, latenciaCl, tensaoVolts, ecc, registrada, alturaMm.
+  PLACA_VIDEO: gpu, memoriaVideoGb, comprimentoMm, alturaMm, espessuraMm, slotsOcupados, consumoWatts, potenciaFonteRecomendadaWatts, conectoresPcie6Pinos, conectoresPcie8Pinos, conectores12vhpwr, conectores12v2x6.
+  FONTE: formato, potenciaWatts, certificacao, modularidade, comprimentoMm, conectoresAtx24Pinos, conectoresEpsCpu, conectoresPcie6Pinos, conectoresPcie8Pinos, conectores12vhpwr, conectores12v2x6, conectoresSata.
+  GABINETE: tamanho, alturaMm, larguraMm, profundidadeMm, formatosPlacaMaeSuportados, formatosFonteSuportados, comprimentoMaximoGpuMm, slotsMaximosGpu, alturaMaximaCoolerCpuMm, baias25, baias35.
+  COOLER: tipo, socketsSuportados, capacidadeTermicaWatts, alturaMm, tamanhoRadiadorMm, quantidadeVentoinhas, tamanhoVentoinhaMm.
+  ARMAZENAMENTO: tipo, formato, interface, capacidadeGb, tamanhoM2Mm, chaveM2, geracaoPcie, pistasPcie, leituraSequencialMbps, escritaSequencialMbps.
+  VENTOINHA: tamanhoMm, espessuraMm, rpmMinima, rpmMaxima, fluxoArCfm, pressaoEstaticaMmH2o, ruidoDb, conector, pwm, rgb, argb.
+- Inclua "evidencias" como objeto opcional mapeando campos importantes para um trecho curto da fonte que sustenta o valor.
+- Valores ausentes devem permanecer null ou ser listados em "ausentes".
+- "alertas" são inconsistências ou interpretações que exigem revisão.
+- "ausentes" são campos importantes que não foram encontrados.
 
 Antes do JSON, explique brevemente o que foi encontrado.
 `;

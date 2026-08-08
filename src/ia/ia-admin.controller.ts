@@ -23,6 +23,7 @@ import {
   NormalizarProdutoIaDto,
 } from './dtos/analisar-produto-ia.dto';
 import { ChatAdminIaDto } from './dtos/chat-admin-ia.dto';
+import { ImportarLinkIaDto } from './dtos/importar-link-ia.dto';
 
 type UsuarioReq = { id: number } | null;
 
@@ -61,6 +62,19 @@ export class IaAdminController {
   ) {
     const resultado = await this.iaService.chatAdmin(dados);
     this.registrarUso(usuario?.id, 'CHAT_ADMIN', req);
+    return resultado;
+  }
+
+  @Post('importar-link')
+  @Papeis(PapelUsuario.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async importarLink(
+    @Body() dados: ImportarLinkIaDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.iaService.importarLinkAdmin(dados.url);
+    this.registrarUso(usuario?.id, 'IMPORTAR_LINK', req);
     return resultado;
   }
 

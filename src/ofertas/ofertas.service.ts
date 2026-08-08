@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { StatusOferta } from '../generated/prisma/enums';
+import {
+  GrupoCategoriaProduto,
+  StatusOferta,
+  TipoProduto,
+} from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { AtualizarOfertaDto } from './dtos/atualizar-oferta.dto';
 import { AtualizarParceiroDto } from './dtos/atualizar-parceiro.dto';
@@ -16,47 +20,98 @@ export class OfertasService {
   constructor(private readonly prisma: PrismaService) {}
 
   private criarSlug(texto: string): string {
-    return texto
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-');
+    return (
+      texto
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'parceiro'
+    );
+  }
+
+  private calcularPercentualDesconto(
+    precoAtual: unknown,
+    precoAnterior: unknown,
+  ): number | null {
+    if (precoAnterior === null || precoAnterior === undefined) return null;
+
+    const atual = Number(precoAtual);
+    const anterior = Number(precoAnterior);
+    if (
+      !Number.isFinite(atual) ||
+      !Number.isFinite(anterior) ||
+      anterior <= 0 ||
+      anterior <= atual
+    ) {
+      return null;
+    }
+
+    return Number((((anterior - atual) / anterior) * 100).toFixed(2));
+  }
+
+  private grupoDestaqueProduto(produto: {
+    tipo: TipoProduto;
+    categoria: { slug: string; grupo: GrupoCategoriaProduto };
+  }): 'HARDWARE' | 'PERIFERICOS' | 'MONITORES' | 'NOTEBOOKS' | 'SETUP' | null {
+    if (
+      produto.tipo === TipoProduto.NOTEBOOK ||
+      produto.categoria.slug === 'notebooks'
+    ) {
+      return 'NOTEBOOKS';
+    }
+
+    if (produto.categoria.slug === 'monitores') return 'MONITORES';
+    if (produto.categoria.grupo === GrupoCategoriaProduto.COMPONENTES) {
+      return 'HARDWARE';
+    }
+    if (produto.categoria.grupo === GrupoCategoriaProduto.PERIFERICOS) {
+      return 'PERIFERICOS';
+    }
+    if (produto.categoria.grupo === GrupoCategoriaProduto.SETUP) return 'SETUP';
+
+    return null;
   }
 
   async criarParceiro(dados: CriarParceiroDto) {
-    const slug = this.criarSlug(dados.nome);
+    const nome = dados.nome.trim();
+    const slug = this.criarSlug(nome);
+    const dominio = dados.dominio?.trim().toLowerCase() || null;
+
     const existente = await this.prisma.parceiro.findUnique({
       where: { slug },
       select: { id: true },
     });
     if (existente) {
       throw new ConflictException(
-        `Já existe um parceiro com o nome "${dados.nome}".`,
+        `Já existe um parceiro com o nome "${nome}".`,
       );
     }
-    if (dados.dominio) {
+
+    if (dominio) {
       const domExistente = await this.prisma.parceiro.findUnique({
-        where: { dominio: dados.dominio },
+        where: { dominio },
         select: { id: true },
       });
       if (domExistente) {
         throw new ConflictException(
-          `Já existe um parceiro com o domínio "${dados.dominio}".`,
+          `Já existe um parceiro com o domínio "${dominio}".`,
         );
       }
     }
+
     return this.prisma.parceiro.create({
       data: {
-        nome: dados.nome,
+        nome,
         slug,
-        logoUrl: dados.logoUrl ?? null,
-        site: dados.site ?? null,
-        dominio: dados.dominio ?? null,
+        logoUrl: dados.logoUrl?.trim() || null,
+        site: dados.site?.trim() || null,
+        dominio,
         programaAfiliados: dados.programaAfiliados ?? false,
-        observacao: dados.observacao ?? null,
+        observacao: dados.observacao?.trim() || null,
       },
     });
   }
@@ -111,20 +166,56 @@ export class OfertasService {
       select: { id: true },
     });
     if (!parceiro) throw new NotFoundException('Parceiro não encontrado.');
+
+    let nome: string | undefined;
+    let slug: string | undefined;
+    if (dados.nome !== undefined) {
+      nome = dados.nome.trim();
+      slug = this.criarSlug(nome);
+      const slugExistente = await this.prisma.parceiro.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+      if (slugExistente && slugExistente.id !== id) {
+        throw new ConflictException(
+          `Já existe um parceiro com o nome "${nome}".`,
+        );
+      }
+    }
+
+    const dominio =
+      dados.dominio === undefined
+        ? undefined
+        : dados.dominio?.trim().toLowerCase() || null;
+    if (dominio) {
+      const dominioExistente = await this.prisma.parceiro.findUnique({
+        where: { dominio },
+        select: { id: true },
+      });
+      if (dominioExistente && dominioExistente.id !== id) {
+        throw new ConflictException(
+          `Já existe um parceiro com o domínio "${dominio}".`,
+        );
+      }
+    }
+
     return this.prisma.parceiro.update({
       where: { id },
       data: {
-        ...(dados.nome !== undefined && {
-          nome: dados.nome,
-          slug: this.criarSlug(dados.nome),
+        ...(nome !== undefined && { nome, slug }),
+        ...(dados.logoUrl !== undefined && {
+          logoUrl: dados.logoUrl?.trim() || null,
         }),
-        ...(dados.logoUrl !== undefined && { logoUrl: dados.logoUrl }),
-        ...(dados.site !== undefined && { site: dados.site }),
-        ...(dados.dominio !== undefined && { dominio: dados.dominio }),
+        ...(dados.site !== undefined && {
+          site: dados.site?.trim() || null,
+        }),
+        ...(dados.dominio !== undefined && { dominio }),
         ...(dados.programaAfiliados !== undefined && {
           programaAfiliados: dados.programaAfiliados,
         }),
-        ...(dados.observacao !== undefined && { observacao: dados.observacao }),
+        ...(dados.observacao !== undefined && {
+          observacao: dados.observacao?.trim() || null,
+        }),
         ...(dados.ativo !== undefined && { ativo: dados.ativo }),
       },
     });
@@ -296,15 +387,161 @@ export class OfertasService {
       select: { id: true, nome: true, slug: true },
     });
     if (!produto) throw new NotFoundException('Produto não encontrado.');
-    const ofertas = await this.listarAtivasProduto(produtoId);
+
+    const ofertasBanco = await this.listarAtivasProduto(produtoId);
+    const ofertas = ofertasBanco.map((oferta) => ({
+      ...oferta,
+      preco: Number(oferta.preco),
+      precoAtual: Number(oferta.preco),
+      precoAnterior:
+        oferta.precoAnterior === null ? null : Number(oferta.precoAnterior),
+      frete: oferta.frete === null ? null : Number(oferta.frete),
+      percentualDesconto: this.calcularPercentualDesconto(
+        oferta.preco,
+        oferta.precoAnterior,
+      ),
+      urlAfiliado: oferta.urlAfiliada,
+      urlCompra: oferta.urlAfiliada ?? oferta.urlOriginal,
+      possuiLinkAfiliado: oferta.urlAfiliada !== null,
+    }));
+    const melhorOferta = ofertas[0] ?? null;
+
     return {
       produto,
       total: ofertas.length,
-      melhorPreco: ofertas[0]
-        ? { preco: ofertas[0].preco, parceiro: ofertas[0].parceiro }
+      quantidadeOfertasAtivas: ofertas.length,
+      melhorPreco: melhorOferta
+        ? { preco: melhorOferta.preco, parceiro: melhorOferta.parceiro }
         : null,
+      melhorOferta,
       ofertas,
     };
+  }
+
+  async listarDestaques() {
+    const agora = new Date();
+    const produtos = await this.prisma.produto.findMany({
+      where: {
+        ativo: true,
+        publicado: true,
+        ofertas: {
+          some: {
+            status: StatusOferta.ATIVA,
+            parceiro: { ativo: true },
+            OR: [{ validoAte: null }, { validoAte: { gte: agora } }],
+          },
+        },
+      },
+      orderBy: [{ atualizadoEm: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        nome: true,
+        marca: true,
+        imagemUrl: true,
+        tipo: true,
+        categoria: {
+          select: { id: true, nome: true, slug: true, grupo: true },
+        },
+        ofertas: {
+          where: {
+            status: StatusOferta.ATIVA,
+            parceiro: { ativo: true },
+            OR: [{ validoAte: null }, { validoAte: { gte: agora } }],
+          },
+          orderBy: [{ preco: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            vendedorNome: true,
+            vendedorIdentificador: true,
+            preco: true,
+            precoAnterior: true,
+            frete: true,
+            urlOriginal: true,
+            urlAfiliada: true,
+            validoAte: true,
+            verificadoEm: true,
+            atualizadoEm: true,
+            parceiro: {
+              select: {
+                id: true,
+                nome: true,
+                slug: true,
+                logoUrl: true,
+                programaAfiliados: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const destaques: {
+      perifericos: Array<Record<string, unknown>>;
+      hardwares: Array<Record<string, unknown>>;
+      monitores: Array<Record<string, unknown>>;
+      notebooks: Array<Record<string, unknown>>;
+      setup: Array<Record<string, unknown>>;
+    } = {
+      perifericos: [],
+      hardwares: [],
+      monitores: [],
+      notebooks: [],
+      setup: [],
+    };
+
+    for (const produto of produtos) {
+      const grupo = this.grupoDestaqueProduto(produto);
+      const oferta = produto.ofertas[0];
+      if (!grupo || !oferta) continue;
+
+      const precoAtual = Number(oferta.preco);
+      const precoAnterior =
+        oferta.precoAnterior === null ? null : Number(oferta.precoAnterior);
+      const percentualDesconto = this.calcularPercentualDesconto(
+        oferta.preco,
+        oferta.precoAnterior,
+      );
+
+      const item = {
+        produtoId: produto.id,
+        nome: produto.nome,
+        marca: produto.marca,
+        imagem: produto.imagemUrl,
+        categoria: produto.categoria,
+        grupo,
+        melhorPreco: precoAtual,
+        precoAnterior,
+        percentualDesconto,
+        quantidadeOfertas: produto.ofertas.length,
+        melhorOferta: {
+          id: oferta.id,
+          vendedorNome: oferta.vendedorNome,
+          vendedorIdentificador: oferta.vendedorIdentificador,
+          preco: precoAtual,
+          precoAtual,
+          precoAnterior,
+          percentualDesconto,
+          frete: oferta.frete === null ? null : Number(oferta.frete),
+          urlOriginal: oferta.urlOriginal,
+          urlAfiliada: oferta.urlAfiliada,
+          urlAfiliado: oferta.urlAfiliada,
+          urlCompra: oferta.urlAfiliada ?? oferta.urlOriginal,
+          possuiLinkAfiliado: oferta.urlAfiliada !== null,
+          validoAte: oferta.validoAte,
+          verificadoEm: oferta.verificadoEm,
+          atualizadoEm: oferta.atualizadoEm,
+          parceiro: oferta.parceiro,
+        },
+      };
+
+      if (grupo === 'HARDWARE') destaques.hardwares.push(item);
+      else if (grupo === 'PERIFERICOS') destaques.perifericos.push(item);
+      else if (grupo === 'MONITORES') destaques.monitores.push(item);
+      else if (grupo === 'NOTEBOOKS') destaques.notebooks.push(item);
+      else destaques.setup.push(item);
+    }
+
+    return destaques;
   }
 
   async listarOfertasDoHardware(hardwareId: number) {
@@ -326,19 +563,28 @@ export class OfertasService {
     if (!oferta) throw new NotFoundException('Oferta não encontrada.');
 
     const precoNovo = dados.preco ?? oferta.preco;
-    const freteNovo = dados.frete ?? oferta.frete;
-    const mudouPrecoOuFrete =
-      dados.preco !== undefined || dados.frete !== undefined;
+    const freteNovo = dados.frete !== undefined ? dados.frete : oferta.frete;
+    const mudouPreco =
+      dados.preco !== undefined && Number(dados.preco) !== Number(oferta.preco);
+    const freteAtual = oferta.frete === null ? null : Number(oferta.frete);
+    const mudouFrete = dados.frete !== undefined && dados.frete !== freteAtual;
+    const mudouPrecoOuFrete = mudouPreco || mudouFrete;
 
     return this.prisma.$transaction(async (tx) => {
       const atualizada = await tx.oferta.update({
         where: { id },
         data: {
           ...(dados.vendedorNome !== undefined && {
-            vendedorNome: dados.vendedorNome.trim() || null,
+            vendedorNome:
+              dados.vendedorNome === null
+                ? null
+                : dados.vendedorNome.trim() || null,
           }),
           ...(dados.vendedorIdentificador !== undefined && {
-            vendedorIdentificador: dados.vendedorIdentificador.trim() || null,
+            vendedorIdentificador:
+              dados.vendedorIdentificador === null
+                ? null
+                : dados.vendedorIdentificador.trim() || null,
           }),
           ...(dados.urlOriginal !== undefined && {
             urlOriginal: dados.urlOriginal,
@@ -348,7 +594,10 @@ export class OfertasService {
           }),
           ...(dados.preco !== undefined && {
             preco: dados.preco,
-            precoAnterior: dados.precoAnterior ?? oferta.preco,
+            precoAnterior:
+              dados.precoAnterior !== undefined
+                ? dados.precoAnterior
+                : oferta.preco,
           }),
           ...(dados.preco === undefined &&
             dados.precoAnterior !== undefined && {
@@ -356,7 +605,8 @@ export class OfertasService {
             }),
           ...(dados.frete !== undefined && { frete: dados.frete }),
           ...(dados.validoAte !== undefined && {
-            validoAte: new Date(dados.validoAte),
+            validoAte:
+              dados.validoAte === null ? null : new Date(dados.validoAte),
           }),
           ...(dados.status !== undefined && { status: dados.status }),
           coletadoEm: new Date(),
@@ -436,11 +686,25 @@ export class OfertasService {
   async removerOferta(id: number) {
     const oferta = await this.prisma.oferta.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!oferta) throw new NotFoundException('Oferta não encontrada.');
-    await this.prisma.oferta.delete({ where: { id } });
-    return { mensagem: 'Oferta removida com sucesso.' };
+
+    if (oferta.status !== StatusOferta.DESCONTINUADA) {
+      await this.prisma.oferta.update({
+        where: { id },
+        data: {
+          status: StatusOferta.DESCONTINUADA,
+          verificadoEm: new Date(),
+        },
+      });
+    }
+
+    return {
+      mensagem: 'Oferta descontinuada com sucesso.',
+      ofertaId: id,
+      status: StatusOferta.DESCONTINUADA,
+    };
   }
 
   async calcularPrecoTotal(hardwareIds: number[]) {

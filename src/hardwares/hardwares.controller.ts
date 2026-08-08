@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseEnumPipe,
   ParseIntPipe,
   Post,
   UseGuards,
@@ -11,6 +12,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { CriarHardwareDto } from './dtos/criar-hardware.dto';
@@ -19,6 +21,7 @@ import { VerificarCompatibilidadeMontagemDto } from './dtos/verificar-compatibil
 import { ResolverMontagem3DDto } from './dtos/modelos-3d/resolver-montagem-3d.dto';
 import { ResolverMontagemCompletaDto } from './dtos/modelos-3d/resolver-montagem-completa.dto';
 import { FiltrarHardwaresDto } from './dtos/filtrar-hardwares.dto';
+import { PosicaoRefrigeracaoGabinete } from '../generated/prisma/enums';
 
 @ApiTags('Hardwares')
 @Controller('hardwares')
@@ -131,7 +134,8 @@ export class HardwaresController {
   verificarCompatibilidadeVentoinhaGabinete(
     @Param('gabineteId', ParseIntPipe) gabineteId: number,
     @Param('ventoinhaId', ParseIntPipe) ventoinhaId: number,
-    @Query('posicao') posicao: string,
+    @Query('posicao', new ParseEnumPipe(PosicaoRefrigeracaoGabinete))
+    posicao: PosicaoRefrigeracaoGabinete,
     @Query('quantidade', ParseIntPipe) quantidade: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeVentoinhaGabinete(
@@ -168,6 +172,7 @@ export class HardwaresController {
     summary: 'Verificar compatibilidade completa de uma montagem',
   })
   @Post('compatibilidades/montagem')
+  @Throttle({ global: { limit: 60, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   verificarCompatibilidadeMontagem(
     @Body() dados: VerificarCompatibilidadeMontagemDto,
@@ -202,6 +207,7 @@ export class HardwaresController {
     summary: 'Resolver montagem 3D + compatibilidade + consumo em uma chamada',
   })
   @Post(':gabineteId/montagem-completa/resolver')
+  @Throttle({ global: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   resolverMontagemCompleta(
     @Param('gabineteId', ParseIntPipe) gabineteId: number,
@@ -215,6 +221,7 @@ export class HardwaresController {
     summary: 'Resolver estrutura 3D hierárquica por instâncias físicas',
   })
   @Post(':hardwarePaiId/montagem-3d/resolver')
+  @Throttle({ global: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   resolverMontagem3DPublica(
     @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,

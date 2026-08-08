@@ -376,6 +376,131 @@ export class HardwaresService {
     }
   }
 
+  private validarCoerenciaEspecificacoes(
+    dados: CriarHardwareDto | AtualizarHardwareDto,
+  ): void {
+    const processador = dados.especificacaoProcessador;
+    if (
+      processador?.possuiVideoIntegrado === false &&
+      processador.modeloVideoIntegrado?.trim()
+    ) {
+      throw new BadRequestException(
+        'Um processador sem vídeo integrado não pode informar modelo de GPU integrada.',
+      );
+    }
+
+    const memoria = dados.especificacaoMemoriaRam;
+    if (
+      memoria?.frequenciaJedecMhz !== undefined &&
+      memoria.frequenciaJedecMhz > memoria.frequenciaMhz
+    ) {
+      throw new BadRequestException(
+        'A frequência JEDEC da memória não pode ser maior que a frequência anunciada.',
+      );
+    }
+
+    const placaMae = dados.especificacaoPlacaMae;
+    if (
+      placaMae?.capacidadeMaximaMemoriaGb !== undefined &&
+      placaMae.capacidadeMaximaPorSlotGb !== undefined &&
+      placaMae.capacidadeMaximaPorSlotGb > placaMae.capacidadeMaximaMemoriaGb
+    ) {
+      throw new BadRequestException(
+        'A capacidade máxima por slot não pode exceder a capacidade total de memória da placa-mãe.',
+      );
+    }
+
+    const placaVideo = dados.especificacaoPlacaVideo;
+    if (
+      placaVideo?.clockBaseMhz !== undefined &&
+      placaVideo.clockBoostMhz !== undefined &&
+      placaVideo.clockBaseMhz > placaVideo.clockBoostMhz
+    ) {
+      throw new BadRequestException(
+        'O clock base da placa de vídeo não pode ser maior que o clock boost.',
+      );
+    }
+
+    const ventoinha = dados.especificacaoVentoinha;
+    if (
+      ventoinha?.rpmMinima !== undefined &&
+      ventoinha.rpmMaxima !== undefined &&
+      ventoinha.rpmMinima > ventoinha.rpmMaxima
+    ) {
+      throw new BadRequestException(
+        'A rotação mínima da ventoinha não pode ser maior que a rotação máxima.',
+      );
+    }
+
+    const cooler = dados.especificacaoCooler;
+    if (cooler?.tipo === TipoCooler.WATER_COOLER && !cooler.tamanhoRadiadorMm) {
+      throw new BadRequestException(
+        'Um water cooler precisa informar o tamanho do radiador.',
+      );
+    }
+
+    if (
+      cooler?.tipo === TipoCooler.AIR_COOLER &&
+      (cooler.tamanhoRadiadorMm !== undefined ||
+        cooler.espessuraRadiadorMm !== undefined ||
+        cooler.comprimentoMangueirasMm !== undefined)
+    ) {
+      throw new BadRequestException(
+        'Um air cooler não pode informar dados de radiador ou mangueiras.',
+      );
+    }
+
+    const armazenamento = dados.especificacaoArmazenamento;
+    if (armazenamento) {
+      const possuiDadosM2 =
+        armazenamento.tamanhoM2Mm !== undefined ||
+        armazenamento.chaveM2 !== undefined;
+
+      if (armazenamento.formato === FormatoArmazenamento.M2) {
+        if (
+          armazenamento.tamanhoM2Mm === undefined ||
+          armazenamento.chaveM2 === undefined
+        ) {
+          throw new BadRequestException(
+            'Um armazenamento M.2 precisa informar tamanho e chave M.2.',
+          );
+        }
+
+        if (
+          armazenamento.interface !== InterfaceArmazenamento.SATA &&
+          armazenamento.interface !== InterfaceArmazenamento.NVME_PCIE
+        ) {
+          throw new BadRequestException(
+            'Um armazenamento M.2 deve usar interface SATA ou NVMe/PCIe.',
+          );
+        }
+      } else if (possuiDadosM2) {
+        throw new BadRequestException(
+          'Tamanho e chave M.2 só podem ser informados para armazenamento no formato M.2.',
+        );
+      }
+
+      if (
+        armazenamento.formato === FormatoArmazenamento.PLACA_PCIE &&
+        armazenamento.interface !== InterfaceArmazenamento.NVME_PCIE
+      ) {
+        throw new BadRequestException(
+          'Armazenamento em placa PCIe deve usar interface NVMe/PCIe.',
+        );
+      }
+
+      if (
+        armazenamento.tipo === 'HDD' &&
+        (armazenamento.formato === FormatoArmazenamento.M2 ||
+          armazenamento.formato === FormatoArmazenamento.PLACA_PCIE)
+      ) {
+        throw new BadRequestException(
+          'Um HDD não pode usar formato M.2 ou placa PCIe.',
+        );
+      }
+    }
+  }
+
   listarTodos() {
     return this.prisma.hardware.findMany({
       include: {
@@ -640,6 +765,7 @@ export class HardwaresService {
     }
 
     this.validarEspecificacaoDaCategoria(dados);
+    this.validarCoerenciaEspecificacoes(dados);
 
     const nome = dados.nome.trim();
     const marca = dados.marca.trim();
@@ -847,6 +973,8 @@ export class HardwaresService {
         'A categoria do hardware não pode ser alterada após o cadastro.',
       );
     }
+
+    this.validarCoerenciaEspecificacoes(dados);
 
     const especificacoesInformadas = [
       {
@@ -1789,6 +1917,39 @@ export class HardwaresService {
       };
     }
 
+    if (
+      !especificacaoPlacaMae.formatosMemoriaSuportados.includes(
+        especificacaoMemoria.formato,
+      )
+    ) {
+      return {
+        compativel: false,
+        status: 'INCOMPATIVEL',
+        motivo: 'O formato físico da memória não é suportado pela placa-mãe.',
+      };
+    }
+
+    if (especificacaoMemoria.ecc && !especificacaoPlacaMae.suportaEcc) {
+      return {
+        compativel: false,
+        status: 'INCOMPATIVEL',
+        motivo:
+          'A memória utiliza ECC, mas a placa-mãe não informa suporte a ECC.',
+      };
+    }
+
+    if (
+      especificacaoMemoria.registrada &&
+      !especificacaoPlacaMae.suportaMemoriaRegistrada
+    ) {
+      return {
+        compativel: false,
+        status: 'INCOMPATIVEL',
+        motivo:
+          'A memória é registrada (RDIMM), mas a placa-mãe não informa suporte a memória registrada.',
+      };
+    }
+
     const quantidadeModulos =
       quantidadeModulosOverride ?? especificacaoMemoria.quantidadeModulos;
 
@@ -1929,6 +2090,12 @@ export class HardwaresService {
       erros.push('O processador não suporta o tipo DDR da memória.');
     }
 
+    if (memoria.ecc && !cpu.suportaEcc) {
+      erros.push(
+        'A memória utiliza ECC, mas o processador não informa suporte a ECC.',
+      );
+    }
+
     const quantidadeModulos = quantidadeModulosRam ?? memoria.quantidadeModulos;
     const capacidadeTotal = memoria.capacidadePorModuloGb * quantidadeModulos;
 
@@ -1963,6 +2130,34 @@ export class HardwaresService {
       alertas.push(
         `A memória de ${memoria.frequenciaMhz} MHz poderá operar em até ${frequenciaFinalMhz} MHz.`,
       );
+    }
+
+    const frequenciaJedecMaximaPlacaMae =
+      placa.frequenciasMemoriaJedecMhz.length > 0
+        ? Math.max(...placa.frequenciasMemoriaJedecMhz)
+        : null;
+
+    if (
+      frequenciaJedecMaximaPlacaMae !== null &&
+      memoria.frequenciaMhz > frequenciaJedecMaximaPlacaMae
+    ) {
+      if (memoria.suportaXmp && !placa.suportaXmp) {
+        alertas.push(
+          'A memória anuncia perfil XMP, mas a placa-mãe não informa suporte a XMP.',
+        );
+      }
+
+      if (memoria.suportaExpo && !placa.suportaExpo) {
+        alertas.push(
+          'A memória anuncia perfil EXPO, mas a placa-mãe não informa suporte a EXPO.',
+        );
+      }
+
+      if (!memoria.suportaXmp && !memoria.suportaExpo) {
+        alertas.push(
+          'A frequência anunciada da memória excede o maior perfil JEDEC cadastrado e pode exigir configuração manual/overclock.',
+        );
+      }
     }
 
     const compatibilidadeNaoConfirmada =
@@ -2475,19 +2670,10 @@ export class HardwaresService {
       return true;
     });
 
-    const armazenamentoM2 = especificacaoArmazenamento.tamanhoM2Mm !== null;
+    const armazenamentoM2 =
+      especificacaoArmazenamento.formato === FormatoArmazenamento.M2;
 
-    if (
-      especificacaoArmazenamento.interface === InterfaceArmazenamento.SATA &&
-      !armazenamentoM2
-    ) {
-      if (especificacaoPlacaMae.portasSata < 1) {
-        erros.push('A placa-mãe não possui portas SATA disponíveis.');
-      }
-    } else if (
-      especificacaoArmazenamento.interface === InterfaceArmazenamento.SATA ||
-      especificacaoArmazenamento.interface === InterfaceArmazenamento.NVME_PCIE
-    ) {
+    if (armazenamentoM2) {
       if (especificacaoArmazenamento.tamanhoM2Mm === null) {
         erros.push('O armazenamento M.2 não possui o tamanho cadastrado.');
       }
@@ -2496,10 +2682,41 @@ export class HardwaresService {
         erros.push('O armazenamento M.2 não possui a chave cadastrada.');
       }
 
+      if (
+        especificacaoArmazenamento.interface !== InterfaceArmazenamento.SATA &&
+        especificacaoArmazenamento.interface !==
+          InterfaceArmazenamento.NVME_PCIE
+      ) {
+        erros.push(
+          'A interface informada não é válida para um armazenamento M.2.',
+        );
+      }
+
       if (slotsM2Compativeis.length === 0) {
         erros.push(
           'Nenhum slot M.2 da placa-mãe é compatível com este armazenamento.',
         );
+      }
+    } else if (
+      especificacaoArmazenamento.formato === FormatoArmazenamento.PLACA_PCIE
+    ) {
+      if (
+        especificacaoArmazenamento.interface !==
+        InterfaceArmazenamento.NVME_PCIE
+      ) {
+        erros.push(
+          'Armazenamento em placa PCIe deve utilizar interface NVMe/PCIe.',
+        );
+      } else {
+        alertas.push(
+          'A placa de armazenamento usa slot PCIe; a disponibilidade e largura exata do slot não podem ser confirmadas completamente com os dados atuais da placa-mãe.',
+        );
+      }
+    } else if (
+      especificacaoArmazenamento.interface === InterfaceArmazenamento.SATA
+    ) {
+      if (especificacaoPlacaMae.portasSata < 1) {
+        erros.push('A placa-mãe não possui portas SATA disponíveis.');
       }
     } else {
       erros.push(
@@ -2720,6 +2937,7 @@ export class HardwaresService {
     gabineteId: number,
     processadorId: number,
     coolerId: number,
+    memoriaRamId?: number,
   ) {
     const [gabinete, processador, cooler] = await Promise.all([
       this.prisma.hardware.findUnique({
@@ -2745,6 +2963,14 @@ export class HardwaresService {
         },
       }),
     ]);
+
+    const memoriaRam =
+      memoriaRamId !== undefined
+        ? await this.prisma.hardware.findUnique({
+            where: { id: memoriaRamId },
+            include: { especificacaoMemoriaRam: true },
+          })
+        : null;
 
     if (!gabinete) {
       throw new NotFoundException('Gabinete não encontrado.');
@@ -2851,6 +3077,43 @@ export class HardwaresService {
       }
     }
 
+    if (
+      especificacaoCooler.tipo === TipoCooler.AIR_COOLER &&
+      memoriaRamId !== undefined
+    ) {
+      if (!memoriaRam) {
+        throw new NotFoundException('Memória RAM não encontrada.');
+      }
+
+      if (memoriaRam.categoria !== CategoriaHardware.MEMORIA_RAM) {
+        throw new BadRequestException(
+          'O hardware informado não pertence à categoria MEMORIA_RAM.',
+        );
+      }
+
+      const especificacaoMemoria = memoriaRam.especificacaoMemoriaRam;
+      if (!especificacaoMemoria) {
+        alertas.push(
+          'Não foi possível validar a folga entre o air cooler e a memória RAM.',
+        );
+      } else if (
+        especificacaoCooler.alturaLivreRamMm !== null &&
+        especificacaoMemoria.alturaMm !== null &&
+        especificacaoMemoria.alturaMm > especificacaoCooler.alturaLivreRamMm
+      ) {
+        erros.push(
+          'A altura da memória RAM excede a folga informada sob o air cooler.',
+        );
+      } else if (
+        especificacaoCooler.alturaLivreRamMm === null ||
+        especificacaoMemoria.alturaMm === null
+      ) {
+        alertas.push(
+          'Não foi possível validar completamente a folga entre o air cooler e a memória RAM.',
+        );
+      }
+    }
+
     if (especificacaoCooler.tipo === TipoCooler.WATER_COOLER) {
       if (especificacaoCooler.tamanhoRadiadorMm === null) {
         erros.push(
@@ -2914,6 +3177,13 @@ export class HardwaresService {
         alturaMm: especificacaoCooler.alturaMm,
         tamanhoRadiadorMm: especificacaoCooler.tamanhoRadiadorMm,
       },
+      memoriaRam: memoriaRam?.especificacaoMemoriaRam
+        ? {
+            id: memoriaRam.id,
+            nome: memoriaRam.nome,
+            alturaMm: memoriaRam.especificacaoMemoriaRam.alturaMm,
+          }
+        : null,
       suporteRadiador,
     };
   }
@@ -3044,6 +3314,234 @@ export class HardwaresService {
         interface: especificacaoArmazenamento.interface,
         capacidadeGb: especificacaoArmazenamento.capacidadeGb,
       },
+    };
+  }
+
+  private async verificarSaidaVideoMontagem(
+    placaMaeId: number,
+    processadorId: number,
+    placaVideoId?: number,
+  ) {
+    if (placaVideoId !== undefined) {
+      return {
+        compativel: true,
+        status: 'COMPATIVEL',
+        erros: [],
+        alertas: [],
+        modoVideo: 'DEDICADA',
+      };
+    }
+
+    const [placaMae, processador] = await Promise.all([
+      this.prisma.hardware.findUnique({
+        where: { id: placaMaeId },
+        include: { especificacaoPlacaMae: true },
+      }),
+      this.prisma.hardware.findUnique({
+        where: { id: processadorId },
+        include: { especificacaoProcessador: true },
+      }),
+    ]);
+
+    if (!placaMae?.especificacaoPlacaMae) {
+      throw new BadRequestException(
+        'A placa-mãe não possui especificação técnica para validar a saída de vídeo.',
+      );
+    }
+
+    if (!processador?.especificacaoProcessador) {
+      throw new BadRequestException(
+        'O processador não possui especificação técnica para validar a saída de vídeo.',
+      );
+    }
+
+    const erros: string[] = [];
+
+    if (!processador.especificacaoProcessador.possuiVideoIntegrado) {
+      erros.push(
+        'A montagem não possui placa de vídeo dedicada e o processador não possui vídeo integrado.',
+      );
+    }
+
+    if (placaMae.especificacaoPlacaMae.saidasVideo.length === 0) {
+      erros.push(
+        'A montagem não possui placa de vídeo dedicada e a placa-mãe não possui saída de vídeo cadastrada para usar o vídeo integrado.',
+      );
+    }
+
+    return {
+      compativel: erros.length === 0,
+      status: erros.length === 0 ? 'COMPATIVEL' : 'INCOMPATIVEL',
+      erros,
+      alertas: [],
+      modoVideo: erros.length === 0 ? 'INTEGRADA' : 'INDISPONIVEL',
+      processador: {
+        id: processador.id,
+        nome: processador.nome,
+        possuiVideoIntegrado:
+          processador.especificacaoProcessador.possuiVideoIntegrado,
+        modeloVideoIntegrado:
+          processador.especificacaoProcessador.modeloVideoIntegrado,
+      },
+      placaMae: {
+        id: placaMae.id,
+        nome: placaMae.nome,
+        saidasVideo: placaMae.especificacaoPlacaMae.saidasVideo,
+      },
+    };
+  }
+
+  private async verificarAlimentacaoPrincipalFonte(fonteId: number) {
+    const fonte = await this.prisma.hardware.findUnique({
+      where: { id: fonteId },
+      include: { especificacaoFonte: true },
+    });
+
+    if (!fonte) {
+      throw new NotFoundException('Fonte não encontrada.');
+    }
+
+    if (fonte.categoria !== CategoriaHardware.FONTE) {
+      throw new BadRequestException(
+        'O hardware informado não pertence à categoria FONTE.',
+      );
+    }
+
+    if (!fonte.especificacaoFonte) {
+      throw new BadRequestException(
+        'A fonte não possui especificação técnica cadastrada.',
+      );
+    }
+
+    const erros: string[] = [];
+
+    if (fonte.especificacaoFonte.conectoresAtx24Pinos < 1) {
+      erros.push(
+        'A fonte não possui conector ATX de 24 pinos para alimentar a placa-mãe.',
+      );
+    }
+
+    if (fonte.especificacaoFonte.conectoresEpsCpu < 1) {
+      erros.push(
+        'A fonte não possui conector EPS/CPU para alimentar o processador.',
+      );
+    }
+
+    return {
+      compativel: erros.length === 0,
+      status: erros.length === 0 ? 'COMPATIVEL' : 'INCOMPATIVEL',
+      erros,
+      alertas: [],
+      fonte: {
+        id: fonte.id,
+        nome: fonte.nome,
+        conectoresAtx24Pinos: fonte.especificacaoFonte.conectoresAtx24Pinos,
+        conectoresEpsCpu: fonte.especificacaoFonte.conectoresEpsCpu,
+      },
+    };
+  }
+
+  private async verificarOcupacaoVentoinhasMontagem(
+    dados: VerificarCompatibilidadeMontagemDto,
+  ) {
+    const configuracoes = dados.ventoinhas ?? [];
+
+    if (configuracoes.length === 0) {
+      return {
+        compativel: true,
+        status: 'COMPATIVEL',
+        erros: [],
+        alertas: [],
+        ocupacoes: [],
+      };
+    }
+
+    const [gabinete, ventoinhas] = await Promise.all([
+      this.prisma.hardware.findUnique({
+        where: { id: dados.gabineteId },
+        include: {
+          especificacaoGabinete: {
+            include: { suportesFans: true },
+          },
+        },
+      }),
+      this.prisma.hardware.findMany({
+        where: {
+          id: { in: configuracoes.map((item) => item.ventoinhaId) },
+        },
+        include: { especificacaoVentoinha: true },
+      }),
+    ]);
+
+    if (!gabinete?.especificacaoGabinete) {
+      throw new BadRequestException(
+        'O gabinete não possui especificação técnica para validar a ocupação das ventoinhas.',
+      );
+    }
+
+    const ventoinhasPorId = new Map(
+      ventoinhas.map((ventoinha) => [ventoinha.id, ventoinha]),
+    );
+    const ocupacao = new Map<
+      string,
+      {
+        posicao: PosicaoRefrigeracaoGabinete;
+        tamanhoMm: number;
+        quantidade: number;
+      }
+    >();
+    const erros: string[] = [];
+
+    for (const item of configuracoes) {
+      const ventoinha = ventoinhasPorId.get(item.ventoinhaId);
+      const especificacao = ventoinha?.especificacaoVentoinha;
+
+      if (!ventoinha || !especificacao) {
+        erros.push(
+          `Não foi possível validar a ocupação da ventoinha ID ${item.ventoinhaId}.`,
+        );
+        continue;
+      }
+
+      const chave = `${item.posicao}:${especificacao.tamanhoMm}`;
+      const atual = ocupacao.get(chave) ?? {
+        posicao: item.posicao,
+        tamanhoMm: especificacao.tamanhoMm,
+        quantidade: 0,
+      };
+      atual.quantidade += item.quantidade;
+      ocupacao.set(chave, atual);
+    }
+
+    const ocupacoes = [...ocupacao.values()].map((item) => {
+      const suporte = gabinete.especificacaoGabinete.suportesFans.find(
+        (suporte) =>
+          suporte.posicao === item.posicao &&
+          suporte.tamanhoMm === item.tamanhoMm,
+      );
+
+      if (!suporte) {
+        erros.push(
+          `O gabinete não possui suporte para ventoinhas de ${item.tamanhoMm} mm na posição ${item.posicao}.`,
+        );
+      } else if (item.quantidade > suporte.quantidadeMaxima) {
+        erros.push(
+          `A posição ${item.posicao} suporta no máximo ${suporte.quantidadeMaxima} ventoinha(s) de ${item.tamanhoMm} mm, mas a montagem utiliza ${item.quantidade}.`,
+        );
+      }
+
+      return {
+        ...item,
+        quantidadeMaxima: suporte?.quantidadeMaxima ?? null,
+      };
+    });
+
+    return {
+      compativel: erros.length === 0,
+      status: erros.length === 0 ? 'COMPATIVEL' : 'INCOMPATIVEL',
+      erros,
+      alertas: [],
+      ocupacoes,
     };
   }
 
@@ -3462,26 +3960,37 @@ export class HardwaresService {
     const erros: string[] = [];
     const alertas: string[] = [];
 
-    // ── Buscar especificações da placa-mãe ────────────────────────────────
-    const placaMae = await this.prisma.hardware.findUnique({
-      where: { id: dados.placaMaeId },
-      include: {
-        especificacaoPlacaMae: {
-          include: { slotsM2: { where: { ativo: true } } },
+    const [placaMae, fonte, gabinete] = await Promise.all([
+      this.prisma.hardware.findUnique({
+        where: { id: dados.placaMaeId },
+        include: {
+          especificacaoPlacaMae: {
+            include: { slotsM2: { where: { ativo: true } } },
+          },
         },
-      },
-    });
+      }),
+      this.prisma.hardware.findUnique({
+        where: { id: dados.fonteId },
+        include: { especificacaoFonte: true },
+      }),
+      this.prisma.hardware.findUnique({
+        where: { id: dados.gabineteId },
+        include: { especificacaoGabinete: true },
+      }),
+    ]);
+
+    const placaVideo =
+      dados.placaVideoId !== undefined
+        ? await this.prisma.hardware.findUnique({
+            where: { id: dados.placaVideoId },
+            include: { especificacaoPlacaVideo: true },
+          })
+        : null;
 
     const espPlaca = placaMae?.especificacaoPlacaMae;
-
-    // ── Buscar especificações da fonte ────────────────────────────────────
-    const fonte = await this.prisma.hardware.findUnique({
-      where: { id: dados.fonteId },
-      include: { especificacaoFonte: true },
-    });
     const espFonte = fonte?.especificacaoFonte;
+    const espGabinete = gabinete?.especificacaoGabinete;
 
-    // ── Módulos RAM ───────────────────────────────────────────────────────
     const quantidadeModulosRamFisicos =
       dados.quantidadeModulosRamTotal ?? dados.quantidadeModulosRam;
 
@@ -3500,9 +4009,13 @@ export class HardwaresService {
       }
     }
 
-    // ── Armazenamentos ────────────────────────────────────────────────────
+    let sataFisicos = 0;
+    let m2Total = 0;
+    let baias25Usadas = 0;
+    let baias35Usadas = 0;
+    let placasPcieArmazenamento = 0;
+
     if ((dados.armazenamentoIds ?? []).length > 0 && espPlaca) {
-      // Buscar specs de todos os armazenamentos de uma vez
       const armazenamentos = await this.prisma.hardware.findMany({
         where: { id: { in: dados.armazenamentoIds } },
         include: { especificacaoArmazenamento: true },
@@ -3515,8 +4028,6 @@ export class HardwaresService {
         ]),
       );
 
-      // Mantém a multiplicidade informada no DTO. O findMany retorna cada
-      // hardware uma única vez, mas a montagem pode ter duas instâncias iguais.
       const espArms = (dados.armazenamentoIds ?? []).flatMap(
         (armazenamentoId) => {
           const especificacao =
@@ -3525,22 +4036,35 @@ export class HardwaresService {
         },
       );
 
-      // Contar por tipo de interface/formato
-      const sataFisicos = espArms.filter(
+      sataFisicos = espArms.filter(
         (e) =>
-          e.interface === InterfaceArmazenamento.SATA && e.tamanhoM2Mm === null,
+          e.interface === InterfaceArmazenamento.SATA &&
+          e.formato !== FormatoArmazenamento.M2,
       ).length;
 
-      const m2Total = espArms.filter((e) => e.tamanhoM2Mm !== null).length;
+      m2Total = espArms.filter(
+        (e) => e.formato === FormatoArmazenamento.M2,
+      ).length;
 
-      // Verificar portas SATA da placa-mãe
+      baias25Usadas = espArms.filter(
+        (e) => e.formato === FormatoArmazenamento.POLEGADAS_2_5,
+      ).length;
+
+      baias35Usadas = espArms.filter(
+        (e) => e.formato === FormatoArmazenamento.POLEGADAS_3_5,
+      ).length;
+
+      placasPcieArmazenamento = espArms.filter(
+        (e) => e.formato === FormatoArmazenamento.PLACA_PCIE,
+      ).length;
+
       if (sataFisicos > 0) {
         if (espPlaca.portasSata < sataFisicos) {
           erros.push(
             `A placa-mãe possui ${espPlaca.portasSata} porta(s) SATA, mas a montagem usa ${sataFisicos} dispositivo(s) SATA.`,
           );
         }
-        // Verificar conectores SATA da fonte
+
         if (espFonte && espFonte.conectoresSata < sataFisicos) {
           erros.push(
             `A fonte possui ${espFonte.conectoresSata} conector(es) SATA de energia, mas a montagem usa ${sataFisicos} dispositivo(s) SATA.`,
@@ -3548,7 +4072,6 @@ export class HardwaresService {
         }
       }
 
-      // Verificar slots M.2 disponíveis
       if (m2Total > 0) {
         const slotsM2Ativos = espPlaca.slotsM2.length;
         if (m2Total > slotsM2Ativos) {
@@ -3561,13 +4084,43 @@ export class HardwaresService {
           );
         }
 
-        // Alertar sobre slots M.2 que compartilham recursos com SATA
         const slotsComCompartilhamento = espPlaca.slotsM2.filter(
-          (s) => s.compartilhaCom,
+          (slot) => slot.compartilhaCom,
         );
         if (slotsComCompartilhamento.length > 0 && sataFisicos > 0) {
           alertas.push(
             'Alguns slots M.2 da placa-mãe compartilham recursos com portas SATA e podem desabilitar conectores SATA ao serem utilizados.',
+          );
+        }
+      }
+    }
+
+    if (espGabinete) {
+      if (baias25Usadas > espGabinete.baias25) {
+        erros.push(
+          `O gabinete possui ${espGabinete.baias25} baia(s) de 2,5 polegadas, mas a montagem usa ${baias25Usadas}.`,
+        );
+      }
+
+      if (baias35Usadas > espGabinete.baias35) {
+        erros.push(
+          `O gabinete possui ${espGabinete.baias35} baia(s) de 3,5 polegadas, mas a montagem usa ${baias35Usadas}.`,
+        );
+      }
+
+      const slotsGpu = Math.ceil(
+        placaVideo?.especificacaoPlacaVideo?.slotsOcupados ?? 0,
+      );
+      const slotsTraseirosNecessarios = slotsGpu + placasPcieArmazenamento;
+
+      if (slotsTraseirosNecessarios > 0) {
+        if (espGabinete.slotsTraseiros === null) {
+          alertas.push(
+            'Não foi possível confirmar a ocupação total dos slots traseiros do gabinete.',
+          );
+        } else if (slotsTraseirosNecessarios > espGabinete.slotsTraseiros) {
+          erros.push(
+            `A montagem precisa de ${slotsTraseirosNecessarios} slot(s) traseiro(s), mas o gabinete possui ${espGabinete.slotsTraseiros}.`,
           );
         }
       }
@@ -3586,6 +4139,12 @@ export class HardwaresService {
         slotsM2Disponiveis: espPlaca?.slotsM2.length ?? null,
         qtdArmazenamentosNaMontagem: (dados.armazenamentoIds ?? []).length,
         conectoresSataFonte: espFonte?.conectoresSata ?? null,
+        baias25Disponiveis: espGabinete?.baias25 ?? null,
+        baias25Usadas,
+        baias35Disponiveis: espGabinete?.baias35 ?? null,
+        baias35Usadas,
+        slotsTraseirosDisponiveis: espGabinete?.slotsTraseiros ?? null,
+        placasPcieArmazenamento,
       },
     };
   }
@@ -3596,6 +4155,7 @@ export class HardwaresService {
     const resultados: Array<{
       etapa: string;
       compativel: boolean;
+      confirmado: boolean;
       erros: string[];
       alertas: string[];
       detalhes: unknown;
@@ -3630,7 +4190,8 @@ export class HardwaresService {
 
       resultados.push({
         etapa,
-        compativel: resultado.compativel === true,
+        compativel: resultado.compativel !== false,
+        confirmado: resultado.compativel !== null,
         erros: errosResultado,
         alertas: alertasResultado,
         detalhes: resultado,
@@ -3648,6 +4209,15 @@ export class HardwaresService {
     );
 
     adicionarResultado(
+      'SAIDA_VIDEO',
+      await this.verificarSaidaVideoMontagem(
+        dados.placaMaeId,
+        dados.processadorId,
+        dados.placaVideoId,
+      ),
+    );
+
+    adicionarResultado(
       'PLACA_MAE_GABINETE',
       await this.verificarCompatibilidadePlacaMaeGabinete(
         dados.gabineteId,
@@ -3661,6 +4231,11 @@ export class HardwaresService {
         dados.gabineteId,
         dados.fonteId,
       ),
+    );
+
+    adicionarResultado(
+      'ALIMENTACAO_PRINCIPAL_FONTE',
+      await this.verificarAlimentacaoPrincipalFonte(dados.fonteId),
     );
 
     if (dados.placaVideoId !== undefined) {
@@ -3688,6 +4263,7 @@ export class HardwaresService {
           dados.gabineteId,
           dados.processadorId,
           dados.coolerId,
+          dados.memoriaRamId,
         ),
       );
     }
@@ -3722,6 +4298,13 @@ export class HardwaresService {
       );
     }
 
+    if ((dados.ventoinhas ?? []).length > 0) {
+      adicionarResultado(
+        'OCUPACAO_VENTOINHAS_GABINETE',
+        await this.verificarOcupacaoVentoinhasMontagem(dados),
+      );
+    }
+
     // ── Verificação de multiplicidade de slots ──────────────────────────────
     adicionarResultado(
       'MULTIPLICIDADE_SLOTS',
@@ -3750,21 +4333,26 @@ export class HardwaresService {
       })),
     );
 
-    const compativel = resultados.every((resultado) => resultado.compativel);
+    const compativel = erros.length === 0;
+    const totalNaoConfirmados = resultados.filter(
+      (resultado) => !resultado.confirmado,
+    ).length;
 
     const status = !compativel
       ? 'INCOMPATIVEL'
-      : alertas.length > 0
+      : alertas.length > 0 || totalNaoConfirmados > 0
         ? 'COMPATIVEL_COM_ALERTAS'
         : 'COMPATIVEL';
 
     return {
       compativel,
       status,
+      confirmado: totalNaoConfirmados === 0,
       resumo: {
         totalVerificacoes: resultados.length,
         totalErros: erros.length,
         totalAlertas: alertas.length,
+        totalNaoConfirmados,
       },
       erros,
       alertas,
@@ -3804,6 +4392,11 @@ export class HardwaresService {
         nome: dados.nome,
         arquivoUrl: dados.arquivoUrl,
         formato: dados.formato,
+        origem: dados.origem,
+        storageKey: dados.storageKey,
+        fonteUrl: dados.fonteUrl,
+        autor: dados.autor,
+        licenca: dados.licenca,
         versao: dados.versao,
         alturaRealMm: dados.alturaRealMm,
         larguraRealMm: dados.larguraRealMm,
@@ -3990,6 +4583,11 @@ export class HardwaresService {
         nome: dados.nome,
         arquivoUrl: dados.arquivoUrl,
         formato: dados.formato,
+        origem: dados.origem,
+        storageKey: dados.storageKey,
+        fonteUrl: dados.fonteUrl,
+        autor: dados.autor,
+        licenca: dados.licenca,
         versao: dados.versao,
         alturaRealMm: dados.alturaRealMm,
         larguraRealMm: dados.larguraRealMm,
@@ -4494,6 +5092,11 @@ export class HardwaresService {
               nome: true,
               arquivoUrl: true,
               formato: true,
+              origem: true,
+              storageKey: true,
+              fonteUrl: true,
+              autor: true,
+              licenca: true,
               versao: true,
               alturaRealMm: true,
               larguraRealMm: true,
@@ -4542,6 +5145,11 @@ export class HardwaresService {
               nome: true,
               arquivoUrl: true,
               formato: true,
+              origem: true,
+              storageKey: true,
+              fonteUrl: true,
+              autor: true,
+              licenca: true,
               versao: true,
               alturaRealMm: true,
               larguraRealMm: true,
@@ -4715,7 +5323,37 @@ export class HardwaresService {
       select: {
         id: true,
         nome: true,
+        marca: true,
+        modelo: true,
         categoria: true,
+        especificacaoGabinete: {
+          select: {
+            tamanho: true,
+            alturaMm: true,
+            larguraMm: true,
+            profundidadeMm: true,
+            baias25: true,
+            baias35: true,
+            slotsTraseiros: true,
+            suportaGpuVertical: true,
+            espacoGerenciamentoCabosMm: true,
+            suportesFans: {
+              select: {
+                posicao: true,
+                tamanhoMm: true,
+                quantidadeMaxima: true,
+                espessuraMaximaMm: true,
+              },
+            },
+            suportesRadiador: {
+              select: {
+                posicao: true,
+                tamanhoMm: true,
+                espessuraConjuntoMaximaMm: true,
+              },
+            },
+          },
+        },
         modelos3D: {
           where: {
             ativo: true,
@@ -4735,6 +5373,11 @@ export class HardwaresService {
             nome: true,
             arquivoUrl: true,
             formato: true,
+            origem: true,
+            storageKey: true,
+            fonteUrl: true,
+            autor: true,
+            licenca: true,
             versao: true,
             alturaRealMm: true,
             larguraRealMm: true,
@@ -5147,7 +5790,103 @@ export class HardwaresService {
       },
     );
 
+    const itensSemAjusteEspecifico = resultadosPorItem.flatMap(
+      ({ item, resultado }) => {
+        if (resultado.ajusteEspecificoAplicado) {
+          return [];
+        }
+
+        return [
+          {
+            instanciaId: item.instanciaId,
+            instanciaPaiId: item.instanciaPaiId ?? null,
+            hardwareId: resultado.hardwareFilho.id,
+            nome: resultado.hardwareFilho.nome,
+            categoria: resultado.hardwareFilho.categoria,
+          },
+        ];
+      },
+    );
+
+    const calibracaoVisualRefinada = itensSemAjusteEspecifico.length === 0;
+
     const hardwarePaiSemModelo3D = hardwarePai.modelos3D.length === 0;
+
+    const hardwarePaiRequerDesenho =
+      hardwarePai.categoria === CategoriaHardware.GABINETE;
+
+    const hardwarePaiRenderizadoPorDesenho =
+      hardwarePaiRequerDesenho && hardwarePai.especificacaoGabinete !== null;
+
+    const hardwarePaiSemDadosDesenho =
+      hardwarePaiRequerDesenho && hardwarePai.especificacaoGabinete === null;
+
+    const modelo3DHardwarePaiParaRenderizacao = hardwarePaiRequerDesenho
+      ? null
+      : modelo3DHardwarePai;
+
+    const modoRenderizacaoHardwarePai = hardwarePaiRequerDesenho
+      ? hardwarePaiRenderizadoPorDesenho
+        ? 'DESENHO'
+        : 'INDISPONIVEL'
+      : modelo3DHardwarePaiParaRenderizacao
+        ? 'MODELO_3D'
+        : 'INDISPONIVEL';
+
+    const desenhoHardwarePai =
+      hardwarePaiRenderizadoPorDesenho && hardwarePai.especificacaoGabinete
+        ? {
+            tipo: 'GABINETE_2_5D',
+            referenciaVisual: {
+              hardwareId: hardwarePai.id,
+              nome: hardwarePai.nome,
+              marca: hardwarePai.marca,
+              modelo: hardwarePai.modelo,
+              fidelidadeEsperada: 'FORMA_ESPECIFICA_DO_MODELO',
+            },
+            estrategiaVisual: {
+              cascaGabinete: 'DESENHO_JAVASCRIPT_2_5D',
+              perfilForma: 'POR_MODELO_DE_GABINETE',
+              componentesInternos: 'MODELOS_3D',
+              objetivo: 'REPRODUZIR_FORMA_DO_GABINETE_REAL',
+              estadosEnergia: {
+                desligado: {
+                  modo: 'ESTATICO',
+                  animarVentoinhas: false,
+                  aplicarIluminacaoConformeHardware: false,
+                  realcarComponentesAtivos: false,
+                  efeitosVisuaisAprimorados: false,
+                },
+                ligado: {
+                  modo: 'APRIMORADO',
+                  animarVentoinhas: true,
+                  aplicarIluminacaoConformeHardware: true,
+                  realcarComponentesAtivos: true,
+                  efeitosVisuaisAprimorados: true,
+                },
+              },
+            },
+            convencaoDimensoes: 'ALTURA_LARGURA_PROFUNDIDADE',
+            dimensoesMm: {
+              altura: hardwarePai.especificacaoGabinete.alturaMm,
+              largura: hardwarePai.especificacaoGabinete.larguraMm,
+              profundidade: hardwarePai.especificacaoGabinete.profundidadeMm,
+            },
+            tamanho: hardwarePai.especificacaoGabinete.tamanho,
+            estrutura: {
+              baias25: hardwarePai.especificacaoGabinete.baias25,
+              baias35: hardwarePai.especificacaoGabinete.baias35,
+              slotsTraseiros: hardwarePai.especificacaoGabinete.slotsTraseiros,
+              suportaGpuVertical:
+                hardwarePai.especificacaoGabinete.suportaGpuVertical,
+              espacoGerenciamentoCabosMm:
+                hardwarePai.especificacaoGabinete.espacoGerenciamentoCabosMm,
+            },
+            suportesVentoinhas: hardwarePai.especificacaoGabinete.suportesFans,
+            suportesRadiador:
+              hardwarePai.especificacaoGabinete.suportesRadiador,
+          }
+        : null;
 
     return {
       hardwarePai: {
@@ -5155,30 +5894,45 @@ export class HardwaresService {
         id: hardwarePai.id,
         nome: hardwarePai.nome,
         categoria: hardwarePai.categoria,
-        modelo3D: modelo3DHardwarePai,
+        modoRenderizacao: modoRenderizacaoHardwarePai,
+        modelo3D: modelo3DHardwarePaiParaRenderizacao,
+        desenho: desenhoHardwarePai,
 
         transformacaoRenderizacao: {
-          posicaoX: modelo3DHardwarePai?.posicaoCorrecaoX ?? 0,
-          posicaoY: modelo3DHardwarePai?.posicaoCorrecaoY ?? 0,
-          posicaoZ: modelo3DHardwarePai?.posicaoCorrecaoZ ?? 0,
+          posicaoX: modelo3DHardwarePaiParaRenderizacao?.posicaoCorrecaoX ?? 0,
+          posicaoY: modelo3DHardwarePaiParaRenderizacao?.posicaoCorrecaoY ?? 0,
+          posicaoZ: modelo3DHardwarePaiParaRenderizacao?.posicaoCorrecaoZ ?? 0,
 
-          rotacaoX: modelo3DHardwarePai?.rotacaoCorrecaoX ?? 0,
-          rotacaoY: modelo3DHardwarePai?.rotacaoCorrecaoY ?? 0,
-          rotacaoZ: modelo3DHardwarePai?.rotacaoCorrecaoZ ?? 0,
+          rotacaoX: modelo3DHardwarePaiParaRenderizacao?.rotacaoCorrecaoX ?? 0,
+          rotacaoY: modelo3DHardwarePaiParaRenderizacao?.rotacaoCorrecaoY ?? 0,
+          rotacaoZ: modelo3DHardwarePaiParaRenderizacao?.rotacaoCorrecaoZ ?? 0,
 
-          escalaX: modelo3DHardwarePai?.escalaCorrecaoX ?? 1,
-          escalaY: modelo3DHardwarePai?.escalaCorrecaoY ?? 1,
-          escalaZ: modelo3DHardwarePai?.escalaCorrecaoZ ?? 1,
+          escalaX: modelo3DHardwarePaiParaRenderizacao?.escalaCorrecaoX ?? 1,
+          escalaY: modelo3DHardwarePaiParaRenderizacao?.escalaCorrecaoY ?? 1,
+          escalaZ: modelo3DHardwarePaiParaRenderizacao?.escalaCorrecaoZ ?? 1,
         },
       },
 
       total: resultadosPorItem.length,
 
       montagemRenderizavel:
-        !hardwarePaiSemModelo3D && itensSemModelo3D.length === 0,
+        (hardwarePaiRenderizadoPorDesenho || !hardwarePaiSemModelo3D) &&
+        itensSemModelo3D.length === 0,
 
       hardwarePaiSemModelo3D,
+      hardwarePaiRequerDesenho,
+      hardwarePaiRenderizadoPorDesenho,
+      hardwarePaiSemDadosDesenho,
       itensSemModelo3D,
+
+      calibracaoVisual: {
+        status: calibracaoVisualRefinada ? 'REFINADA' : 'BASE',
+        refinada: calibracaoVisualRefinada,
+        itensSemAjusteEspecifico,
+        observacao: calibracaoVisualRefinada
+          ? 'Todos os componentes possuem ajuste específico revisado para o ponto de encaixe utilizado.'
+          : 'A montagem pode ser renderizada usando os pontos base, mas alguns componentes ainda não possuem ajuste específico revisado para refinamento visual.',
+      },
 
       itens: resultadosPorItem.map(({ item, resultado }) => ({
         instanciaId: item.instanciaId,
@@ -5229,16 +5983,22 @@ export class HardwaresService {
     const placasVideo = itensDaCategoria(CategoriaHardware.PLACA_VIDEO);
     const armazenamentos = itensDaCategoria(CategoriaHardware.ARMAZENAMENTO);
     const ventoinhas = itensDaCategoria(CategoriaHardware.VENTOINHA);
+    const fontes = itensDaCategoria(CategoriaHardware.FONTE);
+    const coolers = itensDaCategoria(CategoriaHardware.COOLER);
 
-    if (placasMae.length === 0) {
+    if (placasMae.length !== 1) {
       throw new BadRequestException(
-        'A montagem não possui placa-mãe. Adicione uma placa-mãe antes de verificar a compatibilidade.',
+        placasMae.length === 0
+          ? 'A montagem não possui placa-mãe. Adicione uma placa-mãe antes de verificar a compatibilidade.'
+          : 'A montagem completa deve possuir exatamente uma placa-mãe.',
       );
     }
 
-    if (processadores.length === 0) {
+    if (processadores.length !== 1) {
       throw new BadRequestException(
-        'A montagem não possui processador. Adicione um processador antes de verificar a compatibilidade.',
+        processadores.length === 0
+          ? 'A montagem não possui processador. Adicione um processador antes de verificar a compatibilidade.'
+          : 'A montagem completa deve possuir exatamente um processador.',
       );
     }
 
@@ -5247,6 +6007,44 @@ export class HardwaresService {
         'A montagem não possui memória RAM. Adicione ao menos um módulo antes de verificar a compatibilidade.',
       );
     }
+
+    if (fontes.length !== 1) {
+      throw new BadRequestException(
+        fontes.length === 0
+          ? 'A montagem não possui fonte. Adicione uma fonte antes de verificar a compatibilidade.'
+          : 'A montagem completa deve possuir exatamente uma fonte.',
+      );
+    }
+
+    if (placasVideo.length > 1) {
+      throw new BadRequestException(
+        'A montagem completa suporta no máximo uma placa de vídeo principal.',
+      );
+    }
+
+    if (coolers.length > 1) {
+      throw new BadRequestException(
+        'A montagem completa suporta no máximo um cooler principal de processador.',
+      );
+    }
+
+    const fonteIdDaArvore = fontes[0].hardwareFilho.id;
+    if (dados.fonteId !== undefined && dados.fonteId !== fonteIdDaArvore) {
+      throw new BadRequestException(
+        `A fonte informada no campo fonteId (${dados.fonteId}) não corresponde à fonte presente na árvore 3D (${fonteIdDaArvore}).`,
+      );
+    }
+    const fonteIdEfetivo = dados.fonteId ?? fonteIdDaArvore;
+
+    const coolerIdDaArvore = coolers[0]?.hardwareFilho.id;
+    if (dados.coolerId !== undefined && dados.coolerId !== coolerIdDaArvore) {
+      throw new BadRequestException(
+        coolerIdDaArvore === undefined
+          ? 'Foi informado coolerId, mas não existe uma instância de cooler na árvore 3D.'
+          : `O cooler informado no campo coolerId (${dados.coolerId}) não corresponde ao cooler presente na árvore 3D (${coolerIdDaArvore}).`,
+      );
+    }
+    const coolerIdEfetivo = dados.coolerId ?? coolerIdDaArvore;
 
     // ── 2. Ventoinhas: preservar quantidade física por hardware ───────────
     const configuracoesVentoinhas = dados.ventoinhas ?? [];
@@ -5465,9 +6263,9 @@ export class HardwaresService {
                 quantidadePorMemoriaRam.get(memoriaRamId) ?? 1,
               quantidadeModulosRamTotal,
               gabineteId,
-              fonteId: dados.fonteId,
+              fonteId: fonteIdEfetivo,
               placaVideoId,
-              coolerId: dados.coolerId,
+              coolerId: coolerIdEfetivo,
               armazenamentoIds,
               ventoinhas: ventoinhasDto,
             }),
@@ -5507,6 +6305,11 @@ export class HardwaresService {
     );
 
     const resumoFisico = {
+      placasMae: placasMae.length,
+      processadores: processadores.length,
+      placasVideo: placasVideo.length,
+      fontes: fontes.length,
+      coolers: coolers.length,
       modulosRam: memoriasRam.length,
       capacidadeMemoriaTotalGb,
       armazenamentos: armazenamentos.length,

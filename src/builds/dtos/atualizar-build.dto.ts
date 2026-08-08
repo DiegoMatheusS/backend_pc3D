@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsObject,
   IsOptional,
+  ValidateIf,
   IsString,
   MaxLength,
   MinLength,
@@ -12,20 +13,30 @@ import {
 import { BuildComponenteDto } from './criar-build.dto';
 
 export class AtualizarBuildDto {
-  @IsOptional() @IsString() @MinLength(2) @MaxLength(200) nome?: string;
-  @IsOptional() @IsString() @MaxLength(100) marca?: string;
-  @IsOptional() @IsString() @MaxLength(150) modelo?: string;
-  @IsOptional() @IsString() @MaxLength(4000) descricao?: string;
-  @IsOptional() @IsString() @MaxLength(500) imagemUrl?: string;
-  @IsOptional() @IsString() @MaxLength(500) imagemHoverUrl?: string;
-  @IsOptional() @IsString() @MaxLength(100) categoria?: string;
-  @IsOptional() @IsString() @MaxLength(150) finalidade?: string;
-  @IsOptional() @IsString() @MaxLength(80) resolucaoRecomendada?: string;
-  @IsOptional() @IsObject() configuracao3D?: Record<string, unknown>;
-  @IsOptional() @IsBoolean() publicado?: boolean;
-  @IsOptional() @IsBoolean() ativo?: boolean;
+  @ValidateIf((_obj, valor) => valor !== undefined)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  nome?: string;
+  @IsOptional() @IsString() @MaxLength(100) marca?: string | null;
+  @IsOptional() @IsString() @MaxLength(150) modelo?: string | null;
+  @IsOptional() @IsString() @MaxLength(4000) descricao?: string | null;
+  @IsOptional() @IsString() @MaxLength(500) imagemUrl?: string | null;
+  @IsOptional() @IsString() @MaxLength(500) imagemHoverUrl?: string | null;
+  @IsOptional() @IsString() @MaxLength(100) categoria?: string | null;
+  @IsOptional() @IsString() @MaxLength(150) finalidade?: string | null;
+  @IsOptional() @IsString() @MaxLength(80) resolucaoRecomendada?: string | null;
+  @ValidateIf((_obj, valor) => valor !== undefined)
+  @IsObject()
+  configuracao3D?: Record<string, unknown>;
+  @ValidateIf((_obj, valor) => valor !== undefined)
+  @IsBoolean()
+  publicado?: boolean;
+  @ValidateIf((_obj, valor) => valor !== undefined)
+  @IsBoolean()
+  ativo?: boolean;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => BuildComponenteDto)

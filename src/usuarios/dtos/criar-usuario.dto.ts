@@ -1,14 +1,16 @@
 import {
   IsEmail,
-  IsEnum,
-  IsOptional,
   IsString,
   IsStrongPassword,
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { PapelUsuario } from '../../generated/prisma/enums';
 
+/**
+ * Criação de uma nova conta pelo painel administrativo.
+ * Toda conta nasce como USUARIO; promoção de papel acontece depois,
+ * exclusivamente pela rota administrativa de atualização.
+ */
 export class CriarUsuarioDto {
   @IsString({
     message: 'O nome deve ser um texto.',
@@ -52,10 +54,4 @@ export class CriarUsuarioDto {
     message: 'A senha deve ter no máximo 128 caracteres.',
   })
   senha!: string;
-
-  @IsOptional()
-  @IsEnum(PapelUsuario, {
-    message: 'O papel deve ser ADMIN, EDITOR, REVISOR ou USUARIO.',
-  })
-  papel?: PapelUsuario;
 }

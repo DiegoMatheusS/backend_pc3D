@@ -17,7 +17,11 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "db:test:status": "node scripts/prisma-test.mjs status",
+    "db:test:migrate": "node scripts/prisma-test.mjs migrate",
+    "db:test:studio": "node scripts/prisma-test.mjs studio",
+    "verify": "npm run lint && npm run build && npm test && npm run test:e2e"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

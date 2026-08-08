@@ -1,50 +1,42 @@
 /**
  * Testes e2e — Montagem 3D: arquitetura de instâncias físicas
  *
- * Cobre os casos críticos da arquitetura por instanciaId:
- * - montagem simples válida
- * - duas RAMs com mesmo hardwareId (instâncias diferentes)
- * - instanciaId duplicado → 400
- * - mesmo slot usado duas vezes na mesma instância → 400
- * - instanciaId reservado da raiz → 400
- * - instância encaixada nela mesma → 400
- * - instânciaPaiId inexistente → 400
- * - ciclo entre instâncias → 400
- *
- * ATENÇÃO: esses testes dependem dos dados reais do banco de desenvolvimento.
- * Se os IDs mudarem, atualize as constantes abaixo.
+ * Cobre os casos críticos da arquitetura por instanciaId sem depender
+ * de IDs fixos existentes no banco. Cada suíte cria e remove sua própria
+ * fixture técnica no banco exclusivo de testes.
  */
 import request from 'supertest';
+import { PrismaService } from '../src/prisma/prisma.service';
 import { App, criarApp } from './app-setup';
-
-/** IDs do banco de desenvolvimento — ajuste se necessário */
-const GABINETE_ID = 6; // hardware gabinete raiz
-const PLACA_MAE_HW_ID = 4;
-const CPU_HW_ID = 3;
-const RAM_HW_ID = 5;
-const GPU_HW_ID = 7;
-
-// Pontos de encaixe: ajuste conforme o banco
-const PONTO_PLACA_MAE = 1; // gabinete → placa-mãe
-const PONTO_CPU = 2; // placa-mãe → CPU
-const PONTO_RAM_1 = 3; // placa-mãe → RAM slot 1
-const PONTO_RAM_2 = 4; // placa-mãe → RAM slot 2
-const PONTO_GPU = 5; // placa-mãe → GPU
+import {
+  criarFixturePcCompleto,
+  FixturePcCompleto,
+  limparFixturePcCompleto,
+} from './fixtures/pc-completo.fixture';
 
 describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
   let app: App;
+  let prisma: PrismaService;
+  let fixture: FixturePcCompleto;
 
   beforeAll(async () => {
     app = await criarApp();
+    prisma = app.get(PrismaService);
+    fixture = await criarFixturePcCompleto(prisma);
   });
 
   afterAll(async () => {
-    await app.close();
+    if (prisma && fixture) {
+      await limparFixturePcCompleto(prisma, fixture);
+    }
+    if (app) await app.close();
   });
 
   const post = (body: object) =>
     request(app.getHttpServer())
-      .post(`/api/hardwares/${GABINETE_ID}/montagem-3d/resolver`)
+      .post(
+        `/api/hardwares/${fixture.hardwares.gabineteId}/montagem-3d/resolver`,
+      )
       .send(body);
 
   it('montagem simples com IDs explícitos → 200', async () => {
@@ -52,36 +44,32 @@ describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
       itens: [
         {
           instanciaId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_PLACA_MAE,
-          hardwareFilhoId: PLACA_MAE_HW_ID,
+          pontoEncaixeId: fixture.pontos.placaMae,
+          hardwareFilhoId: fixture.hardwares.placaMaeId,
         },
         {
           instanciaId: 'cpu-1',
           instanciaPaiId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_CPU,
-          hardwareFilhoId: CPU_HW_ID,
+          pontoEncaixeId: fixture.pontos.cpu,
+          hardwareFilhoId: fixture.hardwares.processadorId,
         },
         {
           instanciaId: 'ram-1',
           instanciaPaiId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_RAM_1,
-          hardwareFilhoId: RAM_HW_ID,
+          pontoEncaixeId: fixture.pontos.ram1,
+          hardwareFilhoId: fixture.hardwares.memoriaRamId,
         },
       ],
     });
 
-    if (res.status !== 200) {
-      console.warn(
-        'Montagem simples falhou — provavelmente IDs do banco mudaram:',
-        res.body,
-      );
-    }
-    // Aceitar também 400 se o banco não tiver os dados esperados
-    expect([200, 400]).toContain(res.status);
-    if (res.status === 200) {
-      expect(res.body).toHaveProperty('itens');
-      expect(res.body).toHaveProperty('hardwarePai');
-    }
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('itens');
+    expect(res.body).toHaveProperty('hardwarePai');
+    expect(res.body.hardwarePai).toHaveProperty(
+      'id',
+      fixture.hardwares.gabineteId,
+    );
+    expect(res.body.itens).toHaveLength(3);
   });
 
   it('duas RAMs com mesmo hardwareId → instâncias diferentes coexistem', async () => {
@@ -89,39 +77,36 @@ describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
       itens: [
         {
           instanciaId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_PLACA_MAE,
-          hardwareFilhoId: PLACA_MAE_HW_ID,
+          pontoEncaixeId: fixture.pontos.placaMae,
+          hardwareFilhoId: fixture.hardwares.placaMaeId,
         },
         {
           instanciaId: 'cpu-1',
           instanciaPaiId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_CPU,
-          hardwareFilhoId: CPU_HW_ID,
+          pontoEncaixeId: fixture.pontos.cpu,
+          hardwareFilhoId: fixture.hardwares.processadorId,
         },
         {
           instanciaId: 'ram-1',
           instanciaPaiId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_RAM_1,
-          hardwareFilhoId: RAM_HW_ID,
+          pontoEncaixeId: fixture.pontos.ram1,
+          hardwareFilhoId: fixture.hardwares.memoriaRamId,
         },
         {
           instanciaId: 'ram-2',
           instanciaPaiId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_RAM_2,
-          hardwareFilhoId: RAM_HW_ID,
+          pontoEncaixeId: fixture.pontos.ram2,
+          hardwareFilhoId: fixture.hardwares.memoriaRamId,
         },
       ],
     });
 
-    if (res.status === 200) {
-      const instancias = (res.body.itens as Array<{ instanciaId: string }>).map(
-        (i) => i.instanciaId,
-      );
-      expect(instancias).toContain('ram-1');
-      expect(instancias).toContain('ram-2');
-    }
-    // Aceitar 400 se banco não tiver os dados
-    expect([200, 400]).toContain(res.status);
+    expect(res.status).toBe(200);
+    const instancias = (res.body.itens as Array<{ instanciaId: string }>).map(
+      (item) => item.instanciaId,
+    );
+    expect(instancias).toContain('ram-1');
+    expect(instancias).toContain('ram-2');
   });
 
   it('instanciaId duplicado → 400 com mensagem de unicidade', async () => {
@@ -129,13 +114,13 @@ describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
       itens: [
         {
           instanciaId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_PLACA_MAE,
-          hardwareFilhoId: PLACA_MAE_HW_ID,
+          pontoEncaixeId: fixture.pontos.placaMae,
+          hardwareFilhoId: fixture.hardwares.placaMaeId,
         },
         {
           instanciaId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_GPU,
-          hardwareFilhoId: GPU_HW_ID,
+          pontoEncaixeId: fixture.pontos.gpu,
+          hardwareFilhoId: fixture.hardwares.placaVideoId,
         },
       ],
     });
@@ -150,20 +135,20 @@ describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
       itens: [
         {
           instanciaId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_PLACA_MAE,
-          hardwareFilhoId: PLACA_MAE_HW_ID,
+          pontoEncaixeId: fixture.pontos.placaMae,
+          hardwareFilhoId: fixture.hardwares.placaMaeId,
         },
         {
           instanciaId: 'ram-1',
           instanciaPaiId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_RAM_1,
-          hardwareFilhoId: RAM_HW_ID,
+          pontoEncaixeId: fixture.pontos.ram1,
+          hardwareFilhoId: fixture.hardwares.memoriaRamId,
         },
         {
           instanciaId: 'ram-2',
           instanciaPaiId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_RAM_1,
-          hardwareFilhoId: RAM_HW_ID,
+          pontoEncaixeId: fixture.pontos.ram1,
+          hardwareFilhoId: fixture.hardwares.memoriaRamId,
         },
       ],
     });
@@ -176,9 +161,9 @@ describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
     const res = await post({
       itens: [
         {
-          instanciaId: `hardware-raiz-${GABINETE_ID}`,
-          pontoEncaixeId: PONTO_PLACA_MAE,
-          hardwareFilhoId: PLACA_MAE_HW_ID,
+          instanciaId: `hardware-raiz-${fixture.hardwares.gabineteId}`,
+          pontoEncaixeId: fixture.pontos.placaMae,
+          hardwareFilhoId: fixture.hardwares.placaMaeId,
         },
       ],
     });
@@ -193,8 +178,8 @@ describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
         {
           instanciaId: 'placa-mae-1',
           instanciaPaiId: 'placa-mae-1',
-          pontoEncaixeId: PONTO_PLACA_MAE,
-          hardwareFilhoId: PLACA_MAE_HW_ID,
+          pontoEncaixeId: fixture.pontos.placaMae,
+          hardwareFilhoId: fixture.hardwares.placaMaeId,
         },
       ],
     });
@@ -208,8 +193,8 @@ describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
         {
           instanciaId: 'cpu-1',
           instanciaPaiId: 'placa-mae-inexistente',
-          pontoEncaixeId: PONTO_CPU,
-          hardwareFilhoId: CPU_HW_ID,
+          pontoEncaixeId: fixture.pontos.cpu,
+          hardwareFilhoId: fixture.hardwares.processadorId,
         },
       ],
     });
@@ -224,8 +209,15 @@ describe('Montagem 3D — arquitetura de instâncias (e2e)', () => {
 
   it('gabinete inexistente → 404', async () => {
     const res = await request(app.getHttpServer())
-      .post('/api/hardwares/99999/montagem-3d/resolver')
-      .send({ itens: [{ pontoEncaixeId: 1, hardwareFilhoId: 1 }] });
+      .post('/api/hardwares/2147483000/montagem-3d/resolver')
+      .send({
+        itens: [
+          {
+            pontoEncaixeId: fixture.pontos.placaMae,
+            hardwareFilhoId: fixture.hardwares.placaMaeId,
+          },
+        ],
+      });
 
     expect(res.status).toBe(404);
     expect(res.body).toHaveProperty('codigo');

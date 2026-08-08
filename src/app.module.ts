@@ -17,6 +17,7 @@ import { ProdutosModule } from './produtos/produtos.module';
 import { NotebooksModule } from './notebooks/notebooks.module';
 import { BuildsModule } from './builds/builds.module';
 import { AvaliacoesModule } from './avaliacoes/avaliacoes.module';
+import { ComunidadeModule } from './comunidade/comunidade.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { AvaliacoesModule } from './avaliacoes/avaliacoes.module';
     NotebooksModule,
     BuildsModule,
     AvaliacoesModule,
+    ComunidadeModule,
   ],
   controllers: [AppController],
   providers: [

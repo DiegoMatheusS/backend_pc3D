@@ -130,7 +130,7 @@ export class UsuariosController {
       acao: AcaoAuditoria.USUARIO_CRIADO,
       entidade: 'Usuario',
       entidadeId: resultado.id,
-      dadosNovos: { email: dados.email, papel: dados.papel },
+      dadosNovos: { email: dados.email, papel: resultado.papel },
       ip: req.ip,
     });
     return resultado;

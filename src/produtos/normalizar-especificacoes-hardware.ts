@@ -71,6 +71,8 @@ export function normalizarEspecificacoesHardwarePublicas(
       return {
         ...base,
         tipoMemoria: base.tiposMemoriaSuportados ?? [],
+        formatosMemoria: base.formatosMemoriaSuportados ?? ['DIMM'],
+        suportaMemoriaRegistrada: base.suportaMemoriaRegistrada ?? false,
         memoriaMaximaGb: base.capacidadeMaximaMemoriaGb ?? null,
         frequenciaMemoriaMaxMhz:
           frequencias.length > 0 ? Math.max(...frequencias) : null,

@@ -28,12 +28,12 @@ export class CriarOfertaDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  vendedorNome?: string;
+  vendedorNome?: string | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  vendedorIdentificador?: string;
+  vendedorIdentificador?: string | null;
 
   @IsUrl()
   @MaxLength(500)
@@ -42,7 +42,7 @@ export class CriarOfertaDto {
   @IsOptional()
   @IsUrl()
   @MaxLength(500)
-  urlAfiliada?: string;
+  urlAfiliada?: string | null;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
@@ -51,14 +51,14 @@ export class CriarOfertaDto {
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
-  precoAnterior?: number;
+  precoAnterior?: number | null;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  frete?: number;
+  frete?: number | null;
 
   @IsOptional()
   @IsDateString()
-  validoAte?: string;
+  validoAte?: string | null;
 }

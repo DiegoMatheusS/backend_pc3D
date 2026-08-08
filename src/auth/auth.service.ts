@@ -1,8 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
+import { Prisma } from '../generated/prisma/client';
+import { PapelUsuario } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { CadastroDto } from './dtos/cadastro.dto';
 import { LoginDto } from './dtos/login.dto';
 
 @Injectable()
@@ -14,6 +21,43 @@ export class AuthService {
 
   private gerarHashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  async cadastrar(dados: CadastroDto) {
+    const nome = dados.nome.trim();
+    const email = dados.email.trim().toLowerCase();
+    const senhaHash = await argon2.hash(dados.senha, {
+      type: argon2.argon2id,
+    });
+
+    try {
+      return await this.prisma.usuario.create({
+        data: {
+          nome,
+          email,
+          senhaHash,
+          // Regra de segurança: cadastro público nunca escolhe papel.
+          papel: PapelUsuario.USUARIO,
+        },
+        select: {
+          id: true,
+          nome: true,
+          email: true,
+          papel: true,
+          ativo: true,
+          criadoEm: true,
+        },
+      });
+    } catch (erro: unknown) {
+      if (
+        erro instanceof Prisma.PrismaClientKnownRequestError &&
+        erro.code === 'P2002'
+      ) {
+        throw new ConflictException('Já existe um usuário com este e-mail.');
+      }
+
+      throw erro;
+    }
   }
 
   async login(dados: LoginDto) {

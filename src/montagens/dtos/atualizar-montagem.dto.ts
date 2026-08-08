@@ -35,12 +35,12 @@ export class AtualizarMontagemDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  fonteId?: number;
+  fonteId?: number | null;
 
   @IsOptional()
   @IsInt()
   @Min(1)
-  coolerId?: number;
+  coolerId?: number | null;
 
   @IsOptional()
   @IsBoolean()

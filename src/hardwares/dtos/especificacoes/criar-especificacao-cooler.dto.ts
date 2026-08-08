@@ -1,4 +1,5 @@
 import {
+  ArrayNotEmpty,
   ArrayUnique,
   IsArray,
   IsBoolean,
@@ -19,6 +20,7 @@ export class CriarEspecificacaoCoolerDto {
   tipo!: TipoCooler;
 
   @IsArray()
+  @ArrayNotEmpty()
   @ArrayUnique()
   @IsString({ each: true })
   socketsSuportados!: string[];

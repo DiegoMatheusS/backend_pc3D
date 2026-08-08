@@ -14,6 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { Papeis } from '../auth/papeis.decorator';
@@ -39,8 +40,15 @@ export class BuildsController {
   }
 
   @Get(':id/3d')
+  @Throttle({ global: { limit: 30, ttl: 60_000 } })
   abrirNo3D(@Param('id', ParseIntPipe) id: number) {
     return this.buildsService.abrirNo3D(id);
+  }
+
+  @Get(':id/resumo-compra')
+  @Throttle({ global: { limit: 60, ttl: 60_000 } })
+  resumoCompra(@Param('id', ParseIntPipe) id: number) {
+    return this.buildsService.resumoCompra(id);
   }
 
   @Get(':id')

@@ -335,6 +335,11 @@ export class ProdutosService {
               id: true,
               arquivoUrl: true,
               formato: true,
+              origem: true,
+              storageKey: true,
+              fonteUrl: true,
+              autor: true,
+              licenca: true,
               versao: true,
               tamanhoBytes: true,
             },
@@ -458,6 +463,16 @@ export class ProdutosService {
   }
 
   async listarPublicos(filtros: FiltrarProdutosDto) {
+    if (
+      filtros.precoMin !== undefined &&
+      filtros.precoMax !== undefined &&
+      filtros.precoMin > filtros.precoMax
+    ) {
+      throw new BadRequestException(
+        'O preço mínimo não pode ser maior que o preço máximo.',
+      );
+    }
+
     const pagina = filtros.pagina ?? 1;
     const limite = filtros.limite ?? 24;
     const agora = new Date();
@@ -760,6 +775,24 @@ export class ProdutosService {
     this.validarCategoriaProdutoGenerico(categoria.slug);
     this.validarEspecificacaoDaCategoria(dados, categoria.slug);
 
+    if (
+      dados.publicado === true &&
+      new Set(['monitores', 'mouses', 'teclados', 'headsets']).has(
+        categoria.slug,
+      )
+    ) {
+      const possuiEspecificacao =
+        dados.especificacaoMonitor !== undefined ||
+        dados.especificacaoMouse !== undefined ||
+        dados.especificacaoTeclado !== undefined ||
+        dados.especificacaoHeadset !== undefined;
+      if (!possuiEspecificacao) {
+        throw new BadRequestException(
+          'Um produto publicado nesta categoria precisa possuir sua especificação técnica.',
+        );
+      }
+    }
+
     const duplicado = await this.prisma.produto.findFirst({
       where: {
         OR: [
@@ -849,6 +882,7 @@ export class ProdutosService {
         nome: true,
         marca: true,
         modelo: true,
+        publicado: true,
         categoria: { select: { id: true, slug: true } },
         especificacaoMonitor: { select: { id: true } },
         especificacaoMouse: { select: { id: true } },
@@ -897,9 +931,48 @@ export class ProdutosService {
 
     this.validarEspecificacaoDaCategoria(dados, categoriaSlug);
 
+    const ficaraPublicado = dados.publicado ?? atual.publicado;
+    const exigeEspecificacao = new Set([
+      'monitores',
+      'mouses',
+      'teclados',
+      'headsets',
+    ]).has(categoriaSlug);
+    const possuiEspecificacaoAtual =
+      atual.especificacaoMonitor !== null ||
+      atual.especificacaoMouse !== null ||
+      atual.especificacaoTeclado !== null ||
+      atual.especificacaoHeadset !== null;
+    const recebeuEspecificacao =
+      dados.especificacaoMonitor !== undefined ||
+      dados.especificacaoMouse !== undefined ||
+      dados.especificacaoTeclado !== undefined ||
+      dados.especificacaoHeadset !== undefined;
+
+    if (
+      ficaraPublicado &&
+      exigeEspecificacao &&
+      !possuiEspecificacaoAtual &&
+      !recebeuEspecificacao
+    ) {
+      throw new BadRequestException(
+        'Um produto publicado nesta categoria precisa possuir sua especificação técnica.',
+      );
+    }
+
     const nome = dados.nome?.trim() ?? atual.nome;
-    const marca = dados.marca?.trim() ?? atual.marca;
-    const modelo = dados.modelo?.trim() ?? atual.modelo;
+    const marca =
+      dados.marca === undefined
+        ? atual.marca
+        : dados.marca === null
+          ? null
+          : dados.marca.trim() || null;
+    const modelo =
+      dados.modelo === undefined
+        ? atual.modelo
+        : dados.modelo === null
+          ? null
+          : dados.modelo.trim() || null;
     const atualizarSlug =
       dados.nome !== undefined ||
       dados.marca !== undefined ||
@@ -918,21 +991,30 @@ export class ProdutosService {
           ...(dados.nome !== undefined && { nome }),
           ...(slug !== undefined && { slug }),
           ...(dados.marca !== undefined && {
-            marca: dados.marca.trim() || null,
+            marca: dados.marca === null ? null : dados.marca.trim() || null,
           }),
           ...(dados.modelo !== undefined && {
-            modelo: dados.modelo.trim() || null,
+            modelo: dados.modelo === null ? null : dados.modelo.trim() || null,
           }),
           ...(dados.descricao !== undefined && {
-            descricao: dados.descricao.trim() || null,
+            descricao:
+              dados.descricao === null ? null : dados.descricao.trim() || null,
           }),
-          ...(dados.mpn !== undefined && { mpn: dados.mpn.trim() || null }),
-          ...(dados.gtin !== undefined && { gtin: dados.gtin.trim() || null }),
+          ...(dados.mpn !== undefined && {
+            mpn: dados.mpn === null ? null : dados.mpn.trim() || null,
+          }),
+          ...(dados.gtin !== undefined && {
+            gtin: dados.gtin === null ? null : dados.gtin.trim() || null,
+          }),
           ...(dados.imagemUrl !== undefined && {
-            imagemUrl: dados.imagemUrl.trim() || null,
+            imagemUrl:
+              dados.imagemUrl === null ? null : dados.imagemUrl.trim() || null,
           }),
           ...(dados.imagemHoverUrl !== undefined && {
-            imagemHoverUrl: dados.imagemHoverUrl.trim() || null,
+            imagemHoverUrl:
+              dados.imagemHoverUrl === null
+                ? null
+                : dados.imagemHoverUrl.trim() || null,
           }),
           ...(dados.metadados !== undefined && {
             metadados: dados.metadados as Prisma.InputJsonValue,

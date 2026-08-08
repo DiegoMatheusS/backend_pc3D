@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
   ArrayUnique,
   IsArray,
   IsBoolean,
@@ -37,6 +38,7 @@ export class CriarEspecificacaoGabineteDto {
   profundidadeMm!: number;
 
   @IsArray()
+  @ArrayNotEmpty()
   @ArrayUnique()
   @IsEnum(FormatoPlacaMae, {
     each: true,
@@ -45,6 +47,7 @@ export class CriarEspecificacaoGabineteDto {
   formatosPlacaMaeSuportados!: FormatoPlacaMae[];
 
   @IsArray()
+  @ArrayNotEmpty()
   @ArrayUnique()
   @IsEnum(FormatoFonte, {
     each: true,

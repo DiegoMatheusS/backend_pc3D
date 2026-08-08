@@ -41,6 +41,11 @@ export class OfertasController {
     return this.ofertasService.listarParceirosPublicos();
   }
 
+  @Get('destaques')
+  listarDestaques() {
+    return this.ofertasService.listarDestaques();
+  }
+
   @Get('produto/:produtoId')
   listarOfertasDoProduto(@Param('produtoId', ParseIntPipe) produtoId: number) {
     return this.ofertasService.listarOfertasDoProduto(produtoId);

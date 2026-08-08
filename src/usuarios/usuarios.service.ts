@@ -73,7 +73,9 @@ export class UsuariosService {
           nome,
           email,
           senhaHash,
-          ...(dados.papel !== undefined && { papel: dados.papel }),
+          // Toda conta nova nasce como USUARIO. Promoções ocorrem somente
+          // depois, pela rota administrativa PATCH /api/usuarios/:id.
+          papel: PapelUsuario.USUARIO,
         },
         select: {
           id: true,

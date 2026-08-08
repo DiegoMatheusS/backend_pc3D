@@ -5,6 +5,7 @@ import { IaService } from './ia.service';
 import { ChatIaDto } from './dtos/chat-ia.dto';
 import { MontarPcIaDto } from './dtos/montar-pc-ia.dto';
 import { RecomendarLojaIaDto } from './dtos/recomendar-loja-ia.dto';
+import { MontagemGuiadaIaDto } from './dtos/montagem-guiada-ia.dto';
 
 @ApiTags('IA Pública')
 @Controller('ia')
@@ -22,6 +23,12 @@ export class IaController {
   @HttpCode(HttpStatus.OK)
   montarPc(@Body() dados: MontarPcIaDto) {
     return this.iaService.montarPc(dados);
+  }
+
+  @Post('montagem-guiada')
+  @HttpCode(HttpStatus.OK)
+  montagemGuiada(@Body() dados: MontagemGuiadaIaDto) {
+    return this.iaService.montagemGuiada(dados);
   }
 
   @Post('loja/recomendar')

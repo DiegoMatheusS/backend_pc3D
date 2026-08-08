@@ -13,6 +13,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
+import { CadastroDto } from './dtos/cadastro.dto';
 import { LoginDto } from './dtos/login.dto';
 
 @ApiTags('Auth')
@@ -40,6 +41,17 @@ export class AuthController {
     const token = (cookies as Record<string, unknown>)[this.obterNomeCookie()];
 
     return typeof token === 'string' ? token : undefined;
+  }
+
+  @ApiOperation({
+    summary: 'Cadastrar nova conta de usuário',
+    description:
+      'Toda nova conta pública é criada obrigatoriamente com o papel USUARIO.',
+  })
+  @Throttle({ global: { limit: 5, ttl: 60_000 } })
+  @Post('cadastro')
+  cadastrar(@Body() dados: CadastroDto) {
+    return this.authService.cadastrar(dados);
   }
 
   @ApiOperation({ summary: 'Autenticar usuário e criar sessão (cookie)' })
@@ -90,8 +102,12 @@ export class AuthController {
 
     await this.authService.logout(token);
 
+    const ambiente =
+      this.configService.get<string>('NODE_ENV') ?? 'development';
+
     resposta.clearCookie(this.obterNomeCookie(), {
       httpOnly: true,
+      secure: ambiente === 'production',
       sameSite: 'lax',
       path: '/',
     });

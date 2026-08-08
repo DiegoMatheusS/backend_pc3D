@@ -1,4 +1,5 @@
 import {
+  ArrayNotEmpty,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -33,6 +34,7 @@ export class CriarEspecificacaoProcessadorDto {
   @IsOptional() @IsString() @MaxLength(150) modeloVideoIntegrado?: string;
 
   @IsArray()
+  @ArrayNotEmpty()
   @IsEnum(TipoMemoria, { each: true })
   tiposMemoriaSuportados!: TipoMemoria[];
 

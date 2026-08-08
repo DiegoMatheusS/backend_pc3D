@@ -9,7 +9,7 @@ import { HardwaresService } from '../hardwares/hardwares.service';
 import { OfertasService } from '../ofertas/ofertas.service';
 import { CriarMontagemDto } from './dtos/criar-montagem.dto';
 import { AtualizarMontagemDto } from './dtos/atualizar-montagem.dto';
-import { StatusMontagem } from '../generated/prisma/enums';
+import { CategoriaHardware, StatusMontagem } from '../generated/prisma/enums';
 import { SentidoFluxoAr } from '../hardwares/dtos/verificar-compatibilidade-montagem.dto';
 
 @Injectable()
@@ -118,7 +118,10 @@ export class MontagensService {
   // ── listar minhas montagens ───────────────────────────────────────────────
   async listarMinhas(usuarioId: number) {
     const montagens = await this.prisma.montagem.findMany({
-      where: { usuarioId },
+      where: {
+        usuarioId,
+        status: { not: StatusMontagem.ARQUIVADA },
+      },
       select: this.selectResumo,
       orderBy: { atualizadoEm: 'desc' },
     });
@@ -235,6 +238,8 @@ export class MontagensService {
       select: {
         usuarioId: true,
         gabineteId: true,
+        fonteId: true,
+        coolerId: true,
         status: true,
         itens: {
           select: {
@@ -242,6 +247,14 @@ export class MontagensService {
             instanciaPaiId: true,
             pontoEncaixeId: true,
             hardwareFilhoId: true,
+          },
+        },
+        ventoinhas: {
+          select: {
+            instanciaId: true,
+            ventoinhaId: true,
+            posicao: true,
+            sentido: true,
           },
         },
       },
@@ -265,10 +278,16 @@ export class MontagensService {
 
     const gabineteId = dados.gabineteId ?? montagem.gabineteId;
 
-    // Revalida a estrutura se os itens OU o gabinete mudarem. Ao trocar
-    // apenas o gabinete, usa os itens já salvos para impedir que uma montagem
-    // válida no gabinete antigo seja persistida em um gabinete incompatível.
-    if (dados.itens !== undefined || dados.gabineteId !== undefined) {
+    // Toda alteração estrutural precisa ser revalidada. Isso inclui não apenas
+    // a árvore/pontos de encaixe, mas também as referências auxiliares de fonte,
+    // cooler e configuração física das ventoinhas.
+    if (
+      dados.itens !== undefined ||
+      dados.gabineteId !== undefined ||
+      dados.fonteId !== undefined ||
+      dados.coolerId !== undefined ||
+      dados.ventoinhas !== undefined
+    ) {
       const itensParaValidar =
         dados.itens ??
         montagem.itens.map((item) => ({
@@ -278,10 +297,22 @@ export class MontagensService {
           hardwareFilhoId: item.hardwareFilhoId,
         }));
 
+      const ventoinhasParaValidar =
+        dados.ventoinhas ??
+        montagem.ventoinhas.map((ventoinha) => ({
+          instanciaId: ventoinha.instanciaId ?? undefined,
+          ventoinhaId: ventoinha.ventoinhaId,
+          posicao: ventoinha.posicao,
+          sentido: (ventoinha.sentido as SentidoFluxoAr | null) ?? undefined,
+        }));
+
       await this.validarEstrutura(gabineteId, {
         gabineteId,
         itens: itensParaValidar,
-        ventoinhas: dados.ventoinhas,
+        fonteId: dados.fonteId !== undefined ? dados.fonteId : montagem.fonteId,
+        coolerId:
+          dados.coolerId !== undefined ? dados.coolerId : montagem.coolerId,
+        ventoinhas: ventoinhasParaValidar,
       });
     }
 
@@ -432,9 +463,18 @@ export class MontagensService {
       );
     }
 
-    await this.prisma.montagem.delete({ where: { id } });
+    await this.prisma.montagem.update({
+      where: { id },
+      data: {
+        status: StatusMontagem.ARQUIVADA,
+        publico: false,
+      },
+    });
 
-    return { mensagem: 'Montagem excluída com sucesso.' };
+    return {
+      mensagem: 'Montagem arquivada com sucesso.',
+      status: StatusMontagem.ARQUIVADA,
+    };
   }
 
   // ── resolver montagem salva (retorna 3D + compatibilidade) ────────────────
@@ -520,12 +560,83 @@ export class MontagensService {
     dados: {
       gabineteId: number;
       itens: CriarMontagemDto['itens'];
+      fonteId?: number | null;
+      coolerId?: number | null;
       ventoinhas?: CriarMontagemDto['ventoinhas'];
     },
   ) {
-    // Chama resolverMontagem3DPublica apenas para validar (sem salvar)
-    await this.hardwaresService.resolverMontagem3DPublica(gabineteId, {
-      itens: dados.itens,
-    });
+    const montagem3D = await this.hardwaresService.resolverMontagem3DPublica(
+      gabineteId,
+      { itens: dados.itens },
+    );
+
+    const itens = montagem3D.itens;
+
+    if (dados.fonteId != null) {
+      const fonteNaArvore = itens.some(
+        (item) =>
+          item.hardwareFilho.categoria === CategoriaHardware.FONTE &&
+          item.hardwareFilho.id === dados.fonteId,
+      );
+
+      if (!fonteNaArvore) {
+        throw new BadRequestException(
+          'A fonte informada deve corresponder a uma instância de fonte presente na árvore 3D da montagem.',
+        );
+      }
+    }
+
+    if (dados.coolerId != null) {
+      const coolerNaArvore = itens.some(
+        (item) =>
+          item.hardwareFilho.categoria === CategoriaHardware.COOLER &&
+          item.hardwareFilho.id === dados.coolerId,
+      );
+
+      if (!coolerNaArvore) {
+        throw new BadRequestException(
+          'O cooler informado deve corresponder a uma instância de cooler presente na árvore 3D da montagem.',
+        );
+      }
+    }
+
+    if (dados.ventoinhas !== undefined) {
+      const instanciasConfiguradas = new Set<string>();
+
+      for (const config of dados.ventoinhas) {
+        const ventoinhasDoHardware = itens.filter(
+          (item) =>
+            item.hardwareFilho.categoria === CategoriaHardware.VENTOINHA &&
+            item.hardwareFilho.id === config.ventoinhaId,
+        );
+
+        if (config.instanciaId) {
+          if (instanciasConfiguradas.has(config.instanciaId)) {
+            throw new BadRequestException(
+              `A instância de ventoinha ${config.instanciaId} possui mais de uma configuração.`,
+            );
+          }
+
+          const instancia = ventoinhasDoHardware.find(
+            (item) => item.instanciaId === config.instanciaId,
+          );
+
+          if (!instancia) {
+            throw new BadRequestException(
+              `A configuração da ventoinha ${config.instanciaId} não corresponde a uma instância física da árvore 3D.`,
+            );
+          }
+
+          instanciasConfiguradas.add(config.instanciaId);
+          continue;
+        }
+
+        if (ventoinhasDoHardware.length === 0) {
+          throw new BadRequestException(
+            `A ventoinha ${config.ventoinhaId} informada na configuração não existe na árvore 3D da montagem.`,
+          );
+        }
+      }
+    }
   }
 }

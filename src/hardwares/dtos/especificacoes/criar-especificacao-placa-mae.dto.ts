@@ -1,4 +1,5 @@
 import {
+  ArrayNotEmpty,
   ArrayUnique,
   IsArray,
   IsBoolean,
@@ -10,7 +11,11 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { FormatoPlacaMae, TipoMemoria } from '../../../generated/prisma/enums';
+import {
+  FormatoMemoria,
+  FormatoPlacaMae,
+  TipoMemoria,
+} from '../../../generated/prisma/enums';
 import { Type } from 'class-transformer';
 import { CriarSlotM2PlacaMaeDto } from './criar-slot-m2-placa-mae.dto';
 
@@ -39,12 +44,23 @@ export class CriarEspecificacaoPlacaMaeDto {
   biosInicial?: string;
 
   @IsArray()
+  @ArrayNotEmpty()
   @ArrayUnique()
   @IsEnum(TipoMemoria, {
     each: true,
     message: 'Informe somente tipos de memória válidos.',
   })
   tiposMemoriaSuportados!: TipoMemoria[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsEnum(FormatoMemoria, {
+    each: true,
+    message: 'Informe somente formatos de memória válidos.',
+  })
+  formatosMemoriaSuportados?: FormatoMemoria[];
 
   @IsArray()
   @ArrayUnique()
@@ -83,6 +99,10 @@ export class CriarEspecificacaoPlacaMaeDto {
   @IsOptional()
   @IsBoolean()
   suportaEcc?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  suportaMemoriaRegistrada?: boolean;
 
   @IsArray()
   @ArrayUnique()

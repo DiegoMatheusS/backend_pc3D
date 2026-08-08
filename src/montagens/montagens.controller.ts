@@ -128,8 +128,8 @@ export class MontagensController {
   }
 
   @Get(':id/resolver')
-  @UseGuards(AuthGuard)
-  resolver(@Param('id', ParseIntPipe) id: number, @Req() req: ReqAuth) {
-    return this.montagensService.resolverMontagem(id, req.usuario.id);
+  @UseGuards(AuthGuardOpcional)
+  resolver(@Param('id', ParseIntPipe) id: number, @Req() req: ReqAuthOpcional) {
+    return this.montagensService.resolverMontagem(id, req.usuario?.id);
   }
 }

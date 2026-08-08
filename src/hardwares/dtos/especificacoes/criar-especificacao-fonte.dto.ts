@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -58,6 +59,7 @@ export class CriarEspecificacaoFonteDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(100)
   eficienciaPercentual?: number;
 
   @IsOptional()

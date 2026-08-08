@@ -17,7 +17,7 @@ export class IaProvider {
   private readonly cliente: GoogleGenerativeAI | null = null;
 
   constructor(private readonly configService: ConfigService) {
-    const chave = this.configService.get<string>('GEMINI_API_KEY'); //colocar chave da API
+    const chave = this.configService.get<string>('GEMINI_API_KEY');
 
     if (chave) {
       this.cliente = new GoogleGenerativeAI(chave);
@@ -28,15 +28,20 @@ export class IaProvider {
     }
   }
 
-  obterModelo(nomeModelo = 'gemini-2.0-flash'): GenerativeModel {
+  obterModelo(nomeModelo?: string): GenerativeModel {
     if (!this.cliente) {
       throw new ServiceUnavailableException(
         'O assistente de IA não está disponível no momento. Configure a chave da API.',
       );
     }
 
+    const modeloConfigurado =
+      nomeModelo ??
+      this.configService.get<string>('GEMINI_MODEL')?.trim() ??
+      'gemini-2.0-flash';
+
     return this.cliente.getGenerativeModel({
-      model: nomeModelo,
+      model: modeloConfigurado,
       safetySettings: [
         {
           category: HarmCategory.HARM_CATEGORY_HARASSMENT,

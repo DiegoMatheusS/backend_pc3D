@@ -17,17 +17,17 @@ export class AtualizarParceiroDto {
   @IsOptional()
   @IsUrl()
   @MaxLength(500)
-  logoUrl?: string;
+  logoUrl?: string | null;
 
   @IsOptional()
   @IsUrl()
   @MaxLength(500)
-  site?: string;
+  site?: string | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(150)
-  dominio?: string;
+  dominio?: string | null;
 
   @IsOptional()
   @IsBoolean()
@@ -36,7 +36,7 @@ export class AtualizarParceiroDto {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  observacao?: string;
+  observacao?: string | null;
 
   @IsOptional()
   @IsBoolean()

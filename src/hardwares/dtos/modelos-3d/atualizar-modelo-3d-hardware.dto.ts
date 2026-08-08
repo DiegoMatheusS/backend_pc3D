@@ -6,82 +6,111 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
-import { FormatoModelo3D } from '../../../generated/prisma/enums';
+import {
+  FormatoModelo3D,
+  OrigemModelo3D,
+} from '../../../generated/prisma/enums';
 
 export class AtualizarModelo3DHardwareDto {
   @IsOptional()
   @IsString()
   @MaxLength(150)
-  nome?: string;
+  nome?: string | null;
 
-  @IsOptional()
+  // Campo obrigatório no banco: pode ser omitido no PATCH, mas não pode virar null.
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsString()
   @MaxLength(500)
   arquivoUrl?: string;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsEnum(FormatoModelo3D)
   formato?: FormatoModelo3D;
+
+  @ValidateIf((_obj, valor) => valor !== undefined)
+  @IsEnum(OrigemModelo3D)
+  origem?: OrigemModelo3D;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  storageKey?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  fonteUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  autor?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  licenca?: string | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(50)
-  versao?: string;
+  versao?: string | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  alturaRealMm?: number;
+  alturaRealMm?: number | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  larguraRealMm?: number;
+  larguraRealMm?: number | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  profundidadeRealMm?: number;
+  profundidadeRealMm?: number | null;
 
   @IsOptional()
   @IsInt()
   @Min(0)
-  tamanhoBytes?: number;
+  tamanhoBytes?: number | null;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   posicaoCorrecaoX?: number;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   posicaoCorrecaoY?: number;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   posicaoCorrecaoZ?: number;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   rotacaoCorrecaoX?: number;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   rotacaoCorrecaoY?: number;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   rotacaoCorrecaoZ?: number;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   escalaCorrecaoX?: number;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   escalaCorrecaoY?: number;
 
-  @IsOptional()
+  @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
   escalaCorrecaoZ?: number;
 }

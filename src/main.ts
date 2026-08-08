@@ -14,6 +14,17 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(configService.get<string>('PORT') ?? 3000);
   const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
+  const sessionCookieName =
+    configService.get<string>('SESSION_COOKIE_NAME') ?? 'pcbuilder_session';
+
+  // Em produção atrás de proxy/reverse proxy (Cloudflare, Nginx etc.),
+  // habilite TRUST_PROXY=true para req.ip e rate limiting usarem o IP correto.
+  if (configService.get<string>('TRUST_PROXY') === 'true') {
+    const expressApp = app.getHttpAdapter().getInstance() as {
+      set: (chave: string, valor: unknown) => void;
+    };
+    expressApp.set('trust proxy', 1);
+  }
 
   // ── Segurança: headers HTTP seguros ──────────────────────────────────────
   app.use(
@@ -24,9 +35,14 @@ async function bootstrap(): Promise<void> {
   );
 
   // ── CORS ─────────────────────────────────────────────────────────────────
-  const allowedOrigins = (
-    configService.get<string>('CORS_ORIGINS') ?? 'http://localhost:5173'
-  )
+  const corsConfigurado = configService.get<string>('CORS_ORIGINS');
+  if (nodeEnv === 'production' && !corsConfigurado?.trim()) {
+    throw new Error(
+      'CORS_ORIGINS precisa ser configurado explicitamente em produção.',
+    );
+  }
+
+  const allowedOrigins = (corsConfigurado ?? 'http://localhost:5173')
     .split(',')
     .map((origem) => origem.trim())
     .filter(Boolean);
@@ -57,15 +73,15 @@ async function bootstrap(): Promise<void> {
 
   // ── Swagger / OpenAPI ────────────────────────────────────────────────────
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('PC Builder API')
+    .setTitle('CriaByte API')
     .setDescription(
       'API do sistema CriaByte PC Builder — hardware, compatibilidade, montagem 3D, ofertas e muito mais.',
     )
     .setVersion('1.0')
-    .addCookieAuth('sessao', {
+    .addCookieAuth(sessionCookieName, {
       type: 'apiKey',
       in: 'cookie',
-      name: 'sessao',
+      name: sessionCookieName,
     })
     .addTag('Auth', 'Autenticação e sessão')
     .addTag('Usuários', 'Gestão de usuários')
@@ -86,6 +102,7 @@ async function bootstrap(): Promise<void> {
     .addTag('PCs Montados', 'Catálogo público de PCs montados')
     .addTag('PCs Montados Admin', 'Gestão administrativa de PCs montados')
     .addTag('Avaliações', 'Comentários e avaliações de produtos')
+    .addTag('Comunidade', 'Builds criadas e compartilhadas pelos usuários')
     .addTag('Auditoria', 'Logs de auditoria administrativa')
     .addTag(
       'IA Pública',
@@ -112,7 +129,7 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(port);
 
-  console.log(`PC Builder API: http://localhost:${port}/api`);
+  console.log(`CriaByte API:   http://localhost:${port}/api`);
   if (swaggerHabilitado) {
     console.log(`Swagger UI:      http://localhost:${port}/api/docs`);
   }

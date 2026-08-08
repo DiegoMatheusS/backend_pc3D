@@ -50,13 +50,13 @@ export class VentoinhaCompletaDto {
  *
  * Unifica os dois sistemas:
  *   - itens: estrutura de instâncias físicas da montagem 3D
- *   - fonteId: obrigatório para calcular consumo e headroom
+ *   - fonteId: opcional por compatibilidade; quando omitido é inferido da árvore 3D
  *   - ventoinhas: opcional, informa posição/sentido de cada modelo de ventoinha
  *   - coolerId: opcional, para verificar compatibilidade do cooler
  *
- * Os hardwareIds de processador, RAM, GPU, armazenamento e ventoinha
- * são extraídos automaticamente das instâncias resolvidas — não precisam
- * ser informados duas vezes.
+ * Os hardwareIds dos componentes são extraídos automaticamente das
+ * instâncias resolvidas. fonteId e coolerId continuam aceitos apenas para
+ * compatibilidade com clientes antigos e são validados contra a árvore 3D.
  */
 export class ResolverMontagemCompletaDto {
   @IsArray()
@@ -64,9 +64,10 @@ export class ResolverMontagemCompletaDto {
   @Type(() => ItemMontagem3DDto)
   itens!: ItemMontagem3DDto[];
 
+  @IsOptional()
   @IsInt()
   @Min(1)
-  fonteId!: number;
+  fonteId?: number;
 
   @IsOptional()
   @IsArray()

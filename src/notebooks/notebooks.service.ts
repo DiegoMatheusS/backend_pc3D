@@ -210,6 +210,16 @@ export class NotebooksService {
   }
 
   async listarPublicos(filtros: FiltrarNotebooksDto) {
+    if (
+      filtros.precoMin !== undefined &&
+      filtros.precoMax !== undefined &&
+      filtros.precoMin > filtros.precoMax
+    ) {
+      throw new BadRequestException(
+        'O preço mínimo não pode ser maior que o preço máximo.',
+      );
+    }
+
     const pagina = filtros.pagina ?? 1;
     const limite = filtros.limite ?? 24;
     const agora = new Date();
@@ -414,17 +424,28 @@ export class NotebooksService {
             ...(dados.marca !== undefined && { marca: dados.marca.trim() }),
             ...(dados.modelo !== undefined && { modelo: dados.modelo.trim() }),
             ...(dados.descricao !== undefined && {
-              descricao: dados.descricao.trim() || null,
+              descricao:
+                dados.descricao === null
+                  ? null
+                  : dados.descricao.trim() || null,
             }),
-            ...(dados.mpn !== undefined && { mpn: dados.mpn.trim() || null }),
+            ...(dados.mpn !== undefined && {
+              mpn: dados.mpn === null ? null : dados.mpn.trim() || null,
+            }),
             ...(dados.gtin !== undefined && {
-              gtin: dados.gtin.trim() || null,
+              gtin: dados.gtin === null ? null : dados.gtin.trim() || null,
             }),
             ...(dados.imagemUrl !== undefined && {
-              imagemUrl: dados.imagemUrl.trim() || null,
+              imagemUrl:
+                dados.imagemUrl === null
+                  ? null
+                  : dados.imagemUrl.trim() || null,
             }),
             ...(dados.imagemHoverUrl !== undefined && {
-              imagemHoverUrl: dados.imagemHoverUrl.trim() || null,
+              imagemHoverUrl:
+                dados.imagemHoverUrl === null
+                  ? null
+                  : dados.imagemHoverUrl.trim() || null,
             }),
             ...(dados.publicado !== undefined && {
               publicado: dados.publicado,
