@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsInt,
   IsNumber,
@@ -12,6 +13,7 @@ export class CriarEspecificacaoMonitorDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
+  @Max(1_000_000)
   tamanhoPolegadas?: number;
 
   @IsOptional()
@@ -22,6 +24,7 @@ export class CriarEspecificacaoMonitorDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   taxaAtualizacaoHz?: number;
 
   @IsOptional()
@@ -32,11 +35,13 @@ export class CriarEspecificacaoMonitorDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   tempoRespostaMs?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   brilhoNits?: number;
 
   @IsOptional()
@@ -58,16 +63,19 @@ export class CriarEspecificacaoMonitorDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   hdmi?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   displayPort?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   usbC?: number;
 
   @IsOptional()

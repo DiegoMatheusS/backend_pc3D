@@ -1,11 +1,13 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -30,16 +32,19 @@ export class AtualizarMontagemDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   gabineteId?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   fonteId?: number | null;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   coolerId?: number | null;
 
   @IsOptional()
@@ -52,12 +57,14 @@ export class AtualizarMontagemDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(128)
   @ValidateNested({ each: true })
   @Type(() => ItemMontagem3DDto)
   itens?: ItemMontagem3DDto[];
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(64)
   @ValidateNested({ each: true })
   @Type(() => VentoinhaCompletaDto)
   ventoinhas?: VentoinhaCompletaDto[];

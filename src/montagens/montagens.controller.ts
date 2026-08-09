@@ -6,12 +6,13 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
+import { ParseSlugPipe } from '../common/pipes/parse-slug.pipe';
 import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
@@ -42,7 +43,10 @@ export class MontagensController {
 
   @Get('slug/:slug')
   @UseGuards(AuthGuardOpcional)
-  buscarPorSlug(@Param('slug') slug: string, @Req() req: ReqAuthOpcional) {
+  buscarPorSlug(
+    @Param('slug', ParseSlugPipe) slug: string,
+    @Req() req: ReqAuthOpcional,
+  ) {
     return this.montagensService.buscarPorSlug(slug, req.usuario?.id);
   }
 
@@ -70,14 +74,17 @@ export class MontagensController {
 
   @Get(':id')
   @UseGuards(AuthGuard)
-  buscarPorId(@Param('id', ParseIntPipe) id: number, @Req() req: ReqAuth) {
+  buscarPorId(
+    @Param('id', ParsePositiveIntPipe) id: number,
+    @Req() req: ReqAuth,
+  ) {
     return this.montagensService.buscarPorId(id, req.usuario.id);
   }
 
   @Patch(':id')
   @UseGuards(AuthGuard)
   async atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Req() req: ReqAuth,
     @Body() dados: AtualizarMontagemDto,
   ) {
@@ -99,7 +106,10 @@ export class MontagensController {
   @Post(':id/duplicar')
   @UseGuards(AuthGuard)
   @HttpCode(HttpStatus.CREATED)
-  async duplicar(@Param('id', ParseIntPipe) id: number, @Req() req: ReqAuth) {
+  async duplicar(
+    @Param('id', ParsePositiveIntPipe) id: number,
+    @Req() req: ReqAuth,
+  ) {
     const resultado = await this.montagensService.duplicar(id, req.usuario.id);
     void this.auditoriaService.registrar({
       usuarioId: req.usuario.id,
@@ -115,7 +125,10 @@ export class MontagensController {
   @Delete(':id')
   @UseGuards(AuthGuard)
   @HttpCode(HttpStatus.OK)
-  async excluir(@Param('id', ParseIntPipe) id: number, @Req() req: ReqAuth) {
+  async excluir(
+    @Param('id', ParsePositiveIntPipe) id: number,
+    @Req() req: ReqAuth,
+  ) {
     const resultado = await this.montagensService.excluir(id, req.usuario.id);
     void this.auditoriaService.registrar({
       usuarioId: req.usuario.id,
@@ -129,7 +142,10 @@ export class MontagensController {
 
   @Get(':id/resolver')
   @UseGuards(AuthGuardOpcional)
-  resolver(@Param('id', ParseIntPipe) id: number, @Req() req: ReqAuthOpcional) {
+  resolver(
+    @Param('id', ParsePositiveIntPipe) id: number,
+    @Req() req: ReqAuthOpcional,
+  ) {
     return this.montagensService.resolverMontagem(id, req.usuario?.id);
   }
 }

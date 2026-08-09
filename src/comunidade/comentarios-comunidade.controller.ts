@@ -3,11 +3,11 @@ import {
   Controller,
   Delete,
   Param,
-  ParseIntPipe,
   Patch,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
 import { UsuarioAtual } from '../auth/usuario-atual.decorator';
@@ -30,7 +30,7 @@ export class ComentariosComunidadeController {
 
   @Patch(':id')
   atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
     @Body() dados: AtualizarComentarioBuildDto,
   ) {
@@ -43,7 +43,7 @@ export class ComentariosComunidadeController {
 
   @Delete(':id')
   remover(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
   ) {
     return this.comunidadeService.removerComentario(

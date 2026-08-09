@@ -3,12 +3,12 @@ import {
   Controller,
   Get,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { AdminGuard } from '../auth/admin.guard';
@@ -48,7 +48,7 @@ export class UsuariosController {
 
   @Get(':id')
   @UseGuards(AdminGuard)
-  buscarPorId(@Param('id', ParseIntPipe) id: number) {
+  buscarPorId(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.usuariosService.buscarPorId(id);
   }
 
@@ -74,7 +74,7 @@ export class UsuariosController {
   @Patch(':id/senha')
   @UseGuards(AdminGuard)
   async redefinirSenha(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: RedefinirSenhaUsuarioDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -94,7 +94,7 @@ export class UsuariosController {
   @UseGuards(AdminGuard)
   async atualizar(
     @Req() requisicao: RequisicaoAutenticada,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: AtualizarUsuarioDto,
     @UsuarioAtual() usuario: UsuarioReq,
   ) {

@@ -1,4 +1,6 @@
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsInt,
@@ -7,9 +9,13 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   MaxLength,
   Min,
+  MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
 
 export enum UsoPC {
   JOGOS = 'jogos',
@@ -20,24 +26,35 @@ export enum UsoPC {
 
 export class MensagemHistoricoDto {
   @IsEnum(['usuario', 'assistente'])
-  papel: 'usuario' | 'assistente';
+  papel!: 'usuario' | 'assistente';
 
   @IsString()
+  @MinLength(1)
   @MaxLength(4000)
-  conteudo: string;
+  conteudo!: string;
 }
 
 export class ChatIaDto {
   @IsString()
+  @MinLength(1)
   @MaxLength(1000)
-  mensagem: string;
+  mensagem!: string;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => MensagemHistoricoDto)
   historico?: MensagemHistoricoDto[];
 
   @IsOptional()
   @IsObject()
+  @IsSafeJsonObject({
+    maxDepth: 6,
+    maxKeys: 160,
+    maxArrayLength: 64,
+    maxStringLength: 4000,
+  })
   buildAtual?: Record<string, unknown>;
 
   /**
@@ -47,11 +64,13 @@ export class ChatIaDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   montagemId?: number;
 
   @IsOptional()
   @IsNumber()
   @IsPositive()
+  @Max(100_000_000)
   orcamento?: number;
 
   @IsOptional()

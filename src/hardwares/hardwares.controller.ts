@@ -4,13 +4,14 @@ import {
   Get,
   Param,
   ParseEnumPipe,
-  ParseIntPipe,
   Post,
   UseGuards,
   Query,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
+import { ParseQuantityPipe } from '../common/pipes/parse-quantity.pipe';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
@@ -36,8 +37,8 @@ export class HardwaresController {
 
   @Get('compatibilidades/cpu-placa-mae/:placaMaeId/:processadorId')
   verificarCompatibilidadeCpuPlacaMae(
-    @Param('placaMaeId', ParseIntPipe) placaMaeId: number,
-    @Param('processadorId', ParseIntPipe) processadorId: number,
+    @Param('placaMaeId', ParsePositiveIntPipe) placaMaeId: number,
+    @Param('processadorId', ParsePositiveIntPipe) processadorId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeCpuPlacaMae(
       placaMaeId,
@@ -47,8 +48,8 @@ export class HardwaresController {
 
   @Get('compatibilidades/memoria-placa-mae/:placaMaeId/:memoriaRamId')
   verificarCompatibilidadeMemoriaPlacaMae(
-    @Param('placaMaeId', ParseIntPipe) placaMaeId: number,
-    @Param('memoriaRamId', ParseIntPipe) memoriaRamId: number,
+    @Param('placaMaeId', ParsePositiveIntPipe) placaMaeId: number,
+    @Param('memoriaRamId', ParsePositiveIntPipe) memoriaRamId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeMemoriaPlacaMae(
       placaMaeId,
@@ -60,9 +61,9 @@ export class HardwaresController {
     'compatibilidades/conjunto-principal/:placaMaeId/:processadorId/:memoriaRamId',
   )
   verificarCompatibilidadeConjuntoPrincipal(
-    @Param('placaMaeId', ParseIntPipe) placaMaeId: number,
-    @Param('processadorId', ParseIntPipe) processadorId: number,
-    @Param('memoriaRamId', ParseIntPipe) memoriaRamId: number,
+    @Param('placaMaeId', ParsePositiveIntPipe) placaMaeId: number,
+    @Param('processadorId', ParsePositiveIntPipe) processadorId: number,
+    @Param('memoriaRamId', ParsePositiveIntPipe) memoriaRamId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeConjuntoPrincipal(
       placaMaeId,
@@ -73,8 +74,8 @@ export class HardwaresController {
 
   @Get('compatibilidades/placa-mae-gabinete/:gabineteId/:placaMaeId')
   verificarCompatibilidadePlacaMaeGabinete(
-    @Param('gabineteId', ParseIntPipe) gabineteId: number,
-    @Param('placaMaeId', ParseIntPipe) placaMaeId: number,
+    @Param('gabineteId', ParsePositiveIntPipe) gabineteId: number,
+    @Param('placaMaeId', ParsePositiveIntPipe) placaMaeId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadePlacaMaeGabinete(
       gabineteId,
@@ -84,8 +85,8 @@ export class HardwaresController {
 
   @Get('compatibilidades/fonte-gabinete/:gabineteId/:fonteId')
   verificarCompatibilidadeFonteGabinete(
-    @Param('gabineteId', ParseIntPipe) gabineteId: number,
-    @Param('fonteId', ParseIntPipe) fonteId: number,
+    @Param('gabineteId', ParsePositiveIntPipe) gabineteId: number,
+    @Param('fonteId', ParsePositiveIntPipe) fonteId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeFonteGabinete(
       gabineteId,
@@ -95,8 +96,8 @@ export class HardwaresController {
 
   @Get('compatibilidades/placa-video-gabinete/:gabineteId/:placaVideoId')
   verificarCompatibilidadePlacaVideoGabinete(
-    @Param('gabineteId', ParseIntPipe) gabineteId: number,
-    @Param('placaVideoId', ParseIntPipe) placaVideoId: number,
+    @Param('gabineteId', ParsePositiveIntPipe) gabineteId: number,
+    @Param('placaVideoId', ParsePositiveIntPipe) placaVideoId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadePlacaVideoGabinete(
       gabineteId,
@@ -106,8 +107,8 @@ export class HardwaresController {
 
   @Get('compatibilidades/placa-video-fonte/:fonteId/:placaVideoId')
   verificarCompatibilidadePlacaVideoFonte(
-    @Param('fonteId', ParseIntPipe) fonteId: number,
-    @Param('placaVideoId', ParseIntPipe) placaVideoId: number,
+    @Param('fonteId', ParsePositiveIntPipe) fonteId: number,
+    @Param('placaVideoId', ParsePositiveIntPipe) placaVideoId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadePlacaVideoFonte(
       fonteId,
@@ -119,9 +120,9 @@ export class HardwaresController {
     'compatibilidades/cooler-processador-gabinete/:gabineteId/:processadorId/:coolerId',
   )
   verificarCompatibilidadeCoolerProcessadorGabinete(
-    @Param('gabineteId', ParseIntPipe) gabineteId: number,
-    @Param('processadorId', ParseIntPipe) processadorId: number,
-    @Param('coolerId', ParseIntPipe) coolerId: number,
+    @Param('gabineteId', ParsePositiveIntPipe) gabineteId: number,
+    @Param('processadorId', ParsePositiveIntPipe) processadorId: number,
+    @Param('coolerId', ParsePositiveIntPipe) coolerId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeCoolerProcessadorGabinete(
       gabineteId,
@@ -132,11 +133,11 @@ export class HardwaresController {
 
   @Get('compatibilidades/ventoinha-gabinete/:gabineteId/:ventoinhaId')
   verificarCompatibilidadeVentoinhaGabinete(
-    @Param('gabineteId', ParseIntPipe) gabineteId: number,
-    @Param('ventoinhaId', ParseIntPipe) ventoinhaId: number,
+    @Param('gabineteId', ParsePositiveIntPipe) gabineteId: number,
+    @Param('ventoinhaId', ParsePositiveIntPipe) ventoinhaId: number,
     @Query('posicao', new ParseEnumPipe(PosicaoRefrigeracaoGabinete))
     posicao: PosicaoRefrigeracaoGabinete,
-    @Query('quantidade', ParseIntPipe) quantidade: number,
+    @Query('quantidade', ParseQuantityPipe) quantidade: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeVentoinhaGabinete(
       gabineteId,
@@ -148,8 +149,8 @@ export class HardwaresController {
 
   @Get('compatibilidades/armazenamento-placa-mae/:placaMaeId/:armazenamentoId')
   verificarCompatibilidadeArmazenamentoPlacaMae(
-    @Param('placaMaeId', ParseIntPipe) placaMaeId: number,
-    @Param('armazenamentoId', ParseIntPipe) armazenamentoId: number,
+    @Param('placaMaeId', ParsePositiveIntPipe) placaMaeId: number,
+    @Param('armazenamentoId', ParsePositiveIntPipe) armazenamentoId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeArmazenamentoPlacaMae(
       placaMaeId,
@@ -159,8 +160,8 @@ export class HardwaresController {
 
   @Get('compatibilidades/armazenamento-gabinete/:gabineteId/:armazenamentoId')
   verificarCompatibilidadeArmazenamentoGabinete(
-    @Param('gabineteId', ParseIntPipe) gabineteId: number,
-    @Param('armazenamentoId', ParseIntPipe) armazenamentoId: number,
+    @Param('gabineteId', ParsePositiveIntPipe) gabineteId: number,
+    @Param('armazenamentoId', ParsePositiveIntPipe) armazenamentoId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeArmazenamentoGabinete(
       gabineteId,
@@ -182,7 +183,7 @@ export class HardwaresController {
 
   @Get(':hardwareId/modelos-3d')
   listarModelos3DHardwarePublico(
-    @Param('hardwareId', ParseIntPipe) hardwareId: number,
+    @Param('hardwareId', ParsePositiveIntPipe) hardwareId: number,
   ) {
     return this.hardwaresService.listarModelos3DHardwarePublico(hardwareId);
   }
@@ -191,9 +192,9 @@ export class HardwaresController {
     ':hardwarePaiId/pontos-encaixe/:pontoEncaixeId/resolver/:hardwareFilhoId',
   )
   resolverEncaixeHardwarePublico(
-    @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,
-    @Param('pontoEncaixeId', ParseIntPipe) pontoEncaixeId: number,
-    @Param('hardwareFilhoId', ParseIntPipe) hardwareFilhoId: number,
+    @Param('hardwarePaiId', ParsePositiveIntPipe) hardwarePaiId: number,
+    @Param('pontoEncaixeId', ParsePositiveIntPipe) pontoEncaixeId: number,
+    @Param('hardwareFilhoId', ParsePositiveIntPipe) hardwareFilhoId: number,
   ) {
     return this.hardwaresService.resolverEncaixeHardwarePublico(
       hardwarePaiId,
@@ -210,7 +211,7 @@ export class HardwaresController {
   @Throttle({ global: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   resolverMontagemCompleta(
-    @Param('gabineteId', ParseIntPipe) gabineteId: number,
+    @Param('gabineteId', ParsePositiveIntPipe) gabineteId: number,
     @Body() dados: ResolverMontagemCompletaDto,
   ) {
     return this.hardwaresService.resolverMontagemCompleta(gabineteId, dados);
@@ -224,7 +225,7 @@ export class HardwaresController {
   @Throttle({ global: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   resolverMontagem3DPublica(
-    @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,
+    @Param('hardwarePaiId', ParsePositiveIntPipe) hardwarePaiId: number,
     @Body() dados: ResolverMontagem3DDto,
   ) {
     return this.hardwaresService.resolverMontagem3DPublica(
@@ -234,13 +235,13 @@ export class HardwaresController {
   }
 
   @Get(':id')
-  buscarPublicadoPorId(@Param('id', ParseIntPipe) id: number) {
+  buscarPublicadoPorId(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.hardwaresService.buscarPublicadoPorId(id);
   }
 
   @Get(':hardwarePaiId/pontos-encaixe')
   listarPontosEncaixeHardwarePublico(
-    @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,
+    @Param('hardwarePaiId', ParsePositiveIntPipe) hardwarePaiId: number,
   ) {
     return this.hardwaresService.listarPontosEncaixeHardwarePublico(
       hardwarePaiId,

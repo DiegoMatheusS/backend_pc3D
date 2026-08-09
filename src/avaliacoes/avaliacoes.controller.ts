@@ -6,13 +6,13 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
@@ -38,7 +38,7 @@ export class ProdutosAvaliacoesController {
 
   @Get()
   listar(
-    @Param('produtoId', ParseIntPipe) produtoId: number,
+    @Param('produtoId', ParsePositiveIntPipe) produtoId: number,
     @Query() filtros: FiltrarAvaliacoesDto,
   ) {
     return this.avaliacoesService.listar(produtoId, filtros);
@@ -48,7 +48,7 @@ export class ProdutosAvaliacoesController {
   @UseGuards(AuthGuard)
   @Throttle({ global: { limit: 10, ttl: 60_000 } })
   criar(
-    @Param('produtoId', ParseIntPipe) produtoId: number,
+    @Param('produtoId', ParsePositiveIntPipe) produtoId: number,
     @Req() req: ReqAuth,
     @Body() dados: CriarAvaliacaoDto,
   ) {
@@ -71,7 +71,7 @@ export class AvaliacoesController {
   @Patch(':id')
   @UseGuards(AuthGuard)
   atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Req() req: ReqAuth,
     @Body() dados: AtualizarAvaliacaoDto,
   ) {
@@ -81,7 +81,7 @@ export class AvaliacoesController {
   @Delete(':id')
   @UseGuards(AuthGuard)
   @HttpCode(HttpStatus.OK)
-  excluir(@Param('id', ParseIntPipe) id: number, @Req() req: ReqAuth) {
+  excluir(@Param('id', ParsePositiveIntPipe) id: number, @Req() req: ReqAuth) {
     return this.avaliacoesService.excluir(id, req.usuario.id);
   }
 
@@ -89,7 +89,7 @@ export class AvaliacoesController {
   @UseGuards(AuthGuard, PapelGuard)
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.REVISOR)
   async moderar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: ModerarAvaliacaoDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -132,7 +132,7 @@ export class HardwaresAvaliacoesController extends AvaliacoesAliasBase {
 
   @Get()
   async listar(
-    @Param('hardwareId', ParseIntPipe) hardwareId: number,
+    @Param('hardwareId', ParsePositiveIntPipe) hardwareId: number,
     @Query() filtros: FiltrarAvaliacoesDto,
   ) {
     const produtoId =
@@ -144,7 +144,7 @@ export class HardwaresAvaliacoesController extends AvaliacoesAliasBase {
   @UseGuards(AuthGuard)
   @Throttle({ global: { limit: 10, ttl: 60_000 } })
   async criar(
-    @Param('hardwareId', ParseIntPipe) hardwareId: number,
+    @Param('hardwareId', ParsePositiveIntPipe) hardwareId: number,
     @Req() req: ReqAuth,
     @Body() dados: CriarAvaliacaoDto,
   ) {
@@ -163,7 +163,7 @@ export class NotebooksAvaliacoesController extends AvaliacoesAliasBase {
 
   @Get()
   async listar(
-    @Param('notebookId', ParseIntPipe) notebookId: number,
+    @Param('notebookId', ParsePositiveIntPipe) notebookId: number,
     @Query() filtros: FiltrarAvaliacoesDto,
   ) {
     const produtoId =
@@ -175,7 +175,7 @@ export class NotebooksAvaliacoesController extends AvaliacoesAliasBase {
   @UseGuards(AuthGuard)
   @Throttle({ global: { limit: 10, ttl: 60_000 } })
   async criar(
-    @Param('notebookId', ParseIntPipe) notebookId: number,
+    @Param('notebookId', ParsePositiveIntPipe) notebookId: number,
     @Req() req: ReqAuth,
     @Body() dados: CriarAvaliacaoDto,
   ) {
@@ -194,7 +194,7 @@ export class BuildsAvaliacoesController extends AvaliacoesAliasBase {
 
   @Get()
   async listar(
-    @Param('buildId', ParseIntPipe) buildId: number,
+    @Param('buildId', ParsePositiveIntPipe) buildId: number,
     @Query() filtros: FiltrarAvaliacoesDto,
   ) {
     const produtoId = await this.avaliacoesService.produtoIdPorBuild(buildId);
@@ -205,7 +205,7 @@ export class BuildsAvaliacoesController extends AvaliacoesAliasBase {
   @UseGuards(AuthGuard)
   @Throttle({ global: { limit: 10, ttl: 60_000 } })
   async criar(
-    @Param('buildId', ParseIntPipe) buildId: number,
+    @Param('buildId', ParsePositiveIntPipe) buildId: number,
     @Req() req: ReqAuth,
     @Body() dados: CriarAvaliacaoDto,
   ) {

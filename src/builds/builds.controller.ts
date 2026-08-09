@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseIntPipe,
   HttpCode,
   HttpStatus,
   Patch,
@@ -13,6 +12,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
@@ -41,18 +41,18 @@ export class BuildsController {
 
   @Get(':id/3d')
   @Throttle({ global: { limit: 30, ttl: 60_000 } })
-  abrirNo3D(@Param('id', ParseIntPipe) id: number) {
+  abrirNo3D(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.buildsService.abrirNo3D(id);
   }
 
   @Get(':id/resumo-compra')
   @Throttle({ global: { limit: 60, ttl: 60_000 } })
-  resumoCompra(@Param('id', ParseIntPipe) id: number) {
+  resumoCompra(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.buildsService.resumoCompra(id);
   }
 
   @Get(':id')
-  buscar(@Param('id', ParseIntPipe) id: number) {
+  buscar(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.buildsService.buscarPublico(id);
   }
 }
@@ -74,7 +74,7 @@ export class BuildsAdminController {
 
   @Get(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
-  buscar(@Param('id', ParseIntPipe) id: number) {
+  buscar(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.buildsService.buscarAdmin(id);
   }
 
@@ -99,7 +99,7 @@ export class BuildsAdminController {
   @Patch(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: AtualizarBuildDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -118,7 +118,7 @@ export class BuildsAdminController {
   @HttpCode(HttpStatus.OK)
   @Papeis(PapelUsuario.ADMIN)
   async arquivar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {

@@ -4,6 +4,8 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -11,10 +13,12 @@ import {
 export class CriarCompatibilidadeMemoriaPlacaMaeDto {
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   placaMaeId!: number;
 
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   memoriaRamId!: number;
 
   @IsOptional()
@@ -35,16 +39,19 @@ export class CriarCompatibilidadeMemoriaPlacaMaeDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(100_000)
   frequenciaValidadaMhz?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(64)
   quantidadeModulosTestados?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(16_384)
   capacidadeTotalTestadaGb?: number;
 
   @IsOptional()
@@ -57,10 +64,15 @@ export class CriarCompatibilidadeMemoriaPlacaMaeDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   observacao?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   fonteUrl?: string;
 

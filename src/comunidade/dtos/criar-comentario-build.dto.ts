@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  Max,
   IsInt,
   IsOptional,
   IsString,
@@ -18,5 +19,6 @@ export class CriarComentarioBuildDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   comentarioPaiId?: number;
 }

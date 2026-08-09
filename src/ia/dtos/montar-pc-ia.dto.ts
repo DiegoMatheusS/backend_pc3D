@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -13,6 +14,7 @@ import { UsoPC } from './chat-ia.dto';
 export class MontarPcIaDto {
   @IsNumber()
   @IsPositive()
+  @Max(100_000_000)
   orcamento: number;
 
   @IsOptional()
@@ -37,6 +39,7 @@ export class MontarPcIaDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   gabineteId?: number;
 
   /**
@@ -46,5 +49,6 @@ export class MontarPcIaDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   fonteId?: number;
 }

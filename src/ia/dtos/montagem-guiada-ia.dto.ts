@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsInt,
@@ -16,6 +17,7 @@ import {
 } from 'class-validator';
 import { CategoriaHardware } from '../../generated/prisma/enums';
 import { UsoPC } from './chat-ia.dto';
+import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
 
 export enum AcaoMontagemGuiadaIa {
   INICIAR = 'INICIAR',
@@ -54,6 +56,7 @@ export class ComponenteSnapshotIaDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   hardwareId?: number;
 
   @IsString()
@@ -71,12 +74,20 @@ export class ComponenteSnapshotIaDto {
   modelo?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   imagemUrl?: string;
 
   @IsOptional()
-  @IsUrl({ require_protocol: true })
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   modelo3dUrl?: string;
 
@@ -92,10 +103,15 @@ export class ComponenteSnapshotIaDto {
 
   @IsOptional()
   @IsObject()
+  @IsSafeJsonObject({ maxDepth: 6, maxKeys: 160, maxArrayLength: 64 })
   especificacoes?: Record<string, unknown>;
 
   @IsOptional()
-  @IsUrl({ require_protocol: true })
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   fonteDadosUrl?: string;
 }
@@ -115,6 +131,7 @@ export class MontagemGuiadaIaDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(64)
   @ValidateNested({ each: true })
   @Type(() => ComponenteSnapshotIaDto)
   componentes?: ComponenteSnapshotIaDto[];
@@ -123,6 +140,7 @@ export class MontagemGuiadaIaDto {
   @Type(() => Number)
   @IsNumber()
   @IsPositive()
+  @Max(100_000_000)
   orcamento?: number;
 
   @IsOptional()

@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -27,43 +28,62 @@ export class AtualizarPontoEncaixeHardwareDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoZ?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoZ?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaZ?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   ordem?: number;
 
   @IsOptional()
@@ -76,5 +96,6 @@ export class AtualizarPontoEncaixeHardwareDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   observacao?: string;
 }

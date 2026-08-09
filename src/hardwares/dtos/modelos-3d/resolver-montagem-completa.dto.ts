@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  Max,
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsInt,
@@ -35,6 +37,7 @@ export class VentoinhaCompletaDto {
 
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   ventoinhaId!: number;
 
   @IsEnum(PosicaoRefrigeracaoGabinete)
@@ -60,6 +63,7 @@ export class VentoinhaCompletaDto {
  */
 export class ResolverMontagemCompletaDto {
   @IsArray()
+  @ArrayMaxSize(128)
   @ValidateNested({ each: true })
   @Type(() => ItemMontagem3DDto)
   itens!: ItemMontagem3DDto[];
@@ -67,10 +71,12 @@ export class ResolverMontagemCompletaDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   fonteId?: number;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(64)
   @ValidateNested({ each: true })
   @Type(() => VentoinhaCompletaDto)
   ventoinhas?: VentoinhaCompletaDto[];
@@ -78,5 +84,6 @@ export class ResolverMontagemCompletaDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   coolerId?: number;
 }

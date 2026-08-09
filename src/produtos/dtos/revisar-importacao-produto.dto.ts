@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsOptional, Min } from 'class-validator';
+import { Max, IsBoolean, IsInt, IsOptional, Min } from 'class-validator';
 
 export class RevisarImportacaoProdutoDto {
   @IsBoolean()
@@ -7,5 +7,6 @@ export class RevisarImportacaoProdutoDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   produtoId?: number;
 }

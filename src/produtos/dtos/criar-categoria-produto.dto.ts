@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -28,5 +29,6 @@ export class CriarCategoriaProdutoDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   ordem?: number;
 }

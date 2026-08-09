@@ -5,12 +5,15 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
+  Max,
   MaxLength,
   Min,
   MinLength,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
 import { CriarEspecificacaoHeadsetDto } from './especificacoes/criar-especificacao-headset.dto';
 import { CriarEspecificacaoMonitorDto } from './especificacoes/criar-especificacao-monitor.dto';
 import { CriarEspecificacaoMouseDto } from './especificacoes/criar-especificacao-mouse.dto';
@@ -20,6 +23,7 @@ export class AtualizarProdutoDto {
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   categoriaId?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
@@ -33,11 +37,26 @@ export class AtualizarProdutoDto {
   @IsOptional() @IsString() @MaxLength(4000) descricao?: string | null;
   @IsOptional() @IsString() @MaxLength(150) mpn?: string | null;
   @IsOptional() @IsString() @MaxLength(32) gtin?: string | null;
-  @IsOptional() @IsString() @MaxLength(500) imagemUrl?: string | null;
-  @IsOptional() @IsString() @MaxLength(500) imagemHoverUrl?: string | null;
+  @IsOptional()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
+  @MaxLength(500)
+  imagemUrl?: string | null;
+  @IsOptional()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
+  @MaxLength(500)
+  imagemHoverUrl?: string | null;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsObject()
+  @IsSafeJsonObject({ maxDepth: 6, maxKeys: 160, maxArrayLength: 64 })
   metadados?: Record<string, unknown>;
 
   @ValidateIf((_obj, valor) => valor !== undefined)

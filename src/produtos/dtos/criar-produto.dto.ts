@@ -5,11 +5,14 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
+  Max,
   MaxLength,
   Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
 import { CriarEspecificacaoHeadsetDto } from './especificacoes/criar-especificacao-headset.dto';
 import { CriarEspecificacaoMonitorDto } from './especificacoes/criar-especificacao-monitor.dto';
 import { CriarEspecificacaoMouseDto } from './especificacoes/criar-especificacao-mouse.dto';
@@ -18,6 +21,7 @@ import { CriarEspecificacaoTecladoDto } from './especificacoes/criar-especificac
 export class CriarProdutoDto {
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   categoriaId!: number;
 
   @IsString()
@@ -51,17 +55,26 @@ export class CriarProdutoDto {
   gtin?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   imagemUrl?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   imagemHoverUrl?: string;
 
   @IsOptional()
   @IsObject()
+  @IsSafeJsonObject({ maxDepth: 6, maxKeys: 160, maxArrayLength: 64 })
   metadados?: Record<string, unknown>;
 
   @IsOptional()

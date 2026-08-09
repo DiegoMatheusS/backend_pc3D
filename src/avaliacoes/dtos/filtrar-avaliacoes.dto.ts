@@ -6,6 +6,7 @@ export class FiltrarAvaliacoesDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100_000)
   pagina?: number;
 
   @IsOptional()

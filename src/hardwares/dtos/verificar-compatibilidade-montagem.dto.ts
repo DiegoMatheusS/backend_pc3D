@@ -1,9 +1,11 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsInt,
   IsOptional,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -17,6 +19,7 @@ export enum SentidoFluxoAr {
 export class VentoinhaMontagemDto {
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   ventoinhaId!: number;
 
   @IsEnum(PosicaoRefrigeracaoGabinete)
@@ -24,6 +27,7 @@ export class VentoinhaMontagemDto {
 
   @IsInt()
   @Min(1)
+  @Max(64)
   quantidade!: number;
 
   @IsOptional()
@@ -34,14 +38,17 @@ export class VentoinhaMontagemDto {
 export class VerificarCompatibilidadeMontagemDto {
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   placaMaeId!: number;
 
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   processadorId!: number;
 
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   memoriaRamId!: number;
 
   /**
@@ -54,6 +61,7 @@ export class VerificarCompatibilidadeMontagemDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(64)
   quantidadeModulosRam?: number;
 
   /**
@@ -64,34 +72,42 @@ export class VerificarCompatibilidadeMontagemDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(64)
   quantidadeModulosRamTotal?: number;
 
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   gabineteId!: number;
 
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   fonteId!: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   placaVideoId?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   coolerId?: number;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(32)
   @IsInt({ each: true })
   @Min(1, { each: true })
+  @Max(2_147_483_647, { each: true })
   armazenamentoIds?: number[];
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(64)
   @ValidateNested({ each: true })
   @Type(() => VentoinhaMontagemDto)
   ventoinhas?: VentoinhaMontagemDto[];

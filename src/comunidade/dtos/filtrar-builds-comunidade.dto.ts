@@ -34,12 +34,14 @@ export class FiltrarBuildsComunidadeDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   processador?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   gpu?: number;
 
   @IsOptional()
@@ -50,6 +52,7 @@ export class FiltrarBuildsComunidadeDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100_000)
   pagina?: number;
 
   @IsOptional()

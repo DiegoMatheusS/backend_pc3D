@@ -5,11 +5,13 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   MinLength,
   ValidateNested,
 } from 'class-validator';
 import { CategoriaHardware } from '../../generated/prisma/enums';
+import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
 import { CriarEspecificacaoArmazenamentoDto } from './especificacoes/criar-especificacao-armazenamento.dto';
 import { CriarEspecificacaoCoolerDto } from './especificacoes/criar-especificacao-cooler.dto';
 import { CriarEspecificacaoFonteDto } from './especificacoes/criar-especificacao-fonte.dto';
@@ -63,6 +65,7 @@ export class CriarHardwareDto {
   @IsString({
     message: 'A descrição deve ser um texto.',
   })
+  @MaxLength(5000)
   descricao?: string;
 
   @IsOptional()
@@ -76,8 +79,10 @@ export class CriarHardwareDto {
   gtin?: string;
 
   @IsOptional()
-  @IsString({
-    message: 'A URL da imagem deve ser um texto.',
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
   })
   @MaxLength(500, {
     message: 'A URL da imagem deve ter no máximo 500 caracteres.',
@@ -85,7 +90,11 @@ export class CriarHardwareDto {
   imagemUrl?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   imagemHoverUrl?: string;
 
@@ -93,6 +102,7 @@ export class CriarHardwareDto {
   @IsObject({
     message: 'As especificações adicionais devem ser um objeto.',
   })
+  @IsSafeJsonObject({ maxDepth: 6, maxKeys: 200, maxArrayLength: 64 })
   especificacoes?: Record<string, unknown>;
 
   @IsOptional()

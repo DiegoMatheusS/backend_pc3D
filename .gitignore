@@ -1,25 +1,21 @@
-# Ambiente / segredos
 .env
 .env.local
-.env.*
-!.env.example
-!.env.test.example
-
-# Dependências e build
+.env.*.local
+/generated/prisma
 node_modules/
 dist/
 coverage/
-
-# Logs
 logs/
 *.log
 
-# Prisma Client gerado
+.env.*
+!.env.example
+.env.test
+
 src/generated/prisma/
 generated/
-
-# Ferramentas locais de IA
 .agents/
 .claude/
 .windsurf/
 skills-lock.json
+!.env.test.example

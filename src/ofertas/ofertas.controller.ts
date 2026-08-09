@@ -6,12 +6,12 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
@@ -47,19 +47,21 @@ export class OfertasController {
   }
 
   @Get('produto/:produtoId')
-  listarOfertasDoProduto(@Param('produtoId', ParseIntPipe) produtoId: number) {
+  listarOfertasDoProduto(
+    @Param('produtoId', ParsePositiveIntPipe) produtoId: number,
+  ) {
     return this.ofertasService.listarOfertasDoProduto(produtoId);
   }
 
   @Get('hardware/:hardwareId')
   listarOfertasDoHardware(
-    @Param('hardwareId', ParseIntPipe) hardwareId: number,
+    @Param('hardwareId', ParsePositiveIntPipe) hardwareId: number,
   ) {
     return this.ofertasService.listarOfertasDoHardware(hardwareId);
   }
 
   @Get(':id/historico')
-  historicoOferta(@Param('id', ParseIntPipe) id: number) {
+  historicoOferta(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.ofertasService.historicoOferta(id, true);
   }
 }
@@ -112,26 +114,26 @@ export class OfertasAdminController {
 
   @Get('parceiros/:id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
-  buscarParceiro(@Param('id', ParseIntPipe) id: number) {
+  buscarParceiro(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.ofertasService.buscarParceiro(id);
   }
 
   @Get(':id/historico')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
-  historicoOferta(@Param('id', ParseIntPipe) id: number) {
+  historicoOferta(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.ofertasService.historicoOferta(id, false);
   }
 
   @Get(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
-  buscarOferta(@Param('id', ParseIntPipe) id: number) {
+  buscarOferta(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.ofertasService.buscarOferta(id);
   }
 
   @Patch('parceiros/:id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async atualizarParceiro(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: AtualizarParceiroDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -176,7 +178,7 @@ export class OfertasAdminController {
   @Patch(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async atualizarOferta(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: AtualizarOfertaDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -196,7 +198,7 @@ export class OfertasAdminController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(AdminGuard)
   async removerOferta(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {

@@ -155,6 +155,7 @@ export class FiltroHttpExcecoes implements ExceptionFilter {
       403: 'ACESSO_NEGADO',
       404: 'NAO_ENCONTRADO',
       409: 'CONFLITO',
+      413: 'PAYLOAD_MUITO_GRANDE',
       422: 'ENTIDADE_NAO_PROCESSAVEL',
       429: 'LIMITE_EXCEDIDO',
       500: 'ERRO_INTERNO',

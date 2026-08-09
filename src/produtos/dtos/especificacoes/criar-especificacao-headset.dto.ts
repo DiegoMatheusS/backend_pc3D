@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsNumber,
   IsOptional,
@@ -24,6 +25,7 @@ export class CriarEspecificacaoHeadsetDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   driverMm?: number;
 
   @IsOptional()
@@ -37,15 +39,18 @@ export class CriarEspecificacaoHeadsetDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   impedancia?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   pesoGramas?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   bateriaHoras?: number;
 }

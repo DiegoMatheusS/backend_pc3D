@@ -8,10 +8,16 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
+import { json, urlencoded } from 'express';
 import request from 'supertest';
 import { PapelUsuario } from '../src/generated/prisma/enums';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  criarProtecaoOrigemNavegador,
+  limitarComplexidadeJson,
+  tratarErrosParserCorpo,
+} from '../src/common/security/request-security';
 
 export type App = INestApplication;
 
@@ -23,14 +29,33 @@ export async function criarApp(): Promise<App> {
     imports: [AppModule],
   }).compile();
 
-  const app = moduleFixture.createNestApplication();
+  const app = moduleFixture.createNestApplication({ bodyParser: false });
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    set: (chave: string, valor: unknown) => void;
+  };
+  expressApp.set('query parser', 'simple');
+  app.use(criarProtecaoOrigemNavegador(['http://localhost:5173']));
   app.use(cookieParser());
+  app.use(json({ limit: '1mb', strict: true }));
+  app.use(
+    urlencoded({
+      limit: '100kb',
+      extended: false,
+      parameterLimit: 100,
+    }),
+  );
+  app.use(tratarErrosParserCorpo());
+  app.use(limitarComplexidadeJson());
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      forbidUnknownValues: true,
+      stopAtFirstError: true,
+      validationError: { target: false, value: false },
+      transformOptions: { enableImplicitConversion: false },
     }),
   );
   const { FiltroHttpExcecoes } =

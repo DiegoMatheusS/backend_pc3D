@@ -24,6 +24,7 @@ export class RecomendarLojaIaDto {
   @Type(() => Number)
   @IsNumber()
   @IsPositive()
+  @Max(100_000_000)
   orcamento?: number;
 
   @IsOptional()

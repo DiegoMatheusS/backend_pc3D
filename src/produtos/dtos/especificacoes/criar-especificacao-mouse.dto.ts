@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsInt,
   IsNumber,
@@ -17,21 +18,25 @@ export class CriarEspecificacaoMouseDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   dpiMaximo?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   pollingRateHz?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   botoes?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   pesoGramas?: number;
 
   @IsOptional()

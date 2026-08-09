@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -6,9 +7,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
+import { IsSafeResourceUrl } from '../../../common/validators/is-safe-resource-url.validator';
 import {
   FormatoModelo3D,
   OrigemModelo3D,
@@ -24,7 +27,7 @@ export class CriarModelo3DHardwareDto {
    * URL do arquivo 3D. Pode apontar para storage/CDN próprio ou para uma
    * origem externa. O arquivo não é armazenado no PostgreSQL.
    */
-  @IsString()
+  @IsSafeResourceUrl()
   @IsNotEmpty()
   @MaxLength(500)
   arquivoUrl!: string;
@@ -44,7 +47,11 @@ export class CriarModelo3DHardwareDto {
 
   /** Página/fonte de onde veio o modelo quando origem = EXTERNO. */
   @IsOptional()
-  @IsString()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   fonteUrl?: string;
 
@@ -66,57 +73,79 @@ export class CriarModelo3DHardwareDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   alturaRealMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   larguraRealMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   profundidadeRealMm?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(2_000_000_000)
   tamanhoBytes?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoCorrecaoX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoCorrecaoY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoCorrecaoZ?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoCorrecaoX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoCorrecaoY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoCorrecaoZ?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaCorrecaoX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaCorrecaoY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaCorrecaoZ?: number;
 
   @IsOptional()

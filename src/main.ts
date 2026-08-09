@@ -5,24 +5,34 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { FiltroHttpExcecoes } from './common/filters/http-excecoes.filter';
 import cookieParser from 'cookie-parser';
-import { json } from 'express';
+import { json, urlencoded } from 'express';
 import helmet from 'helmet';
+import {
+  criarProtecaoOrigemNavegador,
+  limitarComplexidadeJson,
+  normalizarOrigensPermitidas,
+  tratarErrosParserCorpo,
+} from './common/security/request-security';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const configService = app.get(ConfigService);
 
   const port = Number(configService.get<string>('PORT') ?? 3000);
   const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
   const sessionCookieName =
     configService.get<string>('SESSION_COOKIE_NAME') ?? 'pcbuilder_session';
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    set: (chave: string, valor: unknown) => void;
+  };
+
+  // Parser simples evita objetos arbitrariamente aninhados via query string.
+  // Parâmetros repetidos viram arrays e são recusados pelos DTOs escalares.
+  expressApp.set('query parser', 'simple');
 
   // Em produção atrás de proxy/reverse proxy (Cloudflare, Nginx etc.),
   // habilite TRUST_PROXY=true para req.ip e rate limiting usarem o IP correto.
   if (configService.get<string>('TRUST_PROXY') === 'true') {
-    const expressApp = app.getHttpAdapter().getInstance() as {
-      set: (chave: string, valor: unknown) => void;
-    };
     expressApp.set('trust proxy', 1);
   }
 
@@ -42,10 +52,12 @@ async function bootstrap(): Promise<void> {
     );
   }
 
-  const allowedOrigins = (corsConfigurado ?? 'http://localhost:5173')
-    .split(',')
-    .map((origem) => origem.trim())
-    .filter(Boolean);
+  const allowedOrigins = normalizarOrigensPermitidas(
+    (corsConfigurado ?? 'http://localhost:5173')
+      .split(',')
+      .map((origem) => origem.trim())
+      .filter(Boolean),
+  );
 
   app.enableCors({
     origin: allowedOrigins,
@@ -54,18 +66,36 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'Accept'],
   });
 
+  // Defesa adicional de navegador contra CSRF/origens cruzadas. Fica antes
+  // do parser de corpo para rejeitar origens indevidas sem processar payloads.
+  app.use(criarProtecaoOrigemNavegador(allowedOrigins));
+
   app.use(cookieParser());
   app.setGlobalPrefix('api');
 
-  // ── Limite de payload JSON ────────────────────────────────────────────────
-  // O NestJS usa express por padrão — podemos ajustar via bodyParser
-  app.use(json({ limit: '1mb' }));
+  // ── Corpo da requisição / abuso de payload ───────────────────────────────
+  // Desabilitamos o parser automático do Nest para estes limites serem
+  // efetivamente os limites aplicados pela aplicação.
+  app.use(json({ limit: '1mb', strict: true }));
+  app.use(
+    urlencoded({
+      limit: '100kb',
+      extended: false,
+      parameterLimit: 100,
+    }),
+  );
+  app.use(tratarErrosParserCorpo());
+  app.use(limitarComplexidadeJson());
 
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      forbidUnknownValues: true,
+      stopAtFirstError: true,
+      validationError: { target: false, value: false },
+      transformOptions: { enableImplicitConversion: false },
     }),
   );
 

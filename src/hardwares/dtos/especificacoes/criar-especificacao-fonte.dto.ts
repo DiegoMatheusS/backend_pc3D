@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   ArrayUnique,
   IsArray,
   IsEnum,
@@ -23,6 +24,7 @@ export class CriarEspecificacaoFonteDto {
 
   @IsInt()
   @Min(1)
+  @Max(100_000)
   potenciaWatts!: number;
 
   @IsOptional()
@@ -39,16 +41,19 @@ export class CriarEspecificacaoFonteDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   comprimentoMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   larguraMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   alturaMm?: number;
 
   @IsOptional()
@@ -65,52 +70,63 @@ export class CriarEspecificacaoFonteDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   correnteLinha12vAmperes?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(128)
   conectoresAtx24Pinos?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(128)
   conectoresEpsCpu?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(128)
   conectoresPcie6Pinos?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(128)
   conectoresPcie8Pinos?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(128)
   conectores12vhpwr?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(128)
   conectores12v2x6?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(128)
   conectoresSata?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(128)
   conectoresMolex?: number;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(32)
   @ArrayUnique()
   @IsString({ each: true })
+  @MaxLength(80, { each: true })
   protecoes?: string[];
 
   @IsOptional()

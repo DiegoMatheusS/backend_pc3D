@@ -1,13 +1,16 @@
 import {
+  Max,
   IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
+import { IsSafeResourceUrl } from '../../../common/validators/is-safe-resource-url.validator';
 import {
   FormatoModelo3D,
   OrigemModelo3D,
@@ -21,7 +24,7 @@ export class AtualizarModelo3DHardwareDto {
 
   // Campo obrigatório no banco: pode ser omitido no PATCH, mas não pode virar null.
   @ValidateIf((_obj, valor) => valor !== undefined)
-  @IsString()
+  @IsSafeResourceUrl()
   @MaxLength(500)
   arquivoUrl?: string;
 
@@ -39,7 +42,11 @@ export class AtualizarModelo3DHardwareDto {
   storageKey?: string | null;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   fonteUrl?: string | null;
 
@@ -61,56 +68,78 @@ export class AtualizarModelo3DHardwareDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   alturaRealMm?: number | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   larguraRealMm?: number | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   profundidadeRealMm?: number | null;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(2_000_000_000)
   tamanhoBytes?: number | null;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoCorrecaoX?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoCorrecaoY?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoCorrecaoZ?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoCorrecaoX?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoCorrecaoY?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoCorrecaoZ?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaCorrecaoX?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaCorrecaoY?: number;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaCorrecaoZ?: number;
 }

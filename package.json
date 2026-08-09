@@ -21,7 +21,8 @@
     "db:test:status": "node scripts/prisma-test.mjs status",
     "db:test:migrate": "node scripts/prisma-test.mjs migrate",
     "db:test:studio": "node scripts/prisma-test.mjs studio",
-    "verify": "npm run lint && npm run build && npm test && npm run test:e2e"
+    "verify": "npm run lint && npm run build && npm test && npm run test:e2e",
+    "security:audit": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -44,7 +45,8 @@
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

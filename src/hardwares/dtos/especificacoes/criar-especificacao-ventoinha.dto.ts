@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -11,36 +12,43 @@ import { TipoConectorVentoinha } from '../../../generated/prisma/enums';
 export class CriarEspecificacaoVentoinhaDto {
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   tamanhoMm!: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   espessuraMm?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   rpmMinima?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   rpmMaxima?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   fluxoArCfm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   pressaoEstaticaMmH2o?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   ruidoDb?: number;
 
   @IsEnum(TipoConectorVentoinha, {
@@ -51,11 +59,13 @@ export class CriarEspecificacaoVentoinhaDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   tensaoVolts?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   correnteAmperes?: number;
 
   @IsOptional()

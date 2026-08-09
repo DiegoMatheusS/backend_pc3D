@@ -6,13 +6,13 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
@@ -39,7 +39,7 @@ export class NotebooksController {
   }
 
   @Get(':id')
-  buscar(@Param('id', ParseIntPipe) id: number) {
+  buscar(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.notebooksService.buscarPublico(id);
   }
 }
@@ -79,14 +79,14 @@ export class NotebooksAdminController {
 
   @Get(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
-  buscar(@Param('id', ParseIntPipe) id: number) {
+  buscar(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.notebooksService.buscarAdmin(id);
   }
 
   @Patch(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: AtualizarNotebookDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -106,7 +106,7 @@ export class NotebooksAdminController {
   @HttpCode(HttpStatus.OK)
   @Papeis(PapelUsuario.ADMIN)
   async arquivar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {

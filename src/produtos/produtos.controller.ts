@@ -6,13 +6,14 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
+import { ParseSlugPipe } from '../common/pipes/parse-slug.pipe';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
@@ -44,12 +45,12 @@ export class ProdutosController {
   }
 
   @Get('slug/:slug')
-  buscarPorSlug(@Param('slug') slug: string) {
+  buscarPorSlug(@Param('slug', ParseSlugPipe) slug: string) {
     return this.produtosService.buscarPublicoPorSlug(slug);
   }
 
   @Get(':id')
-  buscarPorId(@Param('id', ParseIntPipe) id: number) {
+  buscarPorId(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.produtosService.buscarPublicoPorId(id);
   }
 }
@@ -112,7 +113,7 @@ export class ProdutosAdminController {
   @Patch('importacoes/:id/revisar')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.REVISOR)
   async revisarImportacao(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: RevisarImportacaoProdutoDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -154,14 +155,14 @@ export class ProdutosAdminController {
 
   @Get(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
-  buscar(@Param('id', ParseIntPipe) id: number) {
+  buscar(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.produtosService.buscarAdmin(id);
   }
 
   @Patch(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: AtualizarProdutoDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -184,7 +185,7 @@ export class ProdutosAdminController {
   @HttpCode(HttpStatus.OK)
   @Papeis(PapelUsuario.ADMIN)
   async arquivar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {
@@ -236,7 +237,7 @@ export class CategoriasProdutosAdminController {
   @Patch(':id')
   @Papeis(PapelUsuario.ADMIN)
   async atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: AtualizarCategoriaProdutoDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,

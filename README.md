@@ -140,6 +140,12 @@ O `verify` executa:
 3. testes unitários;
 4. testes E2E.
 
+Auditoria das dependências de produção (requer acesso ao registry npm):
+
+```powershell
+npm run security:audit
+```
+
 ## Regras críticas do domínio
 
 ### Usuários
@@ -178,6 +184,7 @@ Antes do deploy:
 - decidir se Swagger ficará habilitado;
 - aplicar migrations com `prisma migrate deploy`;
 - manter backups do PostgreSQL;
+- executar `npm run security:audit`;
 - nunca enviar segredos para Git ou ZIP.
 
 Consulte também:

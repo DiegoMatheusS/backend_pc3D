@@ -29,12 +29,14 @@ export class FiltrarAuditoriaDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(2_147_483_647)
   usuarioId?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100_000)
   pagina?: number;
 
   @IsOptional()

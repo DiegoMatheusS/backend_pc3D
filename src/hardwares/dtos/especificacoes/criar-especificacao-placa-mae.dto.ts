@@ -1,4 +1,6 @@
 import {
+  Max,
+  ArrayMaxSize,
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
@@ -45,6 +47,7 @@ export class CriarEspecificacaoPlacaMaeDto {
 
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(16)
   @ArrayUnique()
   @IsEnum(TipoMemoria, {
     each: true,
@@ -55,6 +58,7 @@ export class CriarEspecificacaoPlacaMaeDto {
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(8)
   @ArrayUnique()
   @IsEnum(FormatoMemoria, {
     each: true,
@@ -63,29 +67,36 @@ export class CriarEspecificacaoPlacaMaeDto {
   formatosMemoriaSuportados?: FormatoMemoria[];
 
   @IsArray()
+  @ArrayMaxSize(64)
   @ArrayUnique()
   @IsInt({ each: true })
   @Min(1, { each: true })
+  @Max(1_000_000, { each: true })
   frequenciasMemoriaJedecMhz!: number[];
 
   @IsArray()
+  @ArrayMaxSize(64)
   @ArrayUnique()
   @IsInt({ each: true })
   @Min(1, { each: true })
+  @Max(1_000_000, { each: true })
   frequenciasMemoriaOverclockMhz!: number[];
 
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   slotsMemoria!: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   capacidadeMaximaMemoriaGb?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   capacidadeMaximaPorSlotGb?: number;
 
   @IsOptional()
@@ -105,13 +116,16 @@ export class CriarEspecificacaoPlacaMaeDto {
   suportaMemoriaRegistrada?: boolean;
 
   @IsArray()
+  @ArrayMaxSize(32)
   @ArrayUnique()
   @IsString({ each: true })
+  @MaxLength(80, { each: true })
   saidasVideo!: string[];
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   portasSata?: number;
 
   @IsOptional()
@@ -143,6 +157,7 @@ export class CriarEspecificacaoPlacaMaeDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(16)
   @ValidateNested({ each: true })
   @Type(() => CriarSlotM2PlacaMaeDto)
   slotsM2?: CriarSlotM2PlacaMaeDto[];

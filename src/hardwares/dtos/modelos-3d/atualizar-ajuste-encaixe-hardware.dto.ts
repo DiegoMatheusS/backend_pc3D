@@ -1,44 +1,71 @@
-import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class AtualizarAjusteEncaixeHardwareDto {
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   posicaoZ?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   rotacaoZ?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaX?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaY?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-1_000_000)
+  @Max(1_000_000)
   escalaZ?: number;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   observacao?: string;
 
   @IsOptional()

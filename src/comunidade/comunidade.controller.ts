@@ -4,13 +4,13 @@ import {
   Delete,
   Get,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Query,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuardOpcional } from '../auth/auth-guard-opcional.guard';
 import { AuthGuard } from '../auth/auth.guard';
@@ -60,7 +60,7 @@ export class ComunidadeController {
   @Post(':id/copiar')
   @UseGuards(AuthGuard)
   copiar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
   ) {
     const autenticado = this.exigirUsuario(usuario);
@@ -70,7 +70,7 @@ export class ComunidadeController {
   @Post(':id/avaliacao')
   @UseGuards(AuthGuard)
   avaliar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
     @Body() dados: AvaliarBuildComunidadeDto,
   ) {
@@ -86,7 +86,7 @@ export class ComunidadeController {
   @Get(':id/comentarios')
   @UseGuards(AuthGuardOpcional)
   listarComentarios(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
   ) {
     return this.comunidadeService.listarComentarios(id, usuario);
@@ -95,7 +95,7 @@ export class ComunidadeController {
   @Post(':id/comentarios')
   @UseGuards(AuthGuard)
   criarComentario(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
     @Body() dados: CriarComentarioBuildDto,
   ) {
@@ -111,7 +111,7 @@ export class ComunidadeController {
   @Get(':id')
   @UseGuards(AuthGuardOpcional)
   buscar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
   ) {
     return this.comunidadeService.buscar(id, usuario);
@@ -120,7 +120,7 @@ export class ComunidadeController {
   @Patch(':id')
   @UseGuards(AuthGuard)
   atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
     @Body() dados: AtualizarBuildComunidadeDto,
   ) {
@@ -130,7 +130,7 @@ export class ComunidadeController {
   @Delete(':id')
   @UseGuards(AuthGuard)
   remover(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
   ) {
     return this.comunidadeService.remover(id, usuario);

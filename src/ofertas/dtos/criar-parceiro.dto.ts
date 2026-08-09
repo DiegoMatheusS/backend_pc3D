@@ -14,12 +14,20 @@ export class CriarParceiroDto {
   nome!: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   logoUrl?: string | null;
 
   @IsOptional()
-  @IsUrl()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   site?: string | null;
 

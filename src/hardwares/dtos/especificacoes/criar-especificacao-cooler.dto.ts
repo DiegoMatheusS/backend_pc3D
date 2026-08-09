@@ -1,4 +1,6 @@
 import {
+  Max,
+  ArrayMaxSize,
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
@@ -21,63 +23,76 @@ export class CriarEspecificacaoCoolerDto {
 
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(32)
   @ArrayUnique()
   @IsString({ each: true })
+  @MaxLength(50, { each: true })
   socketsSuportados!: string[];
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   capacidadeTermicaWatts?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   alturaMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   larguraMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   profundidadeMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   alturaLivreRamMm?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   tamanhoRadiadorMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   espessuraRadiadorMm?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   quantidadeVentoinhas?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   tamanhoVentoinhaMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   espessuraVentoinhaMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   comprimentoMangueirasMm?: number;
 
   @IsOptional()
@@ -88,11 +103,13 @@ export class CriarEspecificacaoCoolerDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   consumoBombaWatts?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   consumoWatts?: number;
 
   @IsOptional()

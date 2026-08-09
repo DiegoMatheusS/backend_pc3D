@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -21,29 +22,35 @@ export class CriarEspecificacaoMemoriaRamDto {
 
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   capacidadePorModuloGb!: number;
 
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   quantidadeModulos!: number;
 
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   frequenciaMhz!: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   frequenciaJedecMhz?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   latenciaCl?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   tensaoVolts?: number;
 
   @IsOptional()
@@ -65,6 +72,7 @@ export class CriarEspecificacaoMemoriaRamDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   alturaMm?: number;
 
   @IsOptional()
@@ -74,5 +82,6 @@ export class CriarEspecificacaoMemoriaRamDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   consumoWatts?: number;
 }

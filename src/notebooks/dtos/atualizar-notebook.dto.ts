@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   MinLength,
   ValidateIf,
@@ -32,8 +33,22 @@ export class AtualizarNotebookDto {
   @IsOptional() @IsString() @MaxLength(4000) descricao?: string | null;
   @IsOptional() @IsString() @MaxLength(150) mpn?: string | null;
   @IsOptional() @IsString() @MaxLength(32) gtin?: string | null;
-  @IsOptional() @IsString() @MaxLength(500) imagemUrl?: string | null;
-  @IsOptional() @IsString() @MaxLength(500) imagemHoverUrl?: string | null;
+  @IsOptional()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
+  @MaxLength(500)
+  imagemUrl?: string | null;
+  @IsOptional()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
+  @MaxLength(500)
+  imagemHoverUrl?: string | null;
 
   @ValidateIf((_obj, valor) => valor !== undefined)
   @IsBoolean()

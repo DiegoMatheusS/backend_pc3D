@@ -6,12 +6,12 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
@@ -58,14 +58,14 @@ export class HardwaresAdminController {
 
   @Get(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
-  buscarPorId(@Param('id', ParseIntPipe) id: number) {
+  buscarPorId(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.hardwaresService.buscarPorIdAdmin(id);
   }
 
   @Get(':hardwarePaiId/pontos-encaixe')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   listarPontosEncaixeHardwareAdmin(
-    @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,
+    @Param('hardwarePaiId', ParsePositiveIntPipe) hardwarePaiId: number,
   ) {
     return this.hardwaresService.listarPontosEncaixeHardwareAdmin(
       hardwarePaiId,
@@ -75,7 +75,7 @@ export class HardwaresAdminController {
   @Get(':hardwareId/modelos-3d')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   listarModelos3DHardwareAdmin(
-    @Param('hardwareId', ParseIntPipe) hardwareId: number,
+    @Param('hardwareId', ParsePositiveIntPipe) hardwareId: number,
   ) {
     return this.hardwaresService.listarModelos3DHardwareAdmin(hardwareId);
   }
@@ -95,8 +95,8 @@ export class HardwaresAdminController {
   @Get('compatibilidades/memoria-placa-mae/:placaMaeId/:memoriaRamId')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   verificarCompatibilidadeMemoriaPlacaMae(
-    @Param('placaMaeId', ParseIntPipe) placaMaeId: number,
-    @Param('memoriaRamId', ParseIntPipe) memoriaRamId: number,
+    @Param('placaMaeId', ParsePositiveIntPipe) placaMaeId: number,
+    @Param('memoriaRamId', ParsePositiveIntPipe) memoriaRamId: number,
   ) {
     return this.hardwaresService.verificarCompatibilidadeMemoriaPlacaMae(
       placaMaeId,
@@ -118,7 +118,7 @@ export class HardwaresAdminController {
   @Patch(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async atualizar(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dados: AtualizarHardwareDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -157,7 +157,7 @@ export class HardwaresAdminController {
   @Post(':hardwareId/modelos-3d')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async criarModelo3DHardware(
-    @Param('hardwareId', ParseIntPipe) hardwareId: number,
+    @Param('hardwareId', ParsePositiveIntPipe) hardwareId: number,
     @Body() dados: CriarModelo3DHardwareDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -180,7 +180,7 @@ export class HardwaresAdminController {
   @Patch('modelos-3d/:modeloId')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   atualizarModelo3DHardware(
-    @Param('modeloId', ParseIntPipe) modeloId: number,
+    @Param('modeloId', ParsePositiveIntPipe) modeloId: number,
     @Body() dados: AtualizarModelo3DHardwareDto,
   ) {
     return this.hardwaresService.atualizarModelo3DHardware(modeloId, dados);
@@ -189,7 +189,7 @@ export class HardwaresAdminController {
   @Post(':hardwarePaiId/pontos-encaixe')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   criarPontoEncaixeHardware(
-    @Param('hardwarePaiId', ParseIntPipe) hardwarePaiId: number,
+    @Param('hardwarePaiId', ParsePositiveIntPipe) hardwarePaiId: number,
     @Body() dados: CriarPontoEncaixeHardwareDto,
   ) {
     return this.hardwaresService.criarPontoEncaixeHardware(
@@ -201,7 +201,7 @@ export class HardwaresAdminController {
   @Patch('pontos-encaixe/:pontoEncaixeId')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   atualizarPontoEncaixeHardware(
-    @Param('pontoEncaixeId', ParseIntPipe) pontoEncaixeId: number,
+    @Param('pontoEncaixeId', ParsePositiveIntPipe) pontoEncaixeId: number,
     @Body() dados: AtualizarPontoEncaixeHardwareDto,
   ) {
     return this.hardwaresService.atualizarPontoEncaixeHardware(
@@ -213,7 +213,7 @@ export class HardwaresAdminController {
   @Post('pontos-encaixe/:pontoEncaixeId/ajustes')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   criarAjusteEncaixeHardware(
-    @Param('pontoEncaixeId', ParseIntPipe) pontoEncaixeId: number,
+    @Param('pontoEncaixeId', ParsePositiveIntPipe) pontoEncaixeId: number,
     @Body() dados: CriarAjusteEncaixeHardwareDto,
   ) {
     return this.hardwaresService.criarAjusteEncaixeHardware(
@@ -225,7 +225,7 @@ export class HardwaresAdminController {
   @Patch('ajustes-encaixe/:ajusteId')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   atualizarAjusteEncaixeHardware(
-    @Param('ajusteId', ParseIntPipe) ajusteId: number,
+    @Param('ajusteId', ParsePositiveIntPipe) ajusteId: number,
     @Body() dados: AtualizarAjusteEncaixeHardwareDto,
   ) {
     return this.hardwaresService.atualizarAjusteEncaixeHardware(
@@ -283,7 +283,7 @@ export class HardwaresAdminController {
   @Patch('modelos-3d/:modeloId/aprovar')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.REVISOR)
   async aprovarModelo3DHardware(
-    @Param('modeloId', ParseIntPipe) modeloId: number,
+    @Param('modeloId', ParsePositiveIntPipe) modeloId: number,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {
@@ -302,7 +302,7 @@ export class HardwaresAdminController {
   @Patch('modelos-3d/:modeloId/status')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.REVISOR)
   async atualizarStatusModelo3DHardware(
-    @Param('modeloId', ParseIntPipe) modeloId: number,
+    @Param('modeloId', ParsePositiveIntPipe) modeloId: number,
     @Body() dados: AtualizarStatusModelo3DDto,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
@@ -331,7 +331,7 @@ export class HardwaresAdminController {
   @Delete(':id')
   @UseGuards(AdminGuard)
   async remover(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {
@@ -349,7 +349,7 @@ export class HardwaresAdminController {
   @Delete(':id/permanente')
   @UseGuards(AdminGuard)
   async removerPermanentemente(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {

@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsOptional,
@@ -46,6 +47,7 @@ export class AtualizarBuildComunidadeDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(64)
   @ValidateNested({ each: true })
   @Type(() => BuildComunidadeComponenteDto)
   componentes?: BuildComunidadeComponenteDto[];

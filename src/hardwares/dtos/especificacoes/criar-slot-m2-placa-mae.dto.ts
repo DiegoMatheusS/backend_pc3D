@@ -1,4 +1,6 @@
 import {
+  Max,
+  ArrayMaxSize,
   ArrayUnique,
   IsArray,
   IsBoolean,
@@ -20,29 +22,35 @@ export class CriarSlotM2PlacaMaeDto {
   codigo!: string;
 
   @IsArray()
+  @ArrayMaxSize(16)
   @ArrayUnique()
   @IsEnum(InterfaceArmazenamento, { each: true })
   interfacesSuportadas!: InterfaceArmazenamento[];
 
   @IsArray()
+  @ArrayMaxSize(16)
   @ArrayUnique()
   @IsEnum(ChaveM2, { each: true })
   chavesSuportadas!: ChaveM2[];
 
   @IsArray()
+  @ArrayMaxSize(16)
   @ArrayUnique()
   @IsInt({ each: true })
   @Min(1, { each: true })
+  @Max(1_000_000, { each: true })
   tamanhosSuportadosMm!: number[];
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   geracaoPcieMaxima?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   pistasPcie?: number;
 
   @IsOptional()
@@ -52,6 +60,7 @@ export class CriarSlotM2PlacaMaeDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   observacao?: string;
 
   @IsOptional()

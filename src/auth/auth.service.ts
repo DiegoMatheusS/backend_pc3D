@@ -12,6 +12,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CadastroDto } from './dtos/cadastro.dto';
 import { LoginDto } from './dtos/login.dto';
 
+const HASH_SENHA_DUMMY =
+  '$argon2id$v=19$m=65536,t=3,p=4$M74wbk2A3STYW5JooyM0kA$A03opnxoZrcHhU0sB1jOoA57uDh6v5dAj8LjLLwI008';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -21,6 +24,11 @@ export class AuthService {
 
   private gerarHashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private tokenSessaoTemFormatoValido(token: string): boolean {
+    // randomBytes(32).toString('base64url') produz exatamente 43 caracteres.
+    return /^[A-Za-z0-9_-]{43}$/u.test(token);
   }
 
   async cadastrar(dados: CadastroDto) {
@@ -69,13 +77,17 @@ export class AuthService {
       },
     });
 
-    if (!usuario || !usuario.ativo) {
-      throw new UnauthorizedException('E-mail ou senha incorretos.');
+    // Sempre executa Argon2, inclusive para e-mail inexistente/inativo, para
+    // reduzir diferença de tempo que poderia ajudar enumeração de contas.
+    const hashParaVerificar = usuario?.senhaHash ?? HASH_SENHA_DUMMY;
+    let senhaCorreta = false;
+    try {
+      senhaCorreta = await argon2.verify(hashParaVerificar, dados.senha);
+    } catch {
+      senhaCorreta = false;
     }
 
-    const senhaCorreta = await argon2.verify(usuario.senhaHash, dados.senha);
-
-    if (!senhaCorreta) {
+    if (!usuario || !usuario.ativo || !senhaCorreta) {
       throw new UnauthorizedException('E-mail ou senha incorretos.');
     }
 
@@ -114,6 +126,10 @@ export class AuthService {
       throw new UnauthorizedException('Sessão não encontrada.');
     }
 
+    if (!this.tokenSessaoTemFormatoValido(token)) {
+      throw new UnauthorizedException('Sessão inválida ou expirada.');
+    }
+
     const tokenHash = this.gerarHashToken(token);
 
     const sessao = await this.prisma.sessao.findUnique({
@@ -148,7 +164,7 @@ export class AuthService {
   }
 
   async logout(token: string | undefined): Promise<void> {
-    if (!token) {
+    if (!token || !this.tokenSessaoTemFormatoValido(token)) {
       return;
     }
 

@@ -1,4 +1,5 @@
 import {
+  Max,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -31,11 +32,13 @@ export class CriarEspecificacaoArmazenamentoDto {
 
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   capacidadeGb!: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   tamanhoM2Mm?: number;
 
   @IsOptional()
@@ -47,46 +50,55 @@ export class CriarEspecificacaoArmazenamentoDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   geracaoPcie?: number;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1_000_000)
   pistasPcie?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   leituraSequencialMbps?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(1_000_000)
   escritaSequencialMbps?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   alturaMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   larguraMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   profundidadeMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   espessuraMm?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   consumoWatts?: number;
 
   @IsOptional()
