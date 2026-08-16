@@ -1,0 +1,26 @@
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+
+export class CriarAvaliacaoDto {
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  nota!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  titulo?: string;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(3000)
+  comentario!: string;
+}

@@ -1,0 +1,86 @@
+import {
+  Max,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  Min,
+} from 'class-validator';
+import { TipoConectorVentoinha } from '../../../generated/prisma/enums';
+
+export class CriarEspecificacaoVentoinhaDto {
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  tamanhoMm!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
+  espessuraMm?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1_000_000)
+  rpmMinima?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  rpmMaxima?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
+  fluxoArCfm?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
+  pressaoEstaticaMmH2o?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
+  ruidoDb?: number;
+
+  @IsEnum(TipoConectorVentoinha, {
+    message: 'Informe um conector de ventoinha válido.',
+  })
+  conector!: TipoConectorVentoinha;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
+  tensaoVolts?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
+  correnteAmperes?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  pwm?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  rgb?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  argb?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  fluxoReverso?: boolean;
+}

@@ -1,0 +1,43 @@
+BLOCO DE NOTAS — CRIABYTE
+Atualizado em 15/08/2026
+
+1. LOGIN / CADASTRO COM GOOGLE — FUTURO
+- Adicionar “Continuar com Google” via OAuth.
+- Manter cadastro tradicional por e-mail e senha.
+- Não foi implementado neste patch porque exige configuração de credenciais OAuth, callback e política de vinculação de contas.
+
+2. BUSCA DE OFERTAS — SEM API EXTERNA
+- Não haverá integração automática com API do Mercado Livre nesta versão.
+- Não usar scraping do marketplace.
+- A Busca de Ofertas passa a ler os dados já cadastrados no CriaByte.
+
+3. BUSCA DE OFERTAS — REGRA FIXA
+- ADMIN e EDITOR podem acessar inicialmente.
+- USUARIO não acessa.
+- REVISOR fica para decisão posterior.
+- Aparece na Busca de Ofertas toda Oferta ATIVA, válida, vinculada a Produto ativo e com urlAfiliada preenchida.
+- O link afiliado permanece em Oferta, não em Hardware nem em Produto.
+- O frontend pode cadastrar Produto e Oferta afiliada juntos usando `ofertaInicial`; internamente continuam entidades separadas e a Busca de Ofertas passa a mostrá-la automaticamente.
+- O botão Atualizar apenas relê o banco; não busca dados externos.
+- Hardware != Produto != Oferta.
+
+4. IA — ECONOMIA DE COTA
+- Preferir botões/cards e ações determinísticas do backend.
+- Clique em botão não deve chamar Gemini quando o backend conseguir executar localmente.
+- Gemini fica para perguntas livres, interpretação ambígua ou casos sem regra determinística.
+- Fluxo guiado de montagem deve usar opções estruturadas do catálogo e motor técnico do backend.
+
+5. FONTES TÉCNICAS SECUNDÁRIAS
+Quando fabricante oficial for difícil de coletar automaticamente, usar como apoio:
+- PC-Kombo
+- TechPowerUp GPU Database
+- CPU-World
+- WikiChip
+- CPU-Monkey
+- Geizhals
+Sempre registrar a origem e priorizar fabricante oficial quando possível.
+
+6. COMUNIDADE — REGRAS FECHADAS
+- Uma avaliação por usuário/build e não editável.
+- Na primeira publicação, salvar precoNaPublicacao quando houver preço confiável para todas as peças vinculadas ao catálogo.
+- Se faltar preço confiável de qualquer peça, manter precoNaPublicacao = null.
