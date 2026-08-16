@@ -1,6 +1,9 @@
 import {
   BadRequestException,
+<<<<<<< HEAD
   ConflictException,
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   ForbiddenException,
   HttpStatus,
   Injectable,
@@ -12,7 +15,10 @@ import {
   PapelUsuario,
   StatusBuildComunidade,
   StatusComentarioBuild,
+<<<<<<< HEAD
   StatusOferta,
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   VisibilidadeBuildComunidade,
 } from '../generated/prisma/enums';
 import { ApiException } from '../common/exceptions/api.exception';
@@ -85,6 +91,7 @@ export class ComunidadeService {
     }
   }
 
+<<<<<<< HEAD
   private async calcularPrecoNaPublicacao(
     componentes: ComponenteComunidadePreparado[],
   ): Promise<number | null> {
@@ -139,6 +146,8 @@ export class ComunidadeService {
     return Number(total.toFixed(2));
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   private includeDetalhado() {
     return {
       usuario: {
@@ -1069,9 +1078,12 @@ export class ComunidadeService {
     const publicandoAgora =
       statusFinal === StatusBuildComunidade.PUBLICADA &&
       atual.status !== StatusBuildComunidade.PUBLICADA;
+<<<<<<< HEAD
     const precoNaPublicacao = publicandoAgora
       ? await this.calcularPrecoNaPublicacao(componentesFinais)
       : undefined;
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
     const build = await this.prisma.$transaction(async (tx) => {
       if (componentesAtualizados !== undefined) {
@@ -1120,10 +1132,14 @@ export class ComunidadeService {
               compatibilidadePublicacao?.consumoEnergia.consumoEstimadoWatts ??
               null,
           }),
+<<<<<<< HEAD
           ...(publicandoAgora && {
             publicadoEm: new Date(),
             precoNaPublicacao,
           }),
+=======
+          ...(publicandoAgora && { publicadoEm: new Date() }),
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
         },
       });
 
@@ -1225,6 +1241,7 @@ export class ComunidadeService {
   ) {
     await this.obterBuildParaInteracao(id, usuario);
 
+<<<<<<< HEAD
     try {
       const avaliacao = await this.prisma.avaliacaoBuild.create({
         data: {
@@ -1257,6 +1274,35 @@ export class ComunidadeService {
       }
       throw erro;
     }
+=======
+    const avaliacao = await this.prisma.avaliacaoBuild.upsert({
+      where: {
+        buildId_usuarioId: {
+          buildId: id,
+          usuarioId,
+        },
+      },
+      create: {
+        buildId: id,
+        usuarioId,
+        nota: dados.nota,
+      },
+      update: { nota: dados.nota },
+      select: {
+        id: true,
+        buildId: true,
+        usuarioId: true,
+        nota: true,
+        criadoEm: true,
+        atualizadoEm: true,
+      },
+    });
+
+    return {
+      avaliacao,
+      ...(await this.obterResumoInteracoes(id)),
+    };
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   }
 
   async listarComentarios(id: number, usuario: UsuarioComunidade) {

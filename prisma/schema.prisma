@@ -297,10 +297,14 @@ model Hardware {
   marca                      String                      @db.VarChar(100)
   modelo                     String                      @db.VarChar(150)
   descricao                  String?                     @db.Text
+<<<<<<< HEAD
   mpn                        String?                     @unique @db.VarChar(150)
   gtin                       String?                     @unique @db.VarChar(32)
   imagemUrl                  String?                     @map("imagem_url") @db.VarChar(500)
   imagemHoverUrl             String?                     @map("imagem_hover_url") @db.VarChar(500)
+=======
+  imagemUrl                  String?                     @map("imagem_url") @db.VarChar(500)
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   especificacoes             Json?
   publicado                  Boolean                     @default(false)
   ativo                      Boolean                     @default(true)

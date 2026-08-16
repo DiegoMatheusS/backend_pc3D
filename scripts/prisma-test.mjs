@@ -1,5 +1,8 @@
 import { spawnSync } from 'node:child_process';
+<<<<<<< HEAD
 import { fileURLToPath } from 'node:url';
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { config } from 'dotenv';
 
 config({ path: '.env.test', override: true, quiet: true });
@@ -27,11 +30,16 @@ if (!argumentos) {
   process.exit(1);
 }
 
+<<<<<<< HEAD
 const prismaCli = fileURLToPath(
   new URL('../node_modules/prisma/build/index.js', import.meta.url),
 );
 
 const resultado = spawnSync(process.execPath, [prismaCli, ...argumentos], {
+=======
+const executavel = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const resultado = spawnSync(executavel, ['prisma', ...argumentos], {
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   env: process.env,
   stdio: 'inherit',
 });

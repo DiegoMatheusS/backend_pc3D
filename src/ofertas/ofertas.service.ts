@@ -14,6 +14,7 @@ import { AtualizarOfertaDto } from './dtos/atualizar-oferta.dto';
 import { AtualizarParceiroDto } from './dtos/atualizar-parceiro.dto';
 import { CriarOfertaDto } from './dtos/criar-oferta.dto';
 import { CriarParceiroDto } from './dtos/criar-parceiro.dto';
+<<<<<<< HEAD
 import { VerificadorPrecosOfertasService } from './verificador-precos-ofertas.service';
 
 @Injectable()
@@ -22,6 +23,12 @@ export class OfertasService {
     private readonly prisma: PrismaService,
     private readonly verificadorPrecos: VerificadorPrecosOfertasService,
   ) {}
+=======
+
+@Injectable()
+export class OfertasService {
+  constructor(private readonly prisma: PrismaService) {}
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
   private criarSlug(texto: string): string {
     return (
@@ -559,6 +566,7 @@ export class OfertasService {
     return { hardware, ...resultado, produto: resultado.produto };
   }
 
+<<<<<<< HEAD
   async statusVerificacaoPrecos() {
     const agora = new Date();
     const ha24Horas = new Date(agora.getTime() - 24 * 60 * 60 * 1000);
@@ -762,6 +770,8 @@ export class OfertasService {
     };
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   async atualizarOferta(id: number, dados: AtualizarOfertaDto) {
     const oferta = await this.prisma.oferta.findUnique({
       where: { id },

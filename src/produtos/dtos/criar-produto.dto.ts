@@ -17,7 +17,10 @@ import { CriarEspecificacaoHeadsetDto } from './especificacoes/criar-especificac
 import { CriarEspecificacaoMonitorDto } from './especificacoes/criar-especificacao-monitor.dto';
 import { CriarEspecificacaoMouseDto } from './especificacoes/criar-especificacao-mouse.dto';
 import { CriarEspecificacaoTecladoDto } from './especificacoes/criar-especificacao-teclado.dto';
+<<<<<<< HEAD
 import { CriarOfertaInicialProdutoDto } from './criar-oferta-inicial-produto.dto';
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
 export class CriarProdutoDto {
   @IsInt()
@@ -88,11 +91,14 @@ export class CriarProdutoDto {
 
   @IsOptional()
   @ValidateNested()
+<<<<<<< HEAD
   @Type(() => CriarOfertaInicialProdutoDto)
   ofertaInicial?: CriarOfertaInicialProdutoDto;
 
   @IsOptional()
   @ValidateNested()
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   @Type(() => CriarEspecificacaoMonitorDto)
   especificacaoMonitor?: CriarEspecificacaoMonitorDto;
 

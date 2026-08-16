@@ -18,7 +18,10 @@ import { NotebooksModule } from './notebooks/notebooks.module';
 import { BuildsModule } from './builds/builds.module';
 import { AvaliacoesModule } from './avaliacoes/avaliacoes.module';
 import { ComunidadeModule } from './comunidade/comunidade.module';
+<<<<<<< HEAD
 import { BuscaOfertasModule } from './busca-ofertas/busca-ofertas.module';
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
 @Module({
   imports: [
@@ -49,7 +52,10 @@ import { BuscaOfertasModule } from './busca-ofertas/busca-ofertas.module';
     BuildsModule,
     AvaliacoesModule,
     ComunidadeModule,
+<<<<<<< HEAD
     BuscaOfertasModule,
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   ],
   controllers: [AppController],
   providers: [

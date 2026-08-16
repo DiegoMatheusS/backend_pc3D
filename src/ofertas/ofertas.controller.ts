@@ -26,7 +26,10 @@ import { CriarParceiroDto } from './dtos/criar-parceiro.dto';
 import { AtualizarParceiroDto } from './dtos/atualizar-parceiro.dto';
 import { CriarOfertaDto } from './dtos/criar-oferta.dto';
 import { AtualizarOfertaDto } from './dtos/atualizar-oferta.dto';
+<<<<<<< HEAD
 import { VerificarPrecosOfertasDto } from './dtos/verificar-precos-ofertas.dto';
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
 type UsuarioReq = { id: number; papel: string } | null;
 
@@ -125,12 +128,15 @@ export class OfertasAdminController {
     return this.ofertasService.historicoOferta(id, false);
   }
 
+<<<<<<< HEAD
   @Get('verificacao-precos/status')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   statusVerificacaoPrecos() {
     return this.ofertasService.statusVerificacaoPrecos();
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   @Get(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   buscarOferta(@Param('id', ParsePositiveIntPipe) id: number) {
@@ -158,6 +164,7 @@ export class OfertasAdminController {
 
   // ── Ofertas — ADMIN e EDITOR ──────────────────────────────────────────────
 
+<<<<<<< HEAD
   @Post('verificar-precos')
   @HttpCode(HttpStatus.OK)
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
@@ -165,6 +172,8 @@ export class OfertasAdminController {
     return this.ofertasService.verificarPrecosOfertas(dados.limite);
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   @Post()
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async criarOferta(

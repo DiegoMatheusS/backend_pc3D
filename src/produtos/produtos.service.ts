@@ -9,8 +9,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client';
 import {
+<<<<<<< HEAD
   CategoriaHardware,
   GrupoCategoriaProduto,
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   OrigemDadoProduto,
   StatusAvaliacao,
   StatusImportacao,
@@ -22,9 +25,12 @@ import { AtualizarCategoriaProdutoDto } from './dtos/atualizar-categoria-produto
 import { AtualizarProdutoDto } from './dtos/atualizar-produto.dto';
 import { CriarCategoriaProdutoDto } from './dtos/criar-categoria-produto.dto';
 import { CriarProdutoDto } from './dtos/criar-produto.dto';
+<<<<<<< HEAD
 import { CriarOfertaInicialProdutoDto } from './dtos/criar-oferta-inicial-produto.dto';
 import { CriarProdutoDeHardwareDto } from './dtos/criar-produto-de-hardware.dto';
 import { FiltrarHardwaresDisponiveisDto } from './dtos/filtrar-hardwares-disponiveis.dto';
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { FiltrarProdutosDto } from './dtos/filtrar-produtos.dto';
 import { RevisarImportacaoProdutoDto } from './dtos/revisar-importacao-produto.dto';
 import { normalizarEspecificacoesHardwarePublicas } from './normalizar-especificacoes-hardware';
@@ -61,6 +67,7 @@ export class ProdutosService {
     }
   }
 
+<<<<<<< HEAD
   private dadosCategoriaProdutoHardware(categoria: CategoriaHardware): {
     nome: string;
     slug: string;
@@ -92,6 +99,8 @@ export class ProdutosService {
     };
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   private enderecoIpPrivado(endereco: string): boolean {
     const ip = endereco.replace(/^\[|\]$/g, '').toLowerCase();
     const versao = isIP(ip);
@@ -343,6 +352,7 @@ export class ProdutosService {
     }
   }
 
+<<<<<<< HEAD
   private async criarOfertaInicialProduto(
     tx: Prisma.TransactionClient,
     produtoId: number,
@@ -389,6 +399,8 @@ export class ProdutosService {
     return oferta.id;
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   private includeProdutoDetalhado() {
     const agora = new Date();
     return {
@@ -847,6 +859,7 @@ export class ProdutosService {
     return produto;
   }
 
+<<<<<<< HEAD
   async listarHardwaresDisponiveis(filtros: FiltrarHardwaresDisponiveisDto) {
     const busca = filtros.busca?.trim();
     const hardwares = await this.prisma.hardware.findMany({
@@ -1019,6 +1032,8 @@ export class ProdutosService {
     }
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   async criar(dados: CriarProdutoDto) {
     this.validarEspecificacaoUnica(dados);
     const categoria = await this.prisma.categoriaProduto.findFirst({
@@ -1082,6 +1097,7 @@ export class ProdutosService {
     );
 
     try {
+<<<<<<< HEAD
       const produtoId = await this.prisma.$transaction(async (tx) => {
         const produto = await tx.produto.create({
           data: {
@@ -1128,6 +1144,39 @@ export class ProdutosService {
       });
 
       return this.buscarAdmin(produtoId);
+=======
+      return await this.prisma.produto.create({
+        data: {
+          categoriaId: dados.categoriaId,
+          tipo: TipoProduto.GENERICO,
+          nome: dados.nome.trim(),
+          slug,
+          marca: dados.marca?.trim() ?? null,
+          modelo: dados.modelo?.trim() ?? null,
+          descricao: dados.descricao?.trim() ?? null,
+          mpn: dados.mpn?.trim() || null,
+          gtin: dados.gtin?.trim() || null,
+          imagemUrl: dados.imagemUrl?.trim() ?? null,
+          imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
+          metadados: dados.metadados as Prisma.InputJsonValue | undefined,
+          publicado: dados.publicado ?? false,
+          ativo: dados.ativo ?? true,
+          especificacaoMonitor: dados.especificacaoMonitor
+            ? { create: dados.especificacaoMonitor }
+            : undefined,
+          especificacaoMouse: dados.especificacaoMouse
+            ? { create: dados.especificacaoMouse }
+            : undefined,
+          especificacaoTeclado: dados.especificacaoTeclado
+            ? { create: dados.especificacaoTeclado }
+            : undefined,
+          especificacaoHeadset: dados.especificacaoHeadset
+            ? { create: dados.especificacaoHeadset }
+            : undefined,
+        },
+        include: this.includeProdutoDetalhado(),
+      });
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     } catch (erro: unknown) {
       if (
         erro instanceof Prisma.PrismaClientKnownRequestError &&
@@ -1161,6 +1210,7 @@ export class ProdutosService {
     });
     if (!atual) throw new NotFoundException('Produto não encontrado.');
 
+<<<<<<< HEAD
     if (
       atual.tipo !== TipoProduto.GENERICO &&
       atual.tipo !== TipoProduto.HARDWARE
@@ -1177,6 +1227,11 @@ export class ProdutosService {
     ) {
       throw new BadRequestException(
         'A categoria comercial de um Produto vinculado a Hardware não pode ser alterada por esta rota.',
+=======
+    if (atual.tipo !== TipoProduto.GENERICO) {
+      throw new BadRequestException(
+        'Este produto possui um cadastro especializado. Use a rota administrativa de Hardware, Notebook ou PC Montado para editá-lo.',
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       );
     }
 
@@ -1188,9 +1243,13 @@ export class ProdutosService {
       });
       if (!categoria) throw new NotFoundException('Categoria não encontrada.');
       categoriaSlug = categoria.slug;
+<<<<<<< HEAD
       if (atual.tipo === TipoProduto.GENERICO) {
         this.validarCategoriaProdutoGenerico(categoriaSlug);
       }
+=======
+      this.validarCategoriaProdutoGenerico(categoriaSlug);
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     }
 
     const categoriaEspecificacaoExistente = atual.especificacaoMonitor
@@ -1357,12 +1416,18 @@ export class ProdutosService {
       select: { id: true, tipo: true },
     });
     if (!produto) throw new NotFoundException('Produto não encontrado.');
+<<<<<<< HEAD
     if (
       produto.tipo !== TipoProduto.GENERICO &&
       produto.tipo !== TipoProduto.HARDWARE
     ) {
       throw new BadRequestException(
         'Este produto possui um cadastro especializado de Notebook ou PC Montado. Use a rota administrativa correspondente para arquivá-lo.',
+=======
+    if (produto.tipo !== TipoProduto.GENERICO) {
+      throw new BadRequestException(
+        'Este produto possui um cadastro especializado. Use a rota administrativa correspondente para arquivá-lo.',
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       );
     }
 

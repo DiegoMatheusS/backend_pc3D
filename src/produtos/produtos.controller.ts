@@ -27,8 +27,11 @@ import { AtualizarCategoriaProdutoDto } from './dtos/atualizar-categoria-produto
 import { AtualizarProdutoDto } from './dtos/atualizar-produto.dto';
 import { CriarCategoriaProdutoDto } from './dtos/criar-categoria-produto.dto';
 import { CriarProdutoDto } from './dtos/criar-produto.dto';
+<<<<<<< HEAD
 import { CriarProdutoDeHardwareDto } from './dtos/criar-produto-de-hardware.dto';
 import { FiltrarHardwaresDisponiveisDto } from './dtos/filtrar-hardwares-disponiveis.dto';
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { FiltrarProdutosDto } from './dtos/filtrar-produtos.dto';
 import { ImportarProdutoLojaDto } from './dtos/importar-produto-loja.dto';
 import { RevisarImportacaoProdutoDto } from './dtos/revisar-importacao-produto.dto';
@@ -149,6 +152,7 @@ export class ProdutosAdminController {
       acao: AcaoAuditoria.PRODUTO_CRIADO,
       entidade: 'Produto',
       entidadeId: resultado.id,
+<<<<<<< HEAD
       dadosNovos: {
         nome: dados.nome,
         categoriaId: dados.categoriaId,
@@ -216,6 +220,11 @@ export class ProdutosAdminController {
         ip: req.ip,
       });
     }
+=======
+      dadosNovos: { nome: dados.nome, categoriaId: dados.categoriaId },
+      ip: req.ip,
+    });
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     return resultado;
   }
 

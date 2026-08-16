@@ -1,5 +1,8 @@
 import {
+<<<<<<< HEAD
   IsEnum,
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   IsInt,
   IsOptional,
   IsPositive,
@@ -8,7 +11,10 @@ import {
   Max,
   MaxLength,
 } from 'class-validator';
+<<<<<<< HEAD
 import { CategoriaHardware } from '../../generated/prisma/enums';
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
 export class AnalisarProdutoIaDto {
   @IsOptional()
@@ -37,10 +43,13 @@ export class NormalizarProdutoIaDto {
   })
   @MaxLength(500)
   urlOrigem?: string;
+<<<<<<< HEAD
 
   @IsOptional()
   @IsEnum(CategoriaHardware)
   categoriaEsperada?: CategoriaHardware;
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 }
 
 export class GerarDescricaoIaDto {

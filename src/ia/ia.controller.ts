@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import {
   Body,
   Controller,
@@ -6,6 +7,9 @@ import {
   HttpStatus,
   Post,
 } from '@nestjs/common';
+=======
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags } from '@nestjs/swagger';
 import { IaService } from './ia.service';
@@ -20,6 +24,7 @@ import { MontagemGuiadaIaDto } from './dtos/montagem-guiada-ia.dto';
 export class IaController {
   constructor(private readonly iaService: IaService) {}
 
+<<<<<<< HEAD
   @Get('status')
   status() {
     return this.iaService.status();
@@ -30,6 +35,8 @@ export class IaController {
     return this.iaService.menuPublico();
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   @Post('chat')
   @HttpCode(HttpStatus.OK)
   chat(@Body() dados: ChatIaDto) {

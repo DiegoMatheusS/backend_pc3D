@@ -24,6 +24,7 @@ describe('IA — fluxo guiado e peças fora do catálogo (e2e)', () => {
     if (app) await app.close();
   });
 
+<<<<<<< HEAD
   it('chat reconhece pedido de montar PC e oferece botões locais antes de usar Gemini', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/ia/chat')
@@ -72,10 +73,22 @@ describe('IA — fluxo guiado e peças fora do catálogo (e2e)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.resposta).toContain('jogos');
+=======
+  it('chat reconhece pedido de montar PC e devolve fluxo clicável sem depender do Gemini', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/ia/chat')
+      .send({ mensagem: 'Quero montar um PC gamer' });
+
+    expect(res.status).toBe(200);
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     expect(res.body.fluxoGuiado).toMatchObject({
       tipo: 'MONTAGEM_GUIADA',
       etapa: 'PROCESSADOR',
     });
+<<<<<<< HEAD
+=======
+    expect(Array.isArray(res.body.fluxoGuiado.acoes)).toBe(true);
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   });
 
   it('aceita peça externa, mantém compra indisponível e avança de etapa', async () => {
@@ -150,6 +163,7 @@ describe('IA — fluxo guiado e peças fora do catálogo (e2e)', () => {
     expect(res.body.compatibilidade.erros.join(' ')).toContain('LGA1700');
   });
 
+<<<<<<< HEAD
   it('menu público da IA é orientado a botões e não usa Gemini', async () => {
     const res = await request(app.getHttpServer()).get('/api/ia/menu');
 
@@ -244,6 +258,8 @@ describe('IA — fluxo guiado e peças fora do catálogo (e2e)', () => {
     });
   });
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   it('importação ADMIN por link bloqueia localhost/rede privada antes de acessar a URL', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/admin/ia/importar-link')

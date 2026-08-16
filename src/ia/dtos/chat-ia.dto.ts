@@ -2,7 +2,10 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+<<<<<<< HEAD
   IsBoolean,
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   IsEnum,
   IsInt,
   IsNumber,
@@ -87,6 +90,7 @@ export class ChatIaDto {
   @IsString()
   @MaxLength(50)
   preferencia?: string;
+<<<<<<< HEAD
 
   /**
    * O Gemini só é acionado quando o frontend envia explicitamente true.
@@ -95,4 +99,6 @@ export class ChatIaDto {
   @IsOptional()
   @IsBoolean()
   usarGemini?: boolean;
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 }

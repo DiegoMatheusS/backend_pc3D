@@ -11,16 +11,26 @@ import {
   CategoriaHardware,
   ChaveM2,
   FormatoArmazenamento,
+<<<<<<< HEAD
+=======
+  GrupoCategoriaProduto,
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   InterfaceArmazenamento,
   PosicaoRefrigeracaoGabinete,
   StatusAvaliacao,
   StatusOferta,
   TipoCooler,
+<<<<<<< HEAD
   FormatoModelo3D,
   OrigemModelo3D,
 } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { R2StorageService } from '../storage/r2-storage.service';
+=======
+  TipoProduto,
+} from '../generated/prisma/enums';
+import { PrismaService } from '../prisma/prisma.service';
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { normalizarEspecificacoesHardwarePublicas } from '../produtos/normalizar-especificacoes-hardware';
 import { AtualizarHardwareDto } from './dtos/atualizar-hardware.dto';
 import { CriarCompatibilidadeCpuPlacaMaeDto } from './dtos/criar-compatibilidade-cpu-placa-mae.dto';
@@ -42,6 +52,7 @@ import { AtualizarAjusteEncaixeHardwareDto } from './dtos/modelos-3d/atualizar-a
 import { ResolverMontagem3DDto } from './dtos/modelos-3d/resolver-montagem-3d.dto';
 import { ResolverMontagemCompletaDto } from './dtos/modelos-3d/resolver-montagem-completa.dto';
 import { FiltrarHardwaresDto } from './dtos/filtrar-hardwares.dto';
+<<<<<<< HEAD
 import { UploadModelo3DHardwareDto } from './dtos/modelos-3d/upload-modelo-3d-hardware.dto';
 
 @Injectable()
@@ -50,6 +61,12 @@ export class HardwaresService {
     private readonly prisma: PrismaService,
     private readonly r2StorageService: R2StorageService,
   ) {}
+=======
+
+@Injectable()
+export class HardwaresService {
+  constructor(private readonly prisma: PrismaService) {}
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
   private enderecoIpPrivado(endereco: string): boolean {
     const ip = endereco.replace(/^\[|\]$/g, '').toLowerCase();
@@ -231,6 +248,32 @@ export class HardwaresService {
     }
   }
 
+<<<<<<< HEAD
+=======
+  private async criarSlugProdutoUnico(
+    texto: string,
+    ignorarProdutoId?: number,
+  ): Promise<string> {
+    const slugBase = this.criarSlug(texto);
+    let slug = slugBase;
+    let numero = 2;
+
+    while (true) {
+      const produtoExistente = await this.prisma.produto.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+
+      if (!produtoExistente || produtoExistente.id === ignorarProdutoId) {
+        return slug;
+      }
+
+      slug = `${slugBase}-${numero}`;
+      numero++;
+    }
+  }
+
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   private categoriaParticipaMontagem3D(categoria: CategoriaHardware): boolean {
     return new Set<CategoriaHardware>([
       CategoriaHardware.PROCESSADOR,
@@ -245,6 +288,48 @@ export class HardwaresService {
     ]).has(categoria);
   }
 
+<<<<<<< HEAD
+=======
+  private dadosCategoriaProdutoHardware(categoria: CategoriaHardware): {
+    nome: string;
+    slug: string;
+    grupo: GrupoCategoriaProduto;
+  } {
+    const perifericos = new Set<CategoriaHardware>([
+      CategoriaHardware.MONITOR,
+      CategoriaHardware.MOUSE,
+      CategoriaHardware.TECLADO,
+      CategoriaHardware.FONE,
+      CategoriaHardware.MICROFONE,
+    ]);
+
+    const nomes: Record<CategoriaHardware, string> = {
+      PROCESSADOR: 'Processadores',
+      COOLER: 'Coolers',
+      PLACA_MAE: 'Placas-mãe',
+      MEMORIA_RAM: 'Memórias RAM',
+      PLACA_VIDEO: 'Placas de vídeo',
+      ARMAZENAMENTO: 'Armazenamento',
+      FONTE: 'Fontes',
+      GABINETE: 'Gabinetes',
+      VENTOINHA: 'Ventoinhas',
+      MONITOR: 'Monitores',
+      MOUSE: 'Mouses',
+      TECLADO: 'Teclados',
+      FONE: 'Fones',
+      MICROFONE: 'Microfones',
+    };
+
+    return {
+      nome: nomes[categoria],
+      slug: this.criarSlug(nomes[categoria]),
+      grupo: perifericos.has(categoria)
+        ? GrupoCategoriaProduto.PERIFERICOS
+        : GrupoCategoriaProduto.COMPONENTES,
+    };
+  }
+
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   private validarEspecificacaoDaCategoria(dados: CriarHardwareDto): void {
     const especificacoes = [
       {
@@ -684,10 +769,16 @@ export class HardwaresService {
 
     return {
       ...hardware,
+<<<<<<< HEAD
       mpn: hardware.mpn ?? hardware.produto?.mpn ?? null,
       gtin: hardware.gtin ?? hardware.produto?.gtin ?? null,
       imagemHoverUrl:
         hardware.imagemHoverUrl ?? hardware.produto?.imagemHoverUrl ?? null,
+=======
+      mpn: hardware.produto?.mpn ?? null,
+      gtin: hardware.produto?.gtin ?? null,
+      imagemHoverUrl: hardware.produto?.imagemHoverUrl ?? null,
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       especificacoes: normalizarEspecificacoesHardwarePublicas(
         hardware.categoria,
         especificacoesTecnicas,
@@ -715,7 +806,11 @@ export class HardwaresService {
     const marca = dados.marca.trim();
     const modelo = dados.modelo.trim();
 
+<<<<<<< HEAD
     const duplicadoHardware = await this.prisma.hardware.findFirst({
+=======
+    const duplicadoProduto = await this.prisma.produto.findFirst({
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       where: {
         OR: [
           ...(dados.mpn?.trim() ? [{ mpn: dados.mpn.trim() }] : []),
@@ -729,13 +824,28 @@ export class HardwaresService {
       select: { id: true, nome: true },
     });
 
+<<<<<<< HEAD
     if (duplicadoHardware) {
       throw new ConflictException(
         `Possível hardware duplicado: ID ${duplicadoHardware.id} — ${duplicadoHardware.nome}. Revise MPN/GTIN/marca/modelo antes de cadastrar outro registro técnico.`,
+=======
+    if (duplicadoProduto) {
+      throw new ConflictException(
+        `Possível produto duplicado: ID ${duplicadoProduto.id} — ${duplicadoProduto.nome}. Cadastre uma nova oferta no produto existente se for o mesmo item.`,
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       );
     }
 
     const slug = await this.criarSlugUnico(`${marca} ${modelo} ${nome}`);
+<<<<<<< HEAD
+=======
+    const slugProduto = await this.criarSlugProdutoUnico(
+      `${marca} ${modelo} ${nome}`,
+    );
+    const categoriaProduto = this.dadosCategoriaProdutoHardware(
+      dados.categoria,
+    );
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
     const dadosGabinete = dados.especificacaoGabinete
       ? (() => {
@@ -767,14 +877,43 @@ export class HardwaresService {
           marca,
           modelo,
           descricao: dados.descricao?.trim(),
+<<<<<<< HEAD
           mpn: dados.mpn?.trim() || null,
           gtin: dados.gtin?.trim() || null,
           imagemUrl: dados.imagemUrl?.trim(),
           imagemHoverUrl: dados.imagemHoverUrl?.trim() || null,
+=======
+          imagemUrl: dados.imagemUrl?.trim(),
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
           especificacoes: dados.especificacoes as
             Prisma.InputJsonValue | undefined,
           publicado: dados.publicado ?? false,
           ativo: dados.ativo ?? true,
+<<<<<<< HEAD
+=======
+          produto: {
+            create: {
+              tipo: TipoProduto.HARDWARE,
+              nome,
+              slug: slugProduto,
+              marca,
+              modelo,
+              descricao: dados.descricao?.trim() ?? null,
+              mpn: dados.mpn?.trim() || null,
+              gtin: dados.gtin?.trim() || null,
+              imagemUrl: dados.imagemUrl?.trim() ?? null,
+              imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
+              publicado: dados.publicado ?? false,
+              ativo: dados.ativo ?? true,
+              categoria: {
+                connectOrCreate: {
+                  where: { slug: categoriaProduto.slug },
+                  create: categoriaProduto,
+                },
+              },
+            },
+          },
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
           especificacaoProcessador: dados.especificacaoProcessador
             ? {
@@ -866,6 +1005,10 @@ export class HardwaresService {
           especificacaoCooler: true,
           especificacaoVentoinha: true,
           especificacaoArmazenamento: true,
+<<<<<<< HEAD
+=======
+          produto: { include: { categoria: true } },
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
         },
       });
     } catch (erro: unknown) {
@@ -984,6 +1127,19 @@ export class HardwaresService {
       ? await this.criarSlugUnico(`${marca} ${modelo} ${nome}`, id)
       : hardwareAtual.slug;
 
+<<<<<<< HEAD
+=======
+    const slugProduto = deveAtualizarSlug
+      ? await this.criarSlugProdutoUnico(
+          `${marca} ${modelo} ${nome}`,
+          hardwareAtual.produtoId ?? undefined,
+        )
+      : hardwareAtual.produto?.slug;
+    const categoriaProduto = this.dadosCategoriaProdutoHardware(
+      hardwareAtual.categoria,
+    );
+
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     const dadosGabinete = dados.especificacaoGabinete
       ? (() => {
           const { suportesFans, suportesRadiador, ...gabinete } =
@@ -1042,6 +1198,7 @@ export class HardwaresService {
               : (dados.especificacoes as Prisma.InputJsonValue),
           publicado: dados.publicado,
           ativo: dados.ativo,
+<<<<<<< HEAD
           mpn: dados.mpn === undefined ? undefined : dados.mpn.trim() || null,
           gtin:
             dados.gtin === undefined ? undefined : dados.gtin.trim() || null,
@@ -1049,6 +1206,62 @@ export class HardwaresService {
             dados.imagemHoverUrl === undefined
               ? undefined
               : dados.imagemHoverUrl.trim() || null,
+=======
+          produto: hardwareAtual.produtoId
+            ? {
+                update: {
+                  nome,
+                  ...(slugProduto !== undefined && { slug: slugProduto }),
+                  marca,
+                  modelo,
+                  ...(dados.descricao !== undefined && {
+                    descricao: dados.descricao.trim() || null,
+                  }),
+                  ...(dados.mpn !== undefined && {
+                    mpn: dados.mpn.trim() || null,
+                  }),
+                  ...(dados.gtin !== undefined && {
+                    gtin: dados.gtin.trim() || null,
+                  }),
+                  ...(dados.imagemUrl !== undefined && {
+                    imagemUrl: dados.imagemUrl.trim() || null,
+                  }),
+                  ...(dados.imagemHoverUrl !== undefined && {
+                    imagemHoverUrl: dados.imagemHoverUrl.trim() || null,
+                  }),
+                  ...(dados.publicado !== undefined && {
+                    publicado: dados.publicado,
+                  }),
+                  ...(dados.ativo !== undefined && { ativo: dados.ativo }),
+                },
+              }
+            : {
+                create: {
+                  tipo: TipoProduto.HARDWARE,
+                  nome,
+                  slug:
+                    slugProduto ??
+                    (await this.criarSlugProdutoUnico(
+                      `${marca} ${modelo} ${nome}`,
+                    )),
+                  marca,
+                  modelo,
+                  descricao: dados.descricao?.trim() ?? hardwareAtual.descricao,
+                  mpn: dados.mpn?.trim() || null,
+                  gtin: dados.gtin?.trim() || null,
+                  imagemUrl: dados.imagemUrl?.trim() ?? hardwareAtual.imagemUrl,
+                  imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
+                  publicado: dados.publicado ?? hardwareAtual.publicado,
+                  ativo: dados.ativo ?? hardwareAtual.ativo,
+                  categoria: {
+                    connectOrCreate: {
+                      where: { slug: categoriaProduto.slug },
+                      create: categoriaProduto,
+                    },
+                  },
+                },
+              },
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
           especificacaoProcessador: dados.especificacaoProcessador
             ? {
@@ -1194,6 +1407,7 @@ export class HardwaresService {
   }
 
   async remover(id: number) {
+<<<<<<< HEAD
     await this.buscarPorIdAdmin(id);
 
     await this.prisma.hardware.update({
@@ -1204,10 +1418,31 @@ export class HardwaresService {
     return {
       mensagem:
         'Hardware removido com sucesso. Produtos e Ofertas vinculados não foram alterados.',
+=======
+    const hardware = await this.buscarPorIdAdmin(id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.hardware.update({
+        where: { id },
+        data: { ativo: false, publicado: false },
+      });
+
+      if (hardware.produtoId !== null) {
+        await tx.produto.update({
+          where: { id: hardware.produtoId },
+          data: { ativo: false, publicado: false },
+        });
+      }
+    });
+
+    return {
+      mensagem: 'Hardware removido com sucesso.',
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     };
   }
 
   async removerPermanentemente(id: number) {
+<<<<<<< HEAD
     await this.buscarPorIdAdmin(id);
 
     try {
@@ -1216,6 +1451,21 @@ export class HardwaresService {
       return {
         mensagem:
           'Hardware excluído permanentemente. Produtos vinculados foram preservados e perderam apenas o vínculo técnico.',
+=======
+    const hardware = await this.buscarPorIdAdmin(id);
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.hardware.delete({ where: { id } });
+
+        if (hardware.produtoId !== null) {
+          await tx.produto.delete({ where: { id: hardware.produtoId } });
+        }
+      });
+
+      return {
+        mensagem: 'Hardware excluído permanentemente.',
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       };
     } catch (erro: unknown) {
       if (
@@ -4209,6 +4459,7 @@ export class HardwaresService {
       resultados,
     };
   }
+<<<<<<< HEAD
   statusStorageModelos3D() {
     return this.r2StorageService.status();
   }
@@ -4366,6 +4617,8 @@ export class HardwaresService {
     return pasta;
   }
 
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   async criarModelo3DHardware(
     hardwareId: number,
     dados: CriarModelo3DHardwareDto,
@@ -6375,6 +6628,7 @@ export class HardwaresService {
 
   // ── Importação de produto por URL ─────────────────────────────────────────
 
+<<<<<<< HEAD
   private mesmoHostImportacao(a: URL, b: URL): boolean {
     const normalizar = (host: string) =>
       host.toLowerCase().replace(/^www\./, '');
@@ -6475,11 +6729,115 @@ export class HardwaresService {
       url: url.toString(),
       tipo: tipoFonte,
       titulo,
+=======
+  async importarProdutoPorUrl(
+    urlOriginal: string,
+  ): Promise<Record<string, unknown>> {
+    let html: string;
+    let urlAtual = await this.validarUrlPublicaImportacao(urlOriginal);
+
+    try {
+      let resposta: Response | null = null;
+
+      // Redirect manual para validar novamente cada destino e impedir que uma
+      // URL pública redirecione o servidor para localhost/rede privada.
+      for (
+        let redirecionamentos = 0;
+        redirecionamentos <= 3;
+        redirecionamentos++
+      ) {
+        resposta = await fetch(urlAtual, {
+          redirect: 'manual',
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (compatible; PCBuilderBot/1.0; +https://pcbuilder.app)',
+            Accept: 'text/html,application/xhtml+xml',
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+          },
+          signal: AbortSignal.timeout(12_000),
+        });
+
+        if (
+          resposta.status >= 300 &&
+          resposta.status < 400 &&
+          resposta.headers.has('location')
+        ) {
+          if (redirecionamentos === 3) {
+            throw new BadRequestException(
+              'A página realizou redirecionamentos demais.',
+            );
+          }
+
+          const destino = new URL(
+            resposta.headers.get('location') ?? '',
+            urlAtual,
+          );
+          urlAtual = await this.validarUrlPublicaImportacao(destino.toString());
+          continue;
+        }
+
+        break;
+      }
+
+      if (!resposta?.ok) {
+        throw new BadRequestException(
+          `A página retornou o status ${resposta?.status ?? 'desconhecido'}. Verifique o endereço.`,
+        );
+      }
+
+      const tipo = resposta.headers.get('content-type') ?? '';
+      if (
+        !tipo.includes('text/html') &&
+        !tipo.includes('application/xhtml+xml')
+      ) {
+        throw new BadRequestException(
+          'O endereço não retornou uma página HTML de produto.',
+        );
+      }
+
+      html = await this.lerHtmlLimitado(resposta);
+    } catch (erro) {
+      if (erro instanceof BadRequestException) throw erro;
+      throw new BadRequestException(
+        'Não foi possível acessar a página. A loja pode estar bloqueando requisições externas.',
+      );
+    }
+
+    // Extrai blocos JSON-LD
+    const jsonLdBlocos: string[] = [];
+    const reJsonLd =
+      /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = reJsonLd.exec(html)) !== null) {
+      jsonLdBlocos.push(m[1].trim());
+    }
+
+    // Extrai meta tags Open Graph e produto
+    const metaMap: Record<string, string> = {};
+    const reMeta =
+      /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']+)["'][^>]*>/gi;
+    while ((m = reMeta.exec(html)) !== null) {
+      metaMap[m[1].toLowerCase()] = m[2];
+    }
+
+    // Extrai texto da página limitado (para a IA)
+    const textoLimpo = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .slice(0, 8000); // máximo 8 KB de texto
+
+    return {
+      urlOriginal,
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       jsonLd: jsonLdBlocos,
       meta: metaMap,
       textoExtraido: textoLimpo,
     };
   }
+<<<<<<< HEAD
 
   private async baixarPaginaImportacao(
     urlOriginal: string | URL,
@@ -6721,4 +7079,6 @@ export class HardwaresService {
       textoExtraido,
     };
   }
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 }

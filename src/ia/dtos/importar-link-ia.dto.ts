@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 import { IsEnum, IsOptional, IsUrl, MaxLength } from 'class-validator';
 import { CategoriaHardware } from '../../generated/prisma/enums';
+=======
+import { IsUrl, MaxLength } from 'class-validator';
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
 export class ImportarLinkIaDto {
   @IsUrl({
@@ -9,6 +13,7 @@ export class ImportarLinkIaDto {
   })
   @MaxLength(500)
   url!: string;
+<<<<<<< HEAD
 
   /**
    * O ADMIN pode escolher a categoria antes de importar. Isso funciona como
@@ -17,4 +22,6 @@ export class ImportarLinkIaDto {
   @IsOptional()
   @IsEnum(CategoriaHardware)
   categoriaEsperada?: CategoriaHardware;
+=======
+>>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 }
