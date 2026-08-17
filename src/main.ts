@@ -125,13 +125,10 @@ async function bootstrap(): Promise<void> {
       'Verificação de compatibilidade entre componentes',
     )
     .addTag('Ofertas', 'Ofertas de lojas parceiras')
-<<<<<<< HEAD
     .addTag(
       'Busca de Ofertas',
       'Visão interna das Ofertas do CriaByte que possuem link afiliado',
     )
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     .addTag('Loja', 'Catálogo público de produtos')
     .addTag('Loja Admin', 'Gestão administrativa do catálogo da loja')
     .addTag('Notebooks', 'Catálogo público de notebooks')

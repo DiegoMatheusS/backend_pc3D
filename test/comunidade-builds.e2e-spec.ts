@@ -1,5 +1,4 @@
 import request from 'supertest';
-<<<<<<< HEAD
 import {
   GrupoCategoriaProduto,
   StatusOferta,
@@ -11,9 +10,6 @@ import {
   criarFixturePcCompleto,
   limparFixturePcCompleto,
 } from './fixtures/pc-completo.fixture';
-=======
-import { PrismaService } from '../src/prisma/prisma.service';
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { App, criarApp, loginAdmin } from './app-setup';
 
 jest.setTimeout(30000);
@@ -233,10 +229,7 @@ describe('Builds da Comunidade (e2e)', () => {
     expect(res.body.status).toBe('PUBLICADA');
     expect(res.body.publicadoEm).not.toBeNull();
     expect(res.body.consumoNaPublicacao).toBeNull();
-<<<<<<< HEAD
     expect(res.body.precoNaPublicacao).toBeNull();
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     expect(res.body.compatibilidadePublicacao).toBeNull();
     expect(
       res.body.componentes.every(
@@ -326,7 +319,6 @@ describe('Builds da Comunidade (e2e)', () => {
     expect(publicar.status).toBe(400);
   });
 
-<<<<<<< HEAD
   it('salva o preço total confiável das peças quando a build é publicada', async () => {
     const fixture = await criarFixturePcCompleto(prisma);
     const categoria = await prisma.categoriaProduto.create({
@@ -430,8 +422,6 @@ describe('Builds da Comunidade (e2e)', () => {
     }
   });
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   it('DELETE faz soft delete e remove a build de minhas builds', async () => {
     const excluir = await request(app.getHttpServer())
       .delete(`/api/comunidade/builds/${buildId}`)

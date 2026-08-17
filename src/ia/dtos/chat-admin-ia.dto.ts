@@ -2,10 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
-<<<<<<< HEAD
   IsBoolean,
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   IsObject,
   IsOptional,
   IsString,
@@ -38,11 +35,8 @@ export class ChatAdminIaDto {
     maxStringLength: 10_000,
   })
   contexto?: Record<string, unknown>;
-<<<<<<< HEAD
 
   @IsOptional()
   @IsBoolean()
   usarGemini?: boolean;
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 }

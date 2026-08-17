@@ -1,10 +1,7 @@
 import {
   Body,
   Controller,
-<<<<<<< HEAD
   Get,
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   HttpCode,
   HttpStatus,
   Post,
@@ -29,11 +26,7 @@ import {
 import { ChatAdminIaDto } from './dtos/chat-admin-ia.dto';
 import { ImportarLinkIaDto } from './dtos/importar-link-ia.dto';
 
-<<<<<<< HEAD
 type UsuarioReq = { id: number; papel: string } | null;
-=======
-type UsuarioReq = { id: number } | null;
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
 @ApiTags('IA Admin')
 @Controller('admin/ia')
@@ -60,15 +53,12 @@ export class IaAdminController {
     });
   }
 
-<<<<<<< HEAD
   @Get('menu')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   menu(@UsuarioAtual() usuario: UsuarioReq) {
     return this.iaService.menuAdmin(usuario?.papel);
   }
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   @Post('chat')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   @HttpCode(HttpStatus.OK)
@@ -90,11 +80,7 @@ export class IaAdminController {
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {
-<<<<<<< HEAD
     const resultado = await this.iaService.importarLinkAdmin(dados);
-=======
-    const resultado = await this.iaService.importarLinkAdmin(dados.url);
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     this.registrarUso(usuario?.id, 'IMPORTAR_LINK', req);
     return resultado;
   }

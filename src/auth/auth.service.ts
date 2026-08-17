@@ -6,11 +6,13 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
-import { Prisma } from '../generated/prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { PapelUsuario } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { CadastroDto } from './dtos/cadastro.dto';
+import { GoogleAuthDto } from './dtos/google-auth.dto';
 import { LoginDto } from './dtos/login.dto';
+import { GoogleIdentityService } from './google-identity.service';
 
 const HASH_SENHA_DUMMY =
   '$argon2id$v=19$m=65536,t=3,p=4$M74wbk2A3STYW5JooyM0kA$A03opnxoZrcHhU0sB1jOoA57uDh6v5dAj8LjLLwI008';
@@ -20,6 +22,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly googleIdentityService: GoogleIdentityService,
   ) {}
 
   private gerarHashToken(token: string): string {
@@ -29,6 +32,44 @@ export class AuthService {
   private tokenSessaoTemFormatoValido(token: string): boolean {
     // randomBytes(32).toString('base64url') produz exatamente 43 caracteres.
     return /^[A-Za-z0-9_-]{43}$/u.test(token);
+  }
+
+  private async criarSessao(usuario: {
+    id: number;
+    nome: string;
+    email: string;
+    papel: PapelUsuario;
+    ativo: boolean;
+  }) {
+    const token = randomBytes(32).toString('base64url');
+    const tokenHash = this.gerarHashToken(token);
+
+    const duracaoHoras = Number(
+      this.configService.get<string>('SESSION_DURATION_HOURS') ?? 8,
+    );
+    const duracaoValida =
+      Number.isFinite(duracaoHoras) && duracaoHoras > 0 ? duracaoHoras : 8;
+    const expiraEm = new Date(Date.now() + duracaoValida * 60 * 60 * 1000);
+
+    await this.prisma.sessao.create({
+      data: {
+        usuarioId: usuario.id,
+        tokenHash,
+        expiraEm,
+      },
+    });
+
+    return {
+      token,
+      expiraEm,
+      usuario: {
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+        papel: usuario.papel,
+        ativo: usuario.ativo,
+      },
+    };
   }
 
   async cadastrar(dados: CadastroDto) {
@@ -58,7 +99,7 @@ export class AuthService {
       });
     } catch (erro: unknown) {
       if (
-        erro instanceof Prisma.PrismaClientKnownRequestError &&
+        erro instanceof PrismaClientKnownRequestError &&
         erro.code === 'P2002'
       ) {
         throw new ConflictException('Já existe um usuário com este e-mail.');
@@ -91,33 +132,123 @@ export class AuthService {
       throw new UnauthorizedException('E-mail ou senha incorretos.');
     }
 
-    const token = randomBytes(32).toString('base64url');
-    const tokenHash = this.gerarHashToken(token);
+    return this.criarSessao(usuario);
+  }
 
-    const duracaoHoras = Number(
-      this.configService.get<string>('SESSION_DURATION_HOURS') ?? 8,
+  async autenticarComGoogle(dados: GoogleAuthDto) {
+    const identidade = await this.googleIdentityService.verificarCredential(
+      dados.credential,
     );
 
-    const expiraEm = new Date(Date.now() + duracaoHoras * 60 * 60 * 1000);
-
-    await this.prisma.sessao.create({
-      data: {
-        usuarioId: usuario.id,
-        tokenHash,
-        expiraEm,
-      },
+    let usuario = await this.prisma.usuario.findUnique({
+      where: { googleSub: identidade.sub },
     });
+    let novoUsuario = false;
+
+    if (!usuario) {
+      const usuarioMesmoEmail = await this.prisma.usuario.findUnique({
+        where: { email: identidade.email },
+      });
+
+      if (usuarioMesmoEmail) {
+        if (!usuarioMesmoEmail.ativo) {
+          throw new UnauthorizedException('Esta conta está desativada.');
+        }
+
+        if (!identidade.emailAutoritativo && !usuarioMesmoEmail.googleSub) {
+          throw new ConflictException(
+            'Já existe uma conta com este e-mail. Use e-mail e senha para entrar nesta conta.',
+          );
+        }
+
+        if (
+          usuarioMesmoEmail.googleSub &&
+          usuarioMesmoEmail.googleSub !== identidade.sub
+        ) {
+          throw new UnauthorizedException(
+            'Este e-mail já está vinculado a outra conta Google.',
+          );
+        }
+
+        usuario = await this.prisma.usuario.update({
+          where: { id: usuarioMesmoEmail.id },
+          data: { googleSub: identidade.sub },
+        });
+      } else {
+        // Mantemos senhaHash obrigatório para não quebrar o login tradicional.
+        // A senha aleatória nunca é devolvida nem conhecida pelo usuário Google.
+        const senhaAleatoria = randomBytes(32).toString('base64url');
+        const senhaHash = await argon2.hash(senhaAleatoria, {
+          type: argon2.argon2id,
+        });
+
+        try {
+          usuario = await this.prisma.usuario.create({
+            data: {
+              nome: identidade.nome,
+              email: identidade.email,
+              senhaHash,
+              googleSub: identidade.sub,
+              papel: PapelUsuario.USUARIO,
+            },
+          });
+          novoUsuario = true;
+        } catch (erro: unknown) {
+          if (
+            erro instanceof PrismaClientKnownRequestError &&
+            erro.code === 'P2002'
+          ) {
+            // Protege contra dois primeiros logins simultâneos da mesma conta.
+            usuario = await this.prisma.usuario.findUnique({
+              where: { googleSub: identidade.sub },
+            });
+
+            if (!usuario) {
+              usuario = await this.prisma.usuario.findUnique({
+                where: { email: identidade.email },
+              });
+            }
+
+            if (!usuario || !usuario.ativo) {
+              throw new UnauthorizedException(
+                'Não foi possível autenticar esta conta Google.',
+              );
+            }
+
+            if (usuario.googleSub && usuario.googleSub !== identidade.sub) {
+              throw new UnauthorizedException(
+                'Este e-mail já está vinculado a outra conta Google.',
+              );
+            }
+
+            if (!usuario.googleSub) {
+              if (!identidade.emailAutoritativo) {
+                throw new ConflictException(
+                  'Já existe uma conta com este e-mail. Use e-mail e senha para entrar nesta conta.',
+                );
+              }
+
+              usuario = await this.prisma.usuario.update({
+                where: { id: usuario.id },
+                data: { googleSub: identidade.sub },
+              });
+            }
+          } else {
+            throw erro;
+          }
+        }
+      }
+    }
+
+    if (!usuario || !usuario.ativo) {
+      throw new UnauthorizedException('Esta conta está desativada.');
+    }
+
+    const sessao = await this.criarSessao(usuario);
 
     return {
-      token,
-      expiraEm,
-      usuario: {
-        id: usuario.id,
-        nome: usuario.nome,
-        email: usuario.email,
-        papel: usuario.papel,
-        ativo: usuario.ativo,
-      },
+      ...sessao,
+      novoUsuario,
     };
   }
 

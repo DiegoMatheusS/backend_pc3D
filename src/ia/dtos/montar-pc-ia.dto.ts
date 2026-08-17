@@ -15,11 +15,7 @@ export class MontarPcIaDto {
   @IsNumber()
   @IsPositive()
   @Max(100_000_000)
-<<<<<<< HEAD
   orcamento!: number;
-=======
-  orcamento: number;
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
   @IsOptional()
   @IsEnum(UsoPC)

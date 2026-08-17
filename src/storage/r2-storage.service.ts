@@ -164,6 +164,33 @@ export class R2StorageService {
     }
   }
 
+  ehArquivoGerenciado(storageKey: string | null, arquivoUrl: string): boolean {
+    if (!storageKey) {
+      return false;
+    }
+
+    const publicUrl =
+      this.configService
+        .get<string>('R2_PUBLIC_URL')
+        ?.trim()
+        .replace(/\/+$/, '') ?? '';
+
+    if (!publicUrl) {
+      return false;
+    }
+
+    let chave: string;
+
+    try {
+      chave = this.normalizarStorageKey(storageKey);
+    } catch {
+      return false;
+    }
+
+    const urlEsperada = `${publicUrl}/${this.codificarCaminho(chave)}`;
+    return arquivoUrl.trim() === urlEsperada;
+  }
+
   async removerObjeto(storageKey: string): Promise<void> {
     const chave = this.normalizarStorageKey(storageKey);
     const configuracao = this.obterConfiguracao();

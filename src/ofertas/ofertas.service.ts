@@ -14,7 +14,6 @@ import { AtualizarOfertaDto } from './dtos/atualizar-oferta.dto';
 import { AtualizarParceiroDto } from './dtos/atualizar-parceiro.dto';
 import { CriarOfertaDto } from './dtos/criar-oferta.dto';
 import { CriarParceiroDto } from './dtos/criar-parceiro.dto';
-<<<<<<< HEAD
 import { VerificadorPrecosOfertasService } from './verificador-precos-ofertas.service';
 
 @Injectable()
@@ -23,12 +22,6 @@ export class OfertasService {
     private readonly prisma: PrismaService,
     private readonly verificadorPrecos: VerificadorPrecosOfertasService,
   ) {}
-=======
-
-@Injectable()
-export class OfertasService {
-  constructor(private readonly prisma: PrismaService) {}
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
   private criarSlug(texto: string): string {
     return (
@@ -241,6 +234,7 @@ export class OfertasService {
         },
         hardware: { select: { id: true, nome: true, categoria: true } },
         parceiro: { select: { id: true, nome: true, slug: true } },
+        usuarioOrigem: { select: { id: true, nome: true } },
       },
     });
     return { total: ofertas.length, ofertas };
@@ -253,6 +247,7 @@ export class OfertasService {
         produto: true,
         hardware: { select: { id: true, nome: true, categoria: true } },
         parceiro: true,
+        usuarioOrigem: { select: { id: true, nome: true } },
       },
     });
     if (!oferta) throw new NotFoundException('Oferta não encontrada.');
@@ -379,6 +374,7 @@ export class OfertasService {
         verificadoEm: true,
         status: true,
         atualizadoEm: true,
+        usuarioOrigem: { select: { id: true, nome: true } },
         parceiro: {
           select: {
             id: true,
@@ -395,30 +391,41 @@ export class OfertasService {
   async listarOfertasDoProduto(produtoId: number) {
     const produto = await this.prisma.produto.findFirst({
       where: { id: produtoId, ativo: true, publicado: true },
-      select: { id: true, nome: true, slug: true },
+      select: {
+        id: true,
+        nome: true,
+        slug: true,
+        usuarioOrigem: { select: { id: true, nome: true } },
+      },
     });
     if (!produto) throw new NotFoundException('Produto não encontrado.');
 
     const ofertasBanco = await this.listarAtivasProduto(produtoId);
-    const ofertas = ofertasBanco.map((oferta) => ({
-      ...oferta,
-      preco: Number(oferta.preco),
-      precoAtual: Number(oferta.preco),
-      precoAnterior:
-        oferta.precoAnterior === null ? null : Number(oferta.precoAnterior),
-      frete: oferta.frete === null ? null : Number(oferta.frete),
-      percentualDesconto: this.calcularPercentualDesconto(
-        oferta.preco,
-        oferta.precoAnterior,
-      ),
-      urlAfiliado: oferta.urlAfiliada,
-      urlCompra: oferta.urlAfiliada ?? oferta.urlOriginal,
-      possuiLinkAfiliado: oferta.urlAfiliada !== null,
-    }));
+    const ofertas = ofertasBanco.map((oferta) => {
+      const { usuarioOrigem, ...ofertaPublica } = oferta;
+      return {
+        ...ofertaPublica,
+        cadastradoPor: usuarioOrigem,
+        preco: Number(oferta.preco),
+        precoAtual: Number(oferta.preco),
+        precoAnterior:
+          oferta.precoAnterior === null ? null : Number(oferta.precoAnterior),
+        frete: oferta.frete === null ? null : Number(oferta.frete),
+        percentualDesconto: this.calcularPercentualDesconto(
+          oferta.preco,
+          oferta.precoAnterior,
+        ),
+        urlAfiliado: oferta.urlAfiliada,
+        urlCompra: oferta.urlAfiliada ?? oferta.urlOriginal,
+        possuiLinkAfiliado: oferta.urlAfiliada !== null,
+      };
+    });
     const melhorOferta = ofertas[0] ?? null;
 
+    const { usuarioOrigem, ...produtoPublico } = produto;
+
     return {
-      produto,
+      produto: { ...produtoPublico, cadastradoPor: usuarioOrigem },
       total: ofertas.length,
       quantidadeOfertasAtivas: ofertas.length,
       melhorPreco: melhorOferta
@@ -450,6 +457,7 @@ export class OfertasService {
         marca: true,
         imagemUrl: true,
         tipo: true,
+        usuarioOrigem: { select: { id: true, nome: true } },
         categoria: {
           select: { id: true, nome: true, slug: true, grupo: true },
         },
@@ -472,6 +480,7 @@ export class OfertasService {
             validoAte: true,
             verificadoEm: true,
             atualizadoEm: true,
+            usuarioOrigem: { select: { id: true, nome: true } },
             parceiro: {
               select: {
                 id: true,
@@ -519,6 +528,7 @@ export class OfertasService {
         marca: produto.marca,
         imagem: produto.imagemUrl,
         categoria: produto.categoria,
+        cadastradoPor: produto.usuarioOrigem,
         grupo,
         melhorPreco: precoAtual,
         precoAnterior,
@@ -541,6 +551,7 @@ export class OfertasService {
           validoAte: oferta.validoAte,
           verificadoEm: oferta.verificadoEm,
           atualizadoEm: oferta.atualizadoEm,
+          cadastradoPor: oferta.usuarioOrigem,
           parceiro: oferta.parceiro,
         },
       };
@@ -566,7 +577,6 @@ export class OfertasService {
     return { hardware, ...resultado, produto: resultado.produto };
   }
 
-<<<<<<< HEAD
   async statusVerificacaoPrecos() {
     const agora = new Date();
     const ha24Horas = new Date(agora.getTime() - 24 * 60 * 60 * 1000);
@@ -770,8 +780,6 @@ export class OfertasService {
     };
   }
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   async atualizarOferta(id: number, dados: AtualizarOfertaDto) {
     const oferta = await this.prisma.oferta.findUnique({
       where: { id },

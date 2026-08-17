@@ -189,3 +189,38 @@ R2 / modelos 3D (fix AWS SDK v3)
 - GET /api/admin/hardwares/modelos-3d/storage/testar valida autenticação/conexão real com o bucket.
 - POST /api/admin/hardwares/:hardwareId/modelos-3d/upload envia o GLB.
 - Depois de substituir o backend, rode npm install antes de npm run verify para instalar @aws-sdk/client-s3 e atualizar package-lock.json.
+
+EXCLUSAO DE MODELO 3D / R2
+
+- DELETE /api/admin/hardwares/modelos-3d/:modeloId
+  - somente ADMIN;
+  - remove permanentemente o registro Modelo3DHardware;
+  - quando o modelo foi enviado para o R2 gerenciado pelo CriaByte, tenta remover tambem o objeto do bucket;
+  - modelos externos/CDNs de terceiros nunca tem o arquivo remoto apagado;
+  - se a exclusao do R2 falhar depois da remocao do banco, a API retorna sucesso com aviso e o storageKey para limpeza manual.
+
+- Para apenas esconder/desativar sem apagar o arquivo, continua disponivel:
+  PATCH /api/admin/hardwares/modelos-3d/:modeloId/status
+  Body: { "ativo": false }
+
+=== 2026-08-16 — SUGESTÕES DE OFERTAS POR USUÁRIOS ===
+- Nova entidade SugestaoOferta separada de Oferta publicada.
+- Usuário autenticado envia link, categoria, preço e especificações técnicas dinâmicas.
+- Toda sugestão nasce EM_ANALISE.
+- Somente ADMIN pode aprovar/rejeitar.
+- Aprovação exige Produto existente; Hardware/Produto nunca são criados automaticamente.
+- Parceiro pode ser inferido pelo domínio do link; Admin pode corrigir na aprovação.
+- Se parceiro usa programa de afiliados, URL afiliada é obrigatória antes da aprovação.
+- Aprovação cria Oferta + histórico de preço em transação e marca SugestaoOferta APROVADA.
+- Limite: 10 sugestões por usuário/24h e throttle de 5 envios/minuto.
+- Contrato do frontend: CONTRATO_FRONTEND_SUGESTOES_OFERTAS.txt
+
+Após substituir o backend por este ZIP, executar nesta ordem:
+  npm install
+  npm run db:generate
+  npm run db:migrate
+  npm run db:test:migrate
+  npm run verify
+
+O db:migrate aplica somente migrations pendentes no banco configurado em .env.
+O db:test:migrate continua protegido para aceitar apenas banco contendo /criabyte_test.

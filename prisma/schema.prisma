@@ -255,6 +255,7 @@ model Usuario {
   nome                         String               @db.VarChar(150)
   email                        String               @unique @db.VarChar(255)
   senhaHash                    String               @map("senha_hash") @db.VarChar(255)
+  googleSub                    String?              @unique @map("google_sub") @db.VarChar(255)
   papel                        PapelUsuario         @default(USUARIO)
   ativo                        Boolean              @default(true)
   criadoEm                     DateTime             @default(now()) @map("criado_em") @db.Timestamptz(3)
@@ -268,7 +269,11 @@ model Usuario {
   avaliacoes       Avaliacao[]
   buildsComunidade BuildComunidade[]
   avaliacoesBuild  AvaliacaoBuild[]
-  comentariosBuild ComentarioBuild[]
+  comentariosBuild              ComentarioBuild[]
+  sugestoesOfertas             SugestaoOferta[] @relation("SugestoesOfertasUsuario")
+  sugestoesOfertasAnalisadas   SugestaoOferta[] @relation("SugestoesOfertasAnalisadas")
+  produtosOrigem               Produto[]        @relation("ProdutosUsuarioOrigem")
+  ofertasOrigem                Oferta[]         @relation("OfertasUsuarioOrigem")
 
   @@map("usuarios")
 }
@@ -297,14 +302,10 @@ model Hardware {
   marca                      String                      @db.VarChar(100)
   modelo                     String                      @db.VarChar(150)
   descricao                  String?                     @db.Text
-<<<<<<< HEAD
   mpn                        String?                     @unique @db.VarChar(150)
   gtin                       String?                     @unique @db.VarChar(32)
   imagemUrl                  String?                     @map("imagem_url") @db.VarChar(500)
   imagemHoverUrl             String?                     @map("imagem_hover_url") @db.VarChar(500)
-=======
-  imagemUrl                  String?                     @map("imagem_url") @db.VarChar(500)
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   especificacoes             Json?
   publicado                  Boolean                     @default(false)
   ativo                      Boolean                     @default(true)
@@ -916,6 +917,12 @@ enum StatusOferta {
   DESCONTINUADA
 }
 
+enum StatusSugestaoOferta {
+  EM_ANALISE
+  APROVADA
+  REJEITADA
+}
+
 model Parceiro {
   id                Int      @id @default(autoincrement())
   nome              String   @db.VarChar(150)
@@ -929,7 +936,8 @@ model Parceiro {
   criadoEm          DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm      DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
-  ofertas Oferta[]
+  ofertas          Oferta[]
+  sugestoesOfertas SugestaoOferta[]
 
   @@map("parceiros")
 }
@@ -937,6 +945,7 @@ model Parceiro {
 model Oferta {
   id                    Int          @id @default(autoincrement())
   produtoId             Int          @map("produto_id")
+  usuarioOrigemId       Int?         @map("usuario_origem_id")
   hardwareId            Int?         @map("hardware_id")
   parceiroId            Int          @map("parceiro_id")
   vendedorNome          String?      @map("vendedor_nome") @db.VarChar(200)
@@ -954,16 +963,53 @@ model Oferta {
   criadoEm              DateTime     @default(now()) @map("criado_em") @db.Timestamptz(3)
 
   produto         Produto                @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  usuarioOrigem   Usuario?               @relation("OfertasUsuarioOrigem", fields: [usuarioOrigemId], references: [id], onDelete: SetNull)
   hardware        Hardware?              @relation(fields: [hardwareId], references: [id], onDelete: SetNull)
   parceiro        Parceiro               @relation(fields: [parceiroId], references: [id], onDelete: Cascade)
   historicoPrecos HistoricoPrecoOferta[]
+  sugestaoOrigem  SugestaoOferta?
 
   @@unique([produtoId, parceiroId, urlOriginal])
   @@index([produtoId, status])
+  @@index([usuarioOrigemId])
   @@index([hardwareId, status])
   @@index([parceiroId])
   @@index([vendedorIdentificador])
   @@map("ofertas")
+}
+
+model SugestaoOferta {
+  id                Int                  @id @default(autoincrement())
+  usuarioId         Int                  @map("usuario_id")
+  produtoId         Int?                 @map("produto_id")
+  parceiroId        Int?                 @map("parceiro_id")
+  ofertaId          Int?                 @unique @map("oferta_id")
+  nome              String               @db.VarChar(200)
+  urlOriginal       String               @map("url_original") @db.VarChar(500)
+  categoria         String               @db.VarChar(50)
+  preco             Decimal              @db.Decimal(10, 2)
+  precoAnterior     Decimal?             @map("preco_anterior") @db.Decimal(10, 2)
+  especificacoes    Json?
+  observacaoUsuario String?              @map("observacao_usuario") @db.Text
+  status            StatusSugestaoOferta @default(EM_ANALISE)
+  analisadoPorId    Int?                 @map("analisado_por_id")
+  analisadoEm       DateTime?            @map("analisado_em") @db.Timestamptz(3)
+  motivoAnalise     String?              @map("motivo_analise") @db.Text
+  criadoEm          DateTime             @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm      DateTime             @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  usuario      Usuario  @relation("SugestoesOfertasUsuario", fields: [usuarioId], references: [id], onDelete: Restrict)
+  analisadoPor Usuario? @relation("SugestoesOfertasAnalisadas", fields: [analisadoPorId], references: [id], onDelete: SetNull)
+  produto      Produto? @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+  parceiro     Parceiro? @relation(fields: [parceiroId], references: [id], onDelete: SetNull)
+  oferta       Oferta?   @relation(fields: [ofertaId], references: [id], onDelete: SetNull)
+
+  @@index([usuarioId, criadoEm])
+  @@index([status, criadoEm])
+  @@index([categoria, status])
+  @@index([produtoId])
+  @@index([parceiroId])
+  @@map("sugestoes_ofertas")
 }
 
 model HistoricoPrecoOferta {
@@ -996,8 +1042,9 @@ model CategoriaProduto {
 }
 
 model Produto {
-  id             Int         @id @default(autoincrement())
-  categoriaId    Int         @map("categoria_id")
+  id               Int         @id @default(autoincrement())
+  categoriaId      Int         @map("categoria_id")
+  usuarioOrigemId  Int?        @map("usuario_origem_id")
   tipo           TipoProduto @default(GENERICO)
   nome           String      @db.VarChar(200)
   slug           String      @unique @db.VarChar(220)
@@ -1015,6 +1062,7 @@ model Produto {
   atualizadoEm   DateTime    @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
   categoria            CategoriaProduto      @relation(fields: [categoriaId], references: [id])
+  usuarioOrigem        Usuario?               @relation("ProdutosUsuarioOrigem", fields: [usuarioOrigemId], references: [id], onDelete: SetNull)
   hardware             Hardware?
   notebook             Notebook?
   build                Build?
@@ -1025,8 +1073,10 @@ model Produto {
   especificacaoMouse   EspecificacaoMouse?
   especificacaoTeclado EspecificacaoTeclado?
   especificacaoHeadset EspecificacaoHeadset?
+  sugestoesOfertas      SugestaoOferta[]
 
   @@index([categoriaId, ativo, publicado])
+  @@index([usuarioOrigemId])
   @@index([marca])
   @@index([nome])
   @@map("produtos")

@@ -116,6 +116,16 @@ describe('Auth (e2e)', () => {
     expect(res.body).toHaveProperty('codigo');
   });
 
+  it('POST /api/auth/google — exige credential válida no payload', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/google')
+      .send({ credential: 'curta' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('statusCode', 400);
+    expect(res.body).toHaveProperty('codigo');
+  });
+
   it('GET /api/auth/perfil — sem cookie → 401', async () => {
     const res = await request(app.getHttpServer()).get('/api/auth/perfil');
     expect(res.status).toBe(401);

@@ -130,11 +130,7 @@ describe('Comunidade — avaliações e comentários (e2e)', () => {
     expect(res.status).toBe(400);
   });
 
-<<<<<<< HEAD
   it('mantém uma avaliação imutável por usuário e calcula média', async () => {
-=======
-  it('mantém uma avaliação por usuário e calcula média', async () => {
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     const primeira = await request(app.getHttpServer())
       .post(`/api/comunidade/builds/${buildId}/avaliacao`)
       .set('Cookie', cookieAutor)
@@ -155,13 +151,7 @@ describe('Comunidade — avaliações e comentários (e2e)', () => {
       .post(`/api/comunidade/builds/${buildId}/avaliacao`)
       .set('Cookie', cookieAutor)
       .send({ nota: 4 });
-<<<<<<< HEAD
     expect(atualizar.status).toBe(409);
-=======
-    expect(atualizar.status).toBe(201);
-    expect(atualizar.body.quantidadeAvaliacoes).toBe(2);
-    expect(atualizar.body.mediaAvaliacoes).toBe(3.5);
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
     const quantidadeNoBanco = await prisma.avaliacaoBuild.count({
       where: { buildId, usuarioId: autorId },
@@ -175,11 +165,7 @@ describe('Comunidade — avaliações e comentários (e2e)', () => {
     );
 
     expect(res.status).toBe(200);
-<<<<<<< HEAD
     expect(res.body.mediaAvaliacoes).toBe(4);
-=======
-    expect(res.body.mediaAvaliacoes).toBe(3.5);
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     expect(res.body.quantidadeAvaliacoes).toBe(2);
   });
 

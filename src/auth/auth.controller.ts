@@ -14,6 +14,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { CadastroDto } from './dtos/cadastro.dto';
+import { GoogleAuthDto } from './dtos/google-auth.dto';
 import { LoginDto } from './dtos/login.dto';
 
 @ApiTags('Auth')
@@ -43,6 +44,23 @@ export class AuthController {
     return typeof token === 'string' ? token : undefined;
   }
 
+  private definirCookieSessao(
+    resposta: Response,
+    token: string,
+    expiraEm: Date,
+  ): void {
+    const ambiente =
+      this.configService.get<string>('NODE_ENV') ?? 'development';
+
+    resposta.cookie(this.obterNomeCookie(), token, {
+      httpOnly: true,
+      secure: ambiente === 'production',
+      sameSite: 'lax',
+      expires: expiraEm,
+      path: '/',
+    });
+  }
+
   @ApiOperation({
     summary: 'Cadastrar nova conta de usuário',
     description:
@@ -64,20 +82,34 @@ export class AuthController {
   ) {
     const resultado = await this.authService.login(dados);
 
-    const ambiente =
-      this.configService.get<string>('NODE_ENV') ?? 'development';
-
-    resposta.cookie(this.obterNomeCookie(), resultado.token, {
-      httpOnly: true,
-      secure: ambiente === 'production',
-      sameSite: 'lax',
-      expires: resultado.expiraEm,
-      path: '/',
-    });
+    this.definirCookieSessao(resposta, resultado.token, resultado.expiraEm);
 
     return {
       usuario: resultado.usuario,
       expiraEm: resultado.expiraEm,
+    };
+  }
+
+  @ApiOperation({
+    summary: 'Cadastrar ou entrar com Google e criar sessão',
+    description:
+      'Valida a credential do Google no servidor. Se o e-mail já existir, vincula a conta; caso contrário, cria um novo USUARIO.',
+  })
+  @Throttle({ global: { limit: 10, ttl: 60_000 } })
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  async google(
+    @Body() dados: GoogleAuthDto,
+    @Res({ passthrough: true }) resposta: Response,
+  ) {
+    const resultado = await this.authService.autenticarComGoogle(dados);
+
+    this.definirCookieSessao(resposta, resultado.token, resultado.expiraEm);
+
+    return {
+      usuario: resultado.usuario,
+      expiraEm: resultado.expiraEm,
+      novoUsuario: resultado.novoUsuario,
     };
   }
 

@@ -10,30 +10,20 @@ import {
   Post,
   Req,
   UseGuards,
-<<<<<<< HEAD
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
 import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import type { Request } from 'express';
 import { ApiConsumes, ApiTags } from '@nestjs/swagger';
-=======
-} from '@nestjs/common';
-import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
-import type { Request } from 'express';
-import { ApiTags } from '@nestjs/swagger';
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { AuthGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { PapelGuard } from '../auth/papel.guard';
 import { Papeis } from '../auth/papeis.decorator';
 import { UsuarioAtual } from '../auth/usuario-atual.decorator';
 import { PapelUsuario } from '../generated/prisma/enums';
-<<<<<<< HEAD
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { AcaoAuditoria } from '../generated/prisma/enums';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { AtualizarHardwareDto } from './dtos/atualizar-hardware.dto';
@@ -48,7 +38,6 @@ import { CriarPontoEncaixeHardwareDto } from './dtos/modelos-3d/criar-ponto-enca
 import { CriarAjusteEncaixeHardwareDto } from './dtos/modelos-3d/criar-ajuste-encaixe-hardware.dto';
 import { AtualizarPontoEncaixeHardwareDto } from './dtos/modelos-3d/atualizar-ponto-encaixe-hardware.dto';
 import { AtualizarAjusteEncaixeHardwareDto } from './dtos/modelos-3d/atualizar-ajuste-encaixe-hardware.dto';
-<<<<<<< HEAD
 import { UploadModelo3DHardwareDto } from './dtos/modelos-3d/upload-modelo-3d-hardware.dto';
 
 type UsuarioReq = { id: number; papel: string } | null;
@@ -57,10 +46,6 @@ type ArquivoUploadModelo3D = {
   size: number;
   buffer: Buffer;
 };
-=======
-
-type UsuarioReq = { id: number; papel: string } | null;
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 
 // Guard base: autenticado + verifica papel via @Papeis
 // O controller exige autenticação; cada rota define quais papéis têm acesso.
@@ -81,7 +66,6 @@ export class HardwaresAdminController {
     return this.hardwaresService.listarTodos();
   }
 
-<<<<<<< HEAD
   @Get('modelos-3d/storage/status')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   statusStorageModelos3D() {
@@ -94,8 +78,6 @@ export class HardwaresAdminController {
     return this.hardwaresService.testarConexaoStorageModelos3D();
   }
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   @Get(':id')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   buscarPorId(@Param('id', ParsePositiveIntPipe) id: number) {
@@ -194,7 +176,6 @@ export class HardwaresAdminController {
     return resultado;
   }
 
-<<<<<<< HEAD
   @Post(':hardwareId/modelos-3d/upload')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   @ApiConsumes('multipart/form-data')
@@ -236,8 +217,6 @@ export class HardwaresAdminController {
     return resultado;
   }
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   @Post(':hardwareId/modelos-3d')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async criarModelo3DHardware(
@@ -411,6 +390,35 @@ export class HardwaresAdminController {
   }
 
   // ── Exclusão — somente ADMIN ──────────────────────────────────────────────
+
+  @Delete('modelos-3d/:modeloId')
+  @UseGuards(AdminGuard)
+  async removerModelo3DHardwarePermanentemente(
+    @Param('modeloId', ParsePositiveIntPipe) modeloId: number,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado =
+      await this.hardwaresService.removerModelo3DHardwarePermanentemente(
+        modeloId,
+      );
+
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.MODELO_3D_DESATIVADO,
+      entidade: 'Modelo3DHardware',
+      entidadeId: modeloId,
+      dadosNovos: {
+        remocaoPermanente: true,
+        hardwareId: resultado.hardwareId,
+        storageKey: resultado.storageKey,
+        arquivoR2Removido: resultado.arquivoR2Removido,
+      },
+      ip: req.ip,
+    });
+
+    return resultado;
+  }
 
   @Delete(':id')
   @UseGuards(AdminGuard)

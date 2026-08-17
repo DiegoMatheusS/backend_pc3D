@@ -1,0 +1,128 @@
+CRIABYTE — CONTRATO FRONTEND: SUGESTÕES DE OFERTAS POR USUÁRIOS
+
+OBJETIVO
+Usuário autenticado pode sugerir uma oferta, mas ela NÃO entra diretamente em Oferta.
+A sugestão nasce EM_ANALISE. Somente ADMIN pode aprovar ou rejeitar.
+Hardware nunca é criado automaticamente.
+
+REGRA DE AUTORIA
+Quando uma sugestão é aprovada, o usuário que enviou a sugestão é preservado como origem.
+Produto/Oferta públicos retornam:
+"cadastradoPor": { "id": 123, "nome": "Nome do usuário" }
+E-mail não é exposto publicamente.
+
+1) CAMPOS DINÂMICOS
+GET /api/ofertas/sugestoes/campos
+Auth: usuário autenticado
+
+Retorna as categorias e campos técnicos específicos para cada tipo de produto.
+O frontend deve montar o formulário conforme a categoria escolhida.
+
+2) ENVIAR SUGESTÃO
+POST /api/ofertas/sugestoes
+Auth: qualquer usuário autenticado
+Rate limit HTTP: 5/minuto
+Limite funcional: 10 sugestões por usuário a cada 24 horas
+
+Exemplo:
+{
+  "nome": "Kingston Fury Beast 32GB DDR5 6000",
+  "urlOriginal": "https://loja.com/produto",
+  "categoria": "MEMORIA_RAM",
+  "preco": 599.90,
+  "precoAnterior": 699.90,
+  "especificacoes": {
+    "capacidadeGb": 32,
+    "tipoMemoria": "DDR5",
+    "frequenciaMtS": 6000
+  },
+  "observacao": "Promoção encontrada hoje"
+}
+
+Resposta nasce sempre com status EM_ANALISE.
+
+3) MINHAS SUGESTÕES
+GET /api/ofertas/sugestoes/minhas
+GET /api/ofertas/sugestoes/minhas/:id
+Auth: usuário autenticado
+
+Estados: EM_ANALISE, APROVADA, REJEITADA.
+
+4) FILA ADMIN
+GET /api/admin/ofertas/sugestoes
+GET /api/admin/ofertas/sugestoes/:id
+Auth: ADMIN
+
+5) FLUXO PREFERIDO NO ADMIN — PRODUTO/OFERTA JÁ CRIADOS
+
+Fluxo visual:
+Sugestão EM_ANALISE
+  -> Admin cria/seleciona Produto
+  -> Admin usa "Criar oferta" e cadastra parceiro + URL afiliada + dados comerciais
+  -> Admin volta à sugestão
+  -> clica "Aceitar Oferta"
+  -> seleciona o Produto criado
+  -> backend encontra a Oferta desse Produto pelo mesmo urlOriginal da sugestão
+  -> vincula e conclui a análise
+
+PATCH /api/admin/ofertas/sugestoes/:id/aceitar-existente
+Auth: ADMIN
+
+Body:
+{
+  "produtoId": 123
+}
+
+Esta rota NÃO:
+- cria Produto;
+- cria Oferta;
+- exige nova URL afiliada;
+- altera o preço comercial cadastrado na Oferta.
+
+Ela somente:
+- confirma SugestaoOferta EM_ANALISE;
+- confirma Produto ativo;
+- encontra a Oferta do Produto cujo urlOriginal corresponde ao link da sugestão;
+- vincula sugestao.produtoId;
+- vincula sugestao.parceiroId;
+- vincula sugestao.ofertaId;
+- marca APROVADA;
+- salva analisadoPorId/analisadoEm;
+- grava o usuário da sugestão como usuarioOrigemId na Oferta;
+- grava o mesmo usuário como usuarioOrigemId no Produto se o Produto ainda não tiver origem.
+
+Se o Produto já possuir outro usuarioOrigemId, o primeiro usuário de origem do Produto é preservado.
+A Oferta não pode ser tomada de outra sugestão/usuário já vinculada.
+
+6) APROVAÇÃO DIRETA — COMPATIBILIDADE
+PATCH /api/admin/ofertas/sugestoes/:id/aprovar
+Auth: ADMIN
+
+Essa rota antiga continua disponível para o caso em que o Admin deseja criar a Oferta durante a própria aprovação.
+Nesse fluxo, parceiro/url afiliada/dados comerciais são enviados e o backend cria a Oferta transacionalmente.
+Também grava o usuário da sugestão como origem do Produto/Oferta.
+
+7) REJEITAR
+PATCH /api/admin/ofertas/sugestoes/:id/rejeitar
+Auth: ADMIN
+
+{
+  "motivo": "O anúncio não pôde ser confirmado."
+}
+
+8) EXIBIÇÃO PÚBLICA
+As rotas públicas de Produto/Oferta podem retornar:
+
+"cadastradoPor": {
+  "id": 123,
+  "nome": "Diego"
+}
+
+Aplicar esse campo na tela pública como, por exemplo:
+Cadastrado por Diego
+
+9) REGRA PRINCIPAL
+SugestaoOferta != Oferta != Produto != Hardware
+
+A sugestão do usuário nunca cria Hardware automaticamente.
+No fluxo preferido, Produto e Oferta são cadastrados pelo Admin e o botão Aceitar Oferta apenas conecta a Oferta existente à sugestão e preserva a autoria do usuário.

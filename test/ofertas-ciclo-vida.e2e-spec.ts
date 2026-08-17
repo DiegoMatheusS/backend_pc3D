@@ -146,7 +146,6 @@ describe('Ofertas — integridade e histórico (e2e)', () => {
     expect(limpar.body.observacao).toBeNull();
   });
 
-<<<<<<< HEAD
   it('expõe status do verificador de preços para o Dashboard sem consultar links externos', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/admin/ofertas/verificacao-precos/status')
@@ -158,8 +157,6 @@ describe('Ofertas — integridade e histórico (e2e)', () => {
     expect(typeof res.body.desatualizadasMaisDe24h).toBe('number');
   });
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   it('preserva histórico, usa soft delete e mantém a oferta se o Hardware for removido', async () => {
     const urlOriginal = `https://example.com/produto-${sufixo}`;
     const criado = await request(app.getHttpServer())

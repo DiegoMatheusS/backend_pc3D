@@ -9,11 +9,8 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client';
 import {
-<<<<<<< HEAD
   CategoriaHardware,
   GrupoCategoriaProduto,
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   OrigemDadoProduto,
   StatusAvaliacao,
   StatusImportacao,
@@ -25,12 +22,9 @@ import { AtualizarCategoriaProdutoDto } from './dtos/atualizar-categoria-produto
 import { AtualizarProdutoDto } from './dtos/atualizar-produto.dto';
 import { CriarCategoriaProdutoDto } from './dtos/criar-categoria-produto.dto';
 import { CriarProdutoDto } from './dtos/criar-produto.dto';
-<<<<<<< HEAD
 import { CriarOfertaInicialProdutoDto } from './dtos/criar-oferta-inicial-produto.dto';
 import { CriarProdutoDeHardwareDto } from './dtos/criar-produto-de-hardware.dto';
 import { FiltrarHardwaresDisponiveisDto } from './dtos/filtrar-hardwares-disponiveis.dto';
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
 import { FiltrarProdutosDto } from './dtos/filtrar-produtos.dto';
 import { RevisarImportacaoProdutoDto } from './dtos/revisar-importacao-produto.dto';
 import { normalizarEspecificacoesHardwarePublicas } from './normalizar-especificacoes-hardware';
@@ -67,7 +61,6 @@ export class ProdutosService {
     }
   }
 
-<<<<<<< HEAD
   private dadosCategoriaProdutoHardware(categoria: CategoriaHardware): {
     nome: string;
     slug: string;
@@ -99,8 +92,6 @@ export class ProdutosService {
     };
   }
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   private enderecoIpPrivado(endereco: string): boolean {
     const ip = endereco.replace(/^\[|\]$/g, '').toLowerCase();
     const versao = isIP(ip);
@@ -352,7 +343,6 @@ export class ProdutosService {
     }
   }
 
-<<<<<<< HEAD
   private async criarOfertaInicialProduto(
     tx: Prisma.TransactionClient,
     produtoId: number,
@@ -399,12 +389,11 @@ export class ProdutosService {
     return oferta.id;
   }
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   private includeProdutoDetalhado() {
     const agora = new Date();
     return {
       categoria: true,
+      usuarioOrigem: { select: { id: true, nome: true } },
       hardware: {
         include: {
           especificacaoProcessador: true,
@@ -472,6 +461,7 @@ export class ProdutosService {
         },
         orderBy: { preco: 'asc' as const },
         include: {
+          usuarioOrigem: { select: { id: true, nome: true } },
           parceiro: {
             select: {
               id: true,
@@ -685,6 +675,7 @@ export class ProdutosService {
           modelo: true,
           imagemUrl: true,
           imagemHoverUrl: true,
+          usuarioOrigem: { select: { id: true, nome: true } },
           categoria: {
             select: { id: true, nome: true, slug: true, grupo: true },
           },
@@ -709,6 +700,7 @@ export class ProdutosService {
               precoAnterior: true,
               urlAfiliada: true,
               urlOriginal: true,
+              usuarioOrigem: { select: { id: true, nome: true } },
               parceiro: {
                 select: { id: true, nome: true, slug: true, logoUrl: true },
               },
@@ -740,22 +732,37 @@ export class ProdutosService {
     );
 
     return {
-      dados: produtos.map((produto) => ({
-        ...produto,
-        hardware: produto.hardware
-          ? {
-              id: produto.hardware.id,
-              categoria: produto.hardware.categoria,
-            }
-          : null,
-        possuiModelo3D: (produto.hardware?.modelos3D.length ?? 0) > 0,
-        melhorOferta: produto.ofertas[0] ?? null,
-        ofertas: undefined,
-        avaliacao: avaliacoesPorProduto.get(produto.id) ?? {
-          media: 0,
-          quantidade: 0,
-        },
-      })),
+      dados: produtos.map((produto) => {
+        const { usuarioOrigem, ofertas, ...produtoPublico } = produto;
+        const melhorOfertaBanco = ofertas[0] ?? null;
+        const melhorOferta = melhorOfertaBanco
+          ? (() => {
+              const { usuarioOrigem: origemOferta, ...ofertaPublica } =
+                melhorOfertaBanco;
+              return {
+                ...ofertaPublica,
+                cadastradoPor: origemOferta,
+              };
+            })()
+          : null;
+
+        return {
+          ...produtoPublico,
+          cadastradoPor: usuarioOrigem,
+          hardware: produto.hardware
+            ? {
+                id: produto.hardware.id,
+                categoria: produto.hardware.categoria,
+              }
+            : null,
+          possuiModelo3D: (produto.hardware?.modelos3D.length ?? 0) > 0,
+          melhorOferta,
+          avaliacao: avaliacoesPorProduto.get(produto.id) ?? {
+            media: 0,
+            quantidade: 0,
+          },
+        };
+      }),
       pagina,
       limite,
       total,
@@ -818,8 +825,26 @@ export class ProdutosService {
           }
         : null);
 
+    const { usuarioOrigem, usuarioOrigemId, ofertas, ...produtoPublico } =
+      produto;
+    void usuarioOrigemId;
+    const ofertasPublicas = ofertas.map((oferta) => {
+      const {
+        usuarioOrigem: origemOferta,
+        usuarioOrigemId: ofertaUsuarioOrigemId,
+        ...ofertaPublica
+      } = oferta;
+      void ofertaUsuarioOrigemId;
+      return {
+        ...ofertaPublica,
+        cadastradoPor: origemOferta,
+      };
+    });
+
     return {
-      ...produto,
+      ...produtoPublico,
+      cadastradoPor: usuarioOrigem,
+      ofertas: ofertasPublicas,
       especificacoes,
       possuiModelo3D: (produto.hardware?.modelos3D.length ?? 0) > 0,
       avaliacao: {
@@ -842,6 +867,7 @@ export class ProdutosService {
       orderBy: { atualizadoEm: 'desc' },
       include: {
         categoria: true,
+        usuarioOrigem: { select: { id: true, nome: true } },
         hardware: { select: { id: true, categoria: true } },
         notebook: true,
         build: true,
@@ -859,7 +885,6 @@ export class ProdutosService {
     return produto;
   }
 
-<<<<<<< HEAD
   async listarHardwaresDisponiveis(filtros: FiltrarHardwaresDisponiveisDto) {
     const busca = filtros.busca?.trim();
     const hardwares = await this.prisma.hardware.findMany({
@@ -1032,8 +1057,6 @@ export class ProdutosService {
     }
   }
 
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
   async criar(dados: CriarProdutoDto) {
     this.validarEspecificacaoUnica(dados);
     const categoria = await this.prisma.categoriaProduto.findFirst({
@@ -1097,7 +1120,6 @@ export class ProdutosService {
     );
 
     try {
-<<<<<<< HEAD
       const produtoId = await this.prisma.$transaction(async (tx) => {
         const produto = await tx.produto.create({
           data: {
@@ -1144,39 +1166,6 @@ export class ProdutosService {
       });
 
       return this.buscarAdmin(produtoId);
-=======
-      return await this.prisma.produto.create({
-        data: {
-          categoriaId: dados.categoriaId,
-          tipo: TipoProduto.GENERICO,
-          nome: dados.nome.trim(),
-          slug,
-          marca: dados.marca?.trim() ?? null,
-          modelo: dados.modelo?.trim() ?? null,
-          descricao: dados.descricao?.trim() ?? null,
-          mpn: dados.mpn?.trim() || null,
-          gtin: dados.gtin?.trim() || null,
-          imagemUrl: dados.imagemUrl?.trim() ?? null,
-          imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
-          metadados: dados.metadados as Prisma.InputJsonValue | undefined,
-          publicado: dados.publicado ?? false,
-          ativo: dados.ativo ?? true,
-          especificacaoMonitor: dados.especificacaoMonitor
-            ? { create: dados.especificacaoMonitor }
-            : undefined,
-          especificacaoMouse: dados.especificacaoMouse
-            ? { create: dados.especificacaoMouse }
-            : undefined,
-          especificacaoTeclado: dados.especificacaoTeclado
-            ? { create: dados.especificacaoTeclado }
-            : undefined,
-          especificacaoHeadset: dados.especificacaoHeadset
-            ? { create: dados.especificacaoHeadset }
-            : undefined,
-        },
-        include: this.includeProdutoDetalhado(),
-      });
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     } catch (erro: unknown) {
       if (
         erro instanceof Prisma.PrismaClientKnownRequestError &&
@@ -1210,7 +1199,6 @@ export class ProdutosService {
     });
     if (!atual) throw new NotFoundException('Produto não encontrado.');
 
-<<<<<<< HEAD
     if (
       atual.tipo !== TipoProduto.GENERICO &&
       atual.tipo !== TipoProduto.HARDWARE
@@ -1227,11 +1215,6 @@ export class ProdutosService {
     ) {
       throw new BadRequestException(
         'A categoria comercial de um Produto vinculado a Hardware não pode ser alterada por esta rota.',
-=======
-    if (atual.tipo !== TipoProduto.GENERICO) {
-      throw new BadRequestException(
-        'Este produto possui um cadastro especializado. Use a rota administrativa de Hardware, Notebook ou PC Montado para editá-lo.',
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       );
     }
 
@@ -1243,13 +1226,9 @@ export class ProdutosService {
       });
       if (!categoria) throw new NotFoundException('Categoria não encontrada.');
       categoriaSlug = categoria.slug;
-<<<<<<< HEAD
       if (atual.tipo === TipoProduto.GENERICO) {
         this.validarCategoriaProdutoGenerico(categoriaSlug);
       }
-=======
-      this.validarCategoriaProdutoGenerico(categoriaSlug);
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     }
 
     const categoriaEspecificacaoExistente = atual.especificacaoMonitor
@@ -1416,18 +1395,12 @@ export class ProdutosService {
       select: { id: true, tipo: true },
     });
     if (!produto) throw new NotFoundException('Produto não encontrado.');
-<<<<<<< HEAD
     if (
       produto.tipo !== TipoProduto.GENERICO &&
       produto.tipo !== TipoProduto.HARDWARE
     ) {
       throw new BadRequestException(
         'Este produto possui um cadastro especializado de Notebook ou PC Montado. Use a rota administrativa correspondente para arquivá-lo.',
-=======
-    if (produto.tipo !== TipoProduto.GENERICO) {
-      throw new BadRequestException(
-        'Este produto possui um cadastro especializado. Use a rota administrativa correspondente para arquivá-lo.',
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
       );
     }
 

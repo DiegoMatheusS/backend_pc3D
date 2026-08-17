@@ -84,6 +84,29 @@ describe('Modelos 3D — origem e metadados (e2e)', () => {
     });
   });
 
+  it('remove permanentemente modelo externo sem tentar apagar arquivo de terceiros', async () => {
+    expect(modeloExternoId).toBeGreaterThan(0);
+
+    const remover = await request(app.getHttpServer())
+      .delete(`/api/admin/hardwares/modelos-3d/${modeloExternoId}`)
+      .set('Cookie', cookieAdmin);
+
+    expect(remover.status).toBe(200);
+    expect(remover.body).toMatchObject({
+      removido: true,
+      modeloId: modeloExternoId,
+      arquivoR2Gerenciado: false,
+      arquivoR2Removido: false,
+      aviso: null,
+    });
+
+    const registro = await prisma.modelo3DHardware.findUnique({
+      where: { id: modeloExternoId },
+    });
+    expect(registro).toBeNull();
+    modeloExternoId = 0;
+  });
+
   it('permite modelo próprio apontando para storage/CDN sem salvar o arquivo no banco', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/admin/hardwares/${fixture.hardwares.memoriaRamId}/modelos-3d`)

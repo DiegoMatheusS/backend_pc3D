@@ -17,11 +17,9 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-<<<<<<< HEAD
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
-=======
-    "test:e2e": "jest --config ./test/jest-e2e.json",
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
+    "db:migrate": "prisma migrate deploy",
+    "db:generate": "prisma generate",
     "db:test:status": "node scripts/prisma-test.mjs status",
     "db:test:migrate": "node scripts/prisma-test.mjs migrate",
     "db:test:studio": "node scripts/prisma-test.mjs studio",
@@ -29,12 +27,9 @@
     "security:audit": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
-<<<<<<< HEAD
+    "@aws-sdk/client-s3": "3.1111.0",
     "@google/genai": "2.13.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-=======
-    "@google/generative-ai": "^0.24.1",
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -49,22 +44,15 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
-<<<<<<< HEAD
     "express": "^5.2.1",
-=======
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
+    "google-auth-library": "^10.9.1",
     "helmet": "^8.3.0",
     "multer": "^2.2.0",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
-<<<<<<< HEAD
-    "zod": "^3.25.76",
-    "@aws-sdk/client-s3": "3.1111.0"
-=======
-    "express": "^5.2.1"
->>>>>>> d9293c50a8d5ea1d10010d1a809ec81b93c9397c
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -96,20 +84,24 @@
     "typescript-eslint": "^8.20.0"
   },
   "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
-    "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
-  }
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
+  "rootDir": "src",
+  "testRegex": ".*\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^(\\.{1,2}/.*)\\.js$": "$1"
+  },
+  "collectCoverageFrom": [
+    "**/*.(t|j)s"
+  ],
+  "coverageDirectory": "../coverage",
+  "testEnvironment": "node"
+}
+
 }
