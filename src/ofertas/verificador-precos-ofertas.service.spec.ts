@@ -1,9 +1,12 @@
 import { VerificadorPrecosOfertasService } from './verificador-precos-ofertas.service';
 
 type ExtratorTeste = {
-  extrairPrecoEstruturado(html: string): {
+  extrairPrecoEstruturado(
+    html: string,
+    url?: URL,
+  ): {
     preco: number | null;
-    origem: 'JSON_LD' | 'META' | null;
+    origem: 'JSON_LD' | 'META' | 'JSON_EMBUTIDO' | 'HTML_MARKETPLACE' | null;
     indisponivel: boolean;
   };
 };
@@ -53,6 +56,114 @@ describe('VerificadorPrecosOfertasService', () => {
       preco: null,
       origem: null,
       indisponivel: true,
+    });
+  });
+
+  it('extrai preço atual de JSON de hidratação e ignora preço antigo', () => {
+    const html = `
+      <script id="__NEXT_DATA__" type="application/json">
+        {
+          "props": {
+            "pageProps": {
+              "product": {
+                "originalPrice": 2999.90,
+                "currentPrice": {"value": 2571.22}
+              }
+            }
+          }
+        }
+      </script>`;
+
+    expect(
+      extrator.extrairPrecoEstruturado(
+        html,
+        new URL('https://www.magazineluiza.com.br/produto/p/123'),
+      ),
+    ).toEqual({
+      preco: 2571.22,
+      origem: 'JSON_EMBUTIDO',
+      indisponivel: false,
+    });
+  });
+
+  it('extrai preço principal do HTML do Mercado Livre', () => {
+    const html = `
+      <div class="ui-pdp-price__second-line">
+        <span class="andes-money-amount">
+          <span class="andes-money-amount__currency-symbol">R$</span>
+          <span class="andes-money-amount__fraction">2.099</span>
+          <span class="andes-money-amount__cents">00</span>
+        </span>
+      </div>`;
+
+    expect(
+      extrator.extrairPrecoEstruturado(
+        html,
+        new URL('https://produto.mercadolivre.com.br/MLB-123'),
+      ),
+    ).toEqual({
+      preco: 2099,
+      origem: 'HTML_MARKETPLACE',
+      indisponivel: false,
+    });
+  });
+
+  it('prefere preço no Pix no HTML do Magalu', () => {
+    const html = `
+      <main>
+        <h1>Placa-mãe teste</h1>
+        <span>R$ 2.858,22</span>
+        <div>Preço <strong>R$ 2.571,22</strong> no Pix</div>
+        <div>Ou R$ 2.706,55 em 10x de R$ 270,66 sem juros</div>
+      </main>`;
+
+    expect(
+      extrator.extrairPrecoEstruturado(
+        html,
+        new URL('https://www.magazineluiza.com.br/produto/p/123'),
+      ),
+    ).toEqual({
+      preco: 2571.22,
+      origem: 'HTML_MARKETPLACE',
+      indisponivel: false,
+    });
+  });
+
+  it('converte preço escalado da Shopee em JSON embutido', () => {
+    const html = `
+      <script type="application/json" id="__NEXT_DATA__">
+        {"product":{"price_before_discount":199900000,"price":177455000}}
+      </script>`;
+
+    expect(
+      extrator.extrairPrecoEstruturado(
+        html,
+        new URL('https://shopee.com.br/produto-i.1.2'),
+      ),
+    ).toEqual({
+      preco: 1774.55,
+      origem: 'JSON_EMBUTIDO',
+      indisponivel: false,
+    });
+  });
+
+  it('não usa frete da Shopee como preço do produto no fallback HTML', () => {
+    const html = `
+      <main>
+        <div>R$ 1.774,55</div>
+        <h1>Produto teste</h1>
+        <div>Frete grátis R$ 8,65 com cupom</div>
+      </main>`;
+
+    expect(
+      extrator.extrairPrecoEstruturado(
+        html,
+        new URL('https://shopee.com.br/produto-i.1.2'),
+      ),
+    ).toEqual({
+      preco: 1774.55,
+      origem: 'HTML_MARKETPLACE',
+      indisponivel: false,
     });
   });
 });

@@ -5,6 +5,9 @@ import {
   validarUrlPublica,
 } from '../common/security/external-http-security';
 
+export type OrigemPrecoVerificado =
+  'JSON_LD' | 'META' | 'JSON_EMBUTIDO' | 'HTML_MARKETPLACE';
+
 type ResultadoConsultaPreco =
   | {
       status: 'SUCESSO';
@@ -26,9 +29,23 @@ export type ResultadoVerificacaoOferta = ResultadoConsultaPreco & {
   urlConsultada?: 'ORIGINAL' | 'AFILIADA';
 };
 
+type PrecoExtraido = {
+  preco: number | null;
+  origem: OrigemPrecoVerificado | null;
+  indisponivel: boolean;
+};
+
+type CandidatoPrecoJson = {
+  preco: number;
+  pontos: number;
+  caminho: string;
+};
+
 @Injectable()
 export class VerificadorPrecosOfertasService {
-  private readonly limiteHtmlBytes = 2_000_000;
+  // Marketplaces atuais costumam entregar HTML/estado de hidratação acima de 2 MB.
+  // O limite continua finito para evitar consumo ilimitado de memória.
+  private readonly limiteHtmlBytes = 5_000_000;
   private readonly maximoRedirecionamentos = 4;
 
   private ehRegistro(valor: unknown): valor is Record<string, unknown> {
@@ -73,6 +90,38 @@ export class VerificadorPrecosOfertasService {
     return Number.isFinite(numero) && numero > 0
       ? Number(numero.toFixed(2))
       : null;
+  }
+
+  private normalizarPrecoJson(valor: unknown, hostname: string): number | null {
+    if (
+      hostname.includes('shopee.') &&
+      typeof valor === 'number' &&
+      Number.isInteger(valor) &&
+      valor >= 1_000_000
+    ) {
+      // A Shopee frequentemente serializa preço em unidades de 1/100000.
+      const convertido = valor / 100_000;
+      if (convertido > 0 && convertido < 10_000_000) {
+        return Number(convertido.toFixed(2));
+      }
+    }
+
+    if (
+      hostname.includes('shopee.') &&
+      typeof valor === 'string' &&
+      /^\d{7,15}$/u.test(valor.trim())
+    ) {
+      const convertido = Number(valor) / 100_000;
+      if (
+        Number.isFinite(convertido) &&
+        convertido > 0 &&
+        convertido < 10_000_000
+      ) {
+        return Number(convertido.toFixed(2));
+      }
+    }
+
+    return this.normalizarPreco(valor);
   }
 
   private tipoJsonLd(valor: unknown): string[] {
@@ -171,7 +220,7 @@ export class VerificadorPrecosOfertasService {
       try {
         resultados.push(JSON.parse(bruto) as unknown);
       } catch {
-        // JSON-LD malformado é ignorado; não fazemos inferência por texto solto.
+        // JSON-LD malformado é ignorado; não inferimos preço por texto solto.
       }
     }
     return resultados;
@@ -181,8 +230,13 @@ export class VerificadorPrecosOfertasService {
     const padroes = [
       /<meta\b[^>]*(?:property|name)=["']product:price:amount["'][^>]*content=["']([^"']+)["'][^>]*>/i,
       /<meta\b[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']product:price:amount["'][^>]*>/i,
+      /<meta\b[^>]*(?:property|name)=["']og:price:amount["'][^>]*content=["']([^"']+)["'][^>]*>/i,
+      /<meta\b[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']og:price:amount["'][^>]*>/i,
       /<meta\b[^>]*itemprop=["']price["'][^>]*content=["']([^"']+)["'][^>]*>/i,
       /<meta\b[^>]*content=["']([^"']+)["'][^>]*itemprop=["']price["'][^>]*>/i,
+      /<(?:span|div)\b[^>]*itemprop=["']price["'][^>]*content=["']([^"']+)["'][^>]*>/i,
+      /<(?:span|div)\b[^>]*content=["']([^"']+)["'][^>]*itemprop=["']price["'][^>]*>/i,
+      /<(?:div|span)\b[^>]*data-(?:product-)?price=["']([^"']+)["'][^>]*>/i,
     ];
 
     for (const padrao of padroes) {
@@ -192,11 +246,302 @@ export class VerificadorPrecosOfertasService {
     return null;
   }
 
-  private extrairPrecoEstruturado(html: string): {
-    preco: number | null;
-    origem: 'JSON_LD' | 'META' | null;
-    indisponivel: boolean;
-  } {
+  private extrairScriptsJson(html: string): unknown[] {
+    const resultados: unknown[] = [];
+    const regex = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+
+    for (const match of html.matchAll(regex)) {
+      const atributos = match[1] ?? '';
+      const corpo = match[2]?.trim() ?? '';
+      if (!corpo || corpo.length > 3_500_000) continue;
+
+      const ehJson =
+        /type=["']application\/(?:json|ld\+json)["']/i.test(atributos) ||
+        /id=["'](?:__NEXT_DATA__|__NUXT_DATA__|__APOLLO_STATE__)["']/i.test(
+          atributos,
+        );
+      if (!ehJson || (!corpo.startsWith('{') && !corpo.startsWith('['))) {
+        continue;
+      }
+
+      try {
+        resultados.push(JSON.parse(corpo) as unknown);
+      } catch {
+        // Estados de hidratação incompletos/malformados são ignorados.
+      }
+    }
+
+    return resultados;
+  }
+
+  private chavePrecoPontuacao(chave: string, caminhoPai: string): number {
+    const normalizada = chave.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const caminho = caminhoPai.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const composto = `${caminho}${normalizada}`;
+
+    if (
+      /(installment|parcel|freight|shipping|delivery|coupon|cupom|saving|discountpercent|percentage|tax|fee)/u.test(
+        composto,
+      )
+    ) {
+      return -100;
+    }
+
+    if (
+      /(pricebefore|beforeprice|oldprice|originalprice|listprice|regularprice|previousprice|compareat|pricefrom)/u.test(
+        composto,
+      )
+    ) {
+      return -80;
+    }
+
+    if (/^(pixprice|pricepix|cashprice|bestprice)$/u.test(normalizada))
+      return 150;
+    if (
+      /^(finalprice|currentprice|saleprice|sellingprice|promotionalprice|discountedprice|offerprice)$/u.test(
+        normalizada,
+      )
+    ) {
+      return 135;
+    }
+    if (/^(priceto|pricevalue|unitprice)$/u.test(normalizada)) return 115;
+    if (/^(price|minprice|pricemin|price_min)$/u.test(normalizada)) return 95;
+
+    if (
+      /^(amount|value)$/u.test(normalizada) &&
+      /(price|offer|sale|selling|pix|cash|current|final)/u.test(caminho)
+    ) {
+      return 105;
+    }
+
+    return -20;
+  }
+
+  private buscarCandidatosPrecoJson(
+    valor: unknown,
+    hostname: string,
+    caminho: string[] = [],
+    profundidade = 0,
+    resultados: CandidatoPrecoJson[] = [],
+  ): CandidatoPrecoJson[] {
+    if (profundidade > 14 || resultados.length > 300) return resultados;
+
+    if (Array.isArray(valor)) {
+      for (let indice = 0; indice < Math.min(valor.length, 80); indice++) {
+        this.buscarCandidatosPrecoJson(
+          valor[indice],
+          hostname,
+          [...caminho, String(indice)],
+          profundidade + 1,
+          resultados,
+        );
+      }
+      return resultados;
+    }
+
+    if (!this.ehRegistro(valor)) return resultados;
+
+    for (const [chave, filho] of Object.entries(valor)) {
+      const caminhoPai = caminho.join('.');
+      const pontos = this.chavePrecoPontuacao(chave, caminhoPai);
+
+      if (
+        pontos > 0 &&
+        (typeof filho === 'number' || typeof filho === 'string')
+      ) {
+        const preco = this.normalizarPrecoJson(filho, hostname);
+        if (preco !== null && preco >= 0.5 && preco < 10_000_000) {
+          resultados.push({
+            preco,
+            pontos,
+            caminho: [...caminho, chave].join('.'),
+          });
+        }
+      }
+
+      if (typeof filho === 'object' && filho !== null) {
+        this.buscarCandidatosPrecoJson(
+          filho,
+          hostname,
+          [...caminho, chave],
+          profundidade + 1,
+          resultados,
+        );
+      }
+    }
+
+    return resultados;
+  }
+
+  private extrairPrecoJsonEmbutido(
+    html: string,
+    hostname: string,
+  ): number | null {
+    const estados = this.extrairScriptsJson(html);
+    const candidatos: CandidatoPrecoJson[] = [];
+
+    for (const estado of estados) {
+      this.buscarCandidatosPrecoJson(estado, hostname, [], 0, candidatos);
+    }
+
+    const confiaveis = candidatos
+      .filter((candidato) => candidato.pontos >= 95)
+      .sort(
+        (a, b) => b.pontos - a.pontos || a.caminho.length - b.caminho.length,
+      );
+
+    return confiaveis[0]?.preco ?? null;
+  }
+
+  private decodificarEntidadesBasicas(texto: string): string {
+    return texto
+      .replace(/&nbsp;|&#160;|&#x0*a0;/gi, ' ')
+      .replace(/&quot;|&#34;|&#x0*22;/gi, '"')
+      .replace(/&apos;|&#39;|&#x0*27;/gi, "'")
+      .replace(/&amp;|&#38;|&#x0*26;/gi, '&')
+      .replace(/&lt;|&#60;|&#x0*3c;/gi, '<')
+      .replace(/&gt;|&#62;|&#x0*3e;/gi, '>');
+  }
+
+  private textoVisivel(html: string): string {
+    return this.decodificarEntidadesBasicas(
+      html
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, ' ')
+        .replace(/<[^>]+>/g, ' '),
+    )
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private extrairPrecoAntesDoRotulo(
+    texto: string,
+    rotulo: RegExp,
+    distanciaMaxima: number,
+  ): number | null {
+    const ocorrenciasRotulo = Array.from(texto.matchAll(rotulo));
+    const precos = Array.from(
+      texto.matchAll(
+        /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{1,2})|[0-9]+(?:[.,][0-9]{1,2})?)/gi,
+      ),
+    );
+
+    for (const alvo of ocorrenciasRotulo) {
+      const posicaoRotulo = alvo.index ?? -1;
+      if (posicaoRotulo < 0) continue;
+
+      const anteriores = precos
+        .filter((preco) => {
+          const posicao = preco.index ?? -1;
+          return (
+            posicao >= 0 &&
+            posicao < posicaoRotulo &&
+            posicaoRotulo - posicao <= distanciaMaxima
+          );
+        })
+        .sort((a, b) => (b.index ?? 0) - (a.index ?? 0));
+
+      const valor = this.normalizarPreco(anteriores[0]?.[1]);
+      if (valor !== null) return valor;
+    }
+
+    return null;
+  }
+
+  private extrairPrecoMercadoLivre(html: string): number | null {
+    const regioes = Array.from(
+      html.matchAll(
+        /<(?:div|section)\b[^>]*class=["'][^"']*(?:ui-pdp-price__second-line|ui-pdp-price__main-container)[^"']*["'][^>]*>([\s\S]{0,12_000}?)(?:<\/(?:div|section)>)/gi,
+      ),
+    );
+
+    const alvos =
+      regioes.length > 0 ? regioes.map((item) => item[1] ?? '') : [html];
+    for (const alvo of alvos) {
+      const fracao =
+        /class=["'][^"']*andes-money-amount__fraction[^"']*["'][^>]*>\s*([0-9.]+)\s*</i.exec(
+          alvo,
+        )?.[1];
+      if (!fracao) continue;
+
+      const centavos =
+        /class=["'][^"']*andes-money-amount__cents[^"']*["'][^>]*>\s*([0-9]{1,2})\s*</i.exec(
+          alvo,
+        )?.[1];
+      const preco = this.normalizarPreco(
+        centavos ? `${fracao},${centavos.padEnd(2, '0')}` : fracao,
+      );
+      if (preco !== null) return preco;
+    }
+
+    return null;
+  }
+
+  private extrairPrecoMagalu(html: string): number | null {
+    const texto = this.textoVisivel(html).slice(0, 120_000);
+
+    const pix = this.extrairPrecoAntesDoRotulo(texto, /\bno\s+pix\b/gi, 120);
+    if (pix !== null) return pix;
+
+    const padroes = [
+      /(?:preço|por)\s*R\$\s*([0-9.]+(?:,[0-9]{1,2})?)/i,
+      /R\$\s*([0-9.]+(?:,[0-9]{1,2})?)\s*(?:à vista|a vista)/i,
+    ];
+    for (const padrao of padroes) {
+      const preco = this.normalizarPreco(padrao.exec(texto)?.[1]);
+      if (preco !== null) return preco;
+    }
+
+    return null;
+  }
+
+  private extrairPrecoShopee(html: string): number | null {
+    const texto = this.textoVisivel(html).slice(0, 80_000);
+    const ocorrencias = Array.from(
+      texto.matchAll(/R\$\s*([0-9.]+(?:,[0-9]{1,2})?)/gi),
+    );
+
+    for (const ocorrencia of ocorrencias.slice(0, 12)) {
+      const posicao = ocorrencia.index ?? 0;
+      const contextoAntes = texto
+        .slice(Math.max(0, posicao - 55), posicao)
+        .toLowerCase();
+      const contextoDepois = texto.slice(posicao, posicao + 35).toLowerCase();
+      if (
+        /frete|cupom|parcela|cashback/u.test(contextoAntes) ||
+        /\bx\s+de\b|parcela/u.test(contextoDepois)
+      ) {
+        continue;
+      }
+
+      const preco = this.normalizarPreco(ocorrencia[1]);
+      if (preco !== null) return preco;
+    }
+
+    return null;
+  }
+
+  private extrairPrecoMarketplace(
+    html: string,
+    hostname: string,
+  ): number | null {
+    const host = hostname.toLowerCase();
+
+    if (host.includes('mercadolivre.') || host.includes('mercadolibre.')) {
+      return this.extrairPrecoMercadoLivre(html);
+    }
+    if (host.includes('magazineluiza.')) {
+      return this.extrairPrecoMagalu(html);
+    }
+    if (host.includes('shopee.')) {
+      return this.extrairPrecoShopee(html);
+    }
+
+    return null;
+  }
+
+  private extrairPrecoEstruturado(html: string, url?: URL): PrecoExtraido {
     const jsonLd = this.extrairJsonLd(html);
     for (const item of jsonLd) {
       const preco = this.buscarPrecoEmJsonLd(item);
@@ -213,11 +558,42 @@ export class VerificadorPrecosOfertasService {
     }
 
     const precoMeta = this.extrairPrecoMeta(html);
-    return {
-      preco: precoMeta,
-      origem: precoMeta === null ? null : 'META',
-      indisponivel: false,
-    };
+    if (precoMeta !== null) {
+      return { preco: precoMeta, origem: 'META', indisponivel: false };
+    }
+
+    const hostname = url?.hostname.toLowerCase() ?? '';
+    const precoJson = this.extrairPrecoJsonEmbutido(html, hostname);
+    if (precoJson !== null) {
+      return {
+        preco: precoJson,
+        origem: 'JSON_EMBUTIDO',
+        indisponivel: false,
+      };
+    }
+
+    const precoMarketplace = this.extrairPrecoMarketplace(html, hostname);
+    if (precoMarketplace !== null) {
+      return {
+        preco: precoMarketplace,
+        origem: 'HTML_MARKETPLACE',
+        indisponivel: false,
+      };
+    }
+
+    return { preco: null, origem: null, indisponivel: false };
+  }
+
+  private paginaPareceBloqueio(html: string): boolean {
+    const inicio = this.textoVisivel(html).slice(0, 12_000).toLowerCase();
+    return [
+      'access denied',
+      'captcha',
+      'verifique que você é humano',
+      'verifique que voce e humano',
+      'robot or human',
+      'unusual traffic',
+    ].some((trecho) => inicio.includes(trecho));
   }
 
   private async consultarUrl(valor: string): Promise<ResultadoConsultaPreco> {
@@ -239,12 +615,17 @@ export class VerificadorPrecosOfertasService {
       let resposta: Awaited<ReturnType<typeof requisitarUrlPublicaUmaVez>>;
       try {
         resposta = await requisitarUrlPublicaUmaVez(atual, {
-          timeoutMs: 12_000,
+          timeoutMs: 15_000,
           limiteRespostaBytes: this.limiteHtmlBytes,
           headers: {
-            'User-Agent': 'CriaByte-OfferVerifier/1.0',
-            Accept: 'text/html,application/xhtml+xml',
-            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+            Accept:
+              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.7',
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+            'Upgrade-Insecure-Requests': '1',
           },
         });
       } catch (erro) {
@@ -309,7 +690,15 @@ export class VerificadorPrecosOfertasService {
       }
 
       const html = resposta.corpo.toString('utf8');
-      const extraido = this.extrairPrecoEstruturado(html);
+      if (this.paginaPareceBloqueio(html)) {
+        return {
+          status: 'FALHOU',
+          motivo:
+            'O marketplace bloqueou a consulta automática desta página. O valor salvo não foi alterado.',
+        };
+      }
+
+      const extraido = this.extrairPrecoEstruturado(html, atual);
       if (extraido.indisponivel) {
         return {
           status: 'INDISPONIVEL',
@@ -322,14 +711,16 @@ export class VerificadorPrecosOfertasService {
           status: 'SUCESSO',
           preco: extraido.preco,
           urlFinal: atual.toString(),
-          origemPreco: extraido.origem,
+          // Mantém o contrato legado da API. Métodos novos de extração são
+          // reportados como META para não quebrar consumidores existentes.
+          origemPreco: extraido.origem === 'JSON_LD' ? 'JSON_LD' : 'META',
         };
       }
 
       return {
         status: 'FALHOU',
         motivo:
-          'Não foi encontrado preço estruturado confiável na página. O valor salvo não foi alterado.',
+          'Não foi encontrado preço confiável na página. O valor salvo não foi alterado.',
       };
     }
 
