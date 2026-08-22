@@ -154,6 +154,18 @@ describe('Sugestões de ofertas por usuários (e2e)', () => {
         expect.objectContaining({ chave: 'frequenciaMtS' }),
       ]),
     );
+
+    const celular = res.body.categorias.find(
+      (item: { categoria: string }) => item.categoria === 'CELULAR',
+    );
+    expect(celular).toBeDefined();
+    expect(celular.campos).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ chave: 'armazenamentoGb', unidade: 'GB' }),
+        expect.objectContaining({ chave: 'bateriaMah', unidade: 'mAh' }),
+        expect.objectContaining({ chave: 'rede5g', tipo: 'booleano' }),
+      ]),
+    );
   });
 
   it('usuário envia link + categoria + especificações e sugestão nasce EM_ANALISE', async () => {

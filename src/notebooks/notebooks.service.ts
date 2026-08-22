@@ -147,7 +147,9 @@ export class NotebooksService {
   }
 
   async criar(dados: CriarNotebookDto) {
-    this.validarEspecificacao(dados.especificacao);
+    if (dados.especificacao) {
+      this.validarEspecificacao(dados.especificacao);
+    }
     const categoria = await this.garantirCategoriaNotebooks();
 
     const duplicado = await this.prisma.produto.findFirst({
@@ -194,7 +196,9 @@ export class NotebooksService {
               ativo: dados.ativo ?? true,
             },
           },
-          especificacao: { create: dados.especificacao },
+          ...(dados.especificacao
+            ? { especificacao: { create: dados.especificacao } }
+            : {}),
         },
         include: this.includeDetalhado(),
       });

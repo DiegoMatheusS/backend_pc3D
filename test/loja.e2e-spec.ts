@@ -20,6 +20,11 @@ describe('Loja expandida (e2e)', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('total');
     expect(res.body).toHaveProperty('categorias');
+    expect(
+      res.body.categorias.some(
+        (categoria: { slug: string }) => categoria.slug === 'celulares',
+      ),
+    ).toBe(true);
   });
 
   it('GET /api/produtos → 200', async () => {

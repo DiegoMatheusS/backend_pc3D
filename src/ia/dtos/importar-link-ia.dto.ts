@@ -1,5 +1,6 @@
-import { IsEnum, IsOptional, IsUrl, MaxLength } from 'class-validator';
-import { CategoriaHardware } from '../../generated/prisma/enums';
+import { IsIn, IsOptional, IsUrl, MaxLength } from 'class-validator';
+import { CATEGORIAS_IMPORTACAO_IA } from './categoria-importacao-ia';
+import type { CategoriaImportacaoIa } from './categoria-importacao-ia';
 
 export class ImportarLinkIaDto {
   @IsUrl({
@@ -11,10 +12,10 @@ export class ImportarLinkIaDto {
   url!: string;
 
   /**
-   * O ADMIN pode escolher a categoria antes de importar. Isso funciona como
-   * uma dica forte para a normalização, sem autorizar a IA a inventar specs.
+   * O ADMIN pode escolher o destino antes de importar. A escolha é preservada:
+   * a IA não troca NOTEBOOK por PROCESSADOR só porque o anúncio cita a CPU.
    */
   @IsOptional()
-  @IsEnum(CategoriaHardware)
-  categoriaEsperada?: CategoriaHardware;
+  @IsIn(CATEGORIAS_IMPORTACAO_IA)
+  categoriaEsperada?: CategoriaImportacaoIa;
 }

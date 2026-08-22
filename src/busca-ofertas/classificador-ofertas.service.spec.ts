@@ -16,6 +16,15 @@ describe('ClassificadorOfertasService', () => {
     );
   });
 
+  it('classifica celulares e smartphones por regras locais', () => {
+    expect(service.classificar('Apple iPhone 17 Pro Max 256GB')).toBe(
+      TagBuscaOferta.CELULAR,
+    );
+    expect(service.classificar('Smartphone Samsung Galaxy S26 5G 256GB')).toBe(
+      TagBuscaOferta.CELULAR,
+    );
+  });
+
   it('não depende de Gemini para classificar uma fonte', () => {
     expect(service.classificar('Fonte Corsair RM850x 850W ATX')).toBe(
       TagBuscaOferta.FONTE,

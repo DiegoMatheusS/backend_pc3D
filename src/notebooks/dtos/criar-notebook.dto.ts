@@ -36,7 +36,8 @@ export class CriarNotebookDto {
   @IsOptional() @IsBoolean() publicado?: boolean;
   @IsOptional() @IsBoolean() ativo?: boolean;
 
+  @IsOptional()
   @ValidateNested()
   @Type(() => CriarEspecificacaoNotebookDto)
-  especificacao!: CriarEspecificacaoNotebookDto;
+  especificacao?: CriarEspecificacaoNotebookDto;
 }

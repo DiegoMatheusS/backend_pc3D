@@ -14,6 +14,7 @@ export const CATEGORIAS_SUGESTAO_OFERTA = [
   'FONE',
   'MICROFONE',
   'NOTEBOOK',
+  'CELULAR',
   'OUTRO',
 ] as const;
 
@@ -376,6 +377,52 @@ export const FORMULARIOS_SUGESTAO_OFERTA: Record<
         minimo: 24,
         maximo: 1000,
       }),
+    ],
+  },
+  CELULAR: {
+    categoria: 'CELULAR',
+    rotulo: 'Celular',
+    campos: [
+      campo('sistemaOperacional', 'Sistema operacional', 'texto', {
+        placeholder: 'Android 16 / iOS 20',
+      }),
+      campo('processador', 'Processador', 'texto', { recomendado: true }),
+      campo('memoriaRamGb', 'Memória RAM', 'numero', {
+        unidade: 'GB',
+        minimo: 1,
+        maximo: 64,
+      }),
+      campo('armazenamentoGb', 'Armazenamento', 'numero', {
+        unidade: 'GB',
+        minimo: 8,
+        maximo: 4096,
+        recomendado: true,
+      }),
+      campo('telaPolegadas', 'Tela', 'numero', {
+        unidade: 'pol',
+        minimo: 3,
+        maximo: 10,
+      }),
+      campo('resolucao', 'Resolução da tela', 'texto', {
+        placeholder: '2778x1284',
+      }),
+      campo('taxaAtualizacaoHz', 'Taxa de atualização', 'numero', {
+        unidade: 'Hz',
+        minimo: 30,
+        maximo: 240,
+      }),
+      campo('cameraPrincipalMp', 'Câmera principal', 'numero', {
+        unidade: 'MP',
+        minimo: 1,
+        maximo: 500,
+      }),
+      campo('bateriaMah', 'Bateria', 'numero', {
+        unidade: 'mAh',
+        minimo: 500,
+        maximo: 20000,
+      }),
+      campo('rede5g', '5G', 'booleano'),
+      campo('nfc', 'NFC', 'booleano'),
     ],
   },
   OUTRO: {

@@ -14,6 +14,10 @@ import { MontarPcIaDto } from './dtos/montar-pc-ia.dto';
 import { RecomendarLojaIaDto } from './dtos/recomendar-loja-ia.dto';
 import { ImportarLinkIaDto } from './dtos/importar-link-ia.dto';
 import {
+  CategoriaImportacaoIa,
+  ehCategoriaHardwareImportacao,
+} from './dtos/categoria-importacao-ia';
+import {
   AcaoMontagemGuiadaIa,
   ComponenteSnapshotIaDto,
   EtapaMontagemGuiadaIa,
@@ -168,6 +172,54 @@ export class IaService {
               rotulo: 'Importar Hardware por link',
               usaGemini: false,
               acao: { tipo: 'PEDIR_URL_IMPORTACAO' as const },
+            },
+            {
+              id: 'CADASTRAR_NOTEBOOK',
+              rotulo: 'Cadastrar Notebook',
+              usaGemini: false,
+              acao: { tipo: 'ABRIR_CADASTRO_NOTEBOOK' as const },
+            },
+            {
+              id: 'IMPORTAR_NOTEBOOK_LINK',
+              rotulo: 'Pesquisar Notebook por link',
+              usaGemini: true,
+              acao: {
+                tipo: 'PEDIR_URL_IMPORTACAO' as const,
+                categoriaEsperada: 'NOTEBOOK' as const,
+              },
+            },
+            {
+              id: 'CADASTRAR_PC_MONTADO',
+              rotulo: 'Cadastrar PC Montado',
+              usaGemini: false,
+              acao: { tipo: 'ABRIR_CADASTRO_PC_MONTADO' as const },
+            },
+            {
+              id: 'IMPORTAR_PC_MONTADO_LINK',
+              rotulo: 'Pesquisar PC Montado por link',
+              usaGemini: true,
+              acao: {
+                tipo: 'PEDIR_URL_IMPORTACAO' as const,
+                categoriaEsperada: 'PC_MONTADO' as const,
+              },
+            },
+            {
+              id: 'CADASTRAR_CELULAR',
+              rotulo: 'Cadastrar Celular',
+              usaGemini: false,
+              acao: {
+                tipo: 'ABRIR_CADASTRO_PRODUTO' as const,
+                categoriaSlug: 'celulares',
+              },
+            },
+            {
+              id: 'IMPORTAR_CELULAR_LINK',
+              rotulo: 'Pesquisar Celular por link',
+              usaGemini: true,
+              acao: {
+                tipo: 'PEDIR_URL_IMPORTACAO' as const,
+                categoriaEsperada: 'CELULAR' as const,
+              },
             },
           ]
         : []),
@@ -2385,11 +2437,37 @@ Ao final retorne também:
     return regras.find(([regex]) => regex.test(texto))?.[1] ?? null;
   }
 
+  private categoriaImportacaoPorMensagemAdmin(
+    mensagem: string,
+  ): CategoriaImportacaoIa | null {
+    const texto = this.normalizarTextoIntencaoAdmin(mensagem);
+
+    // Produtos completos têm prioridade sobre componentes citados no anúncio.
+    if (/\b(?:notebook|laptop|ultrabook)\b/.test(texto)) return 'NOTEBOOK';
+    if (
+      /\b(?:pc montado|computador montado|desktop montado|gaming pc|pc gamer completo|computador gamer completo)\b/.test(
+        texto,
+      )
+    ) {
+      return 'PC_MONTADO';
+    }
+    if (
+      /\b(?:celular|smartphone|iphone|galaxy|redmi|poco|moto g|pixel)\b/.test(
+        texto,
+      )
+    ) {
+      return 'CELULAR';
+    }
+
+    return this.categoriaHardwarePorMensagemAdmin(mensagem);
+  }
+
   private construirAcaoLocalChatAdmin(dados: ChatAdminIaDto) {
     const mensagem = dados.mensagem.trim();
     const texto = this.normalizarTextoIntencaoAdmin(mensagem);
     const url = this.extrairUrlDaMensagemAdmin(mensagem);
-    const categoriaMensagem = this.categoriaHardwarePorMensagemAdmin(mensagem);
+    const categoriaMensagem =
+      this.categoriaImportacaoPorMensagemAdmin(mensagem);
     const categoriaUrl = url ? this.categoriaImportacaoPorUrl(url) : null;
     const categoria = categoriaMensagem ?? categoriaUrl;
 
@@ -2478,7 +2556,31 @@ Ao final retorne também:
       };
     }
 
-    if (categoria) {
+    if (categoria && !ehCategoriaHardwareImportacao(categoria)) {
+      const destino =
+        categoria === 'NOTEBOOK'
+          ? 'Notebook'
+          : categoria === 'PC_MONTADO'
+            ? 'PC Montado'
+            : 'Celular';
+      return {
+        resposta: `Vou preparar o cadastro de ${destino} para revisão. Nada será salvo automaticamente.`,
+        processamento: {
+          modo: 'LOCAL' as const,
+          geminiUtilizado: false,
+          motivo: 'Destino comercial especializado reconhecido localmente.',
+        },
+        acaoEstruturada: {
+          tipo: 'ABRIR_CADASTRO_ESPECIALIZADO' as const,
+          abrirAutomaticamente: true,
+          salvarAutomaticamente: false,
+          requerPapel: 'ADMIN' as const,
+          destino: categoria,
+        },
+      };
+    }
+
+    if (categoria && ehCategoriaHardwareImportacao(categoria)) {
       return {
         resposta: `Vou abrir o cadastro de ${this.rotuloCategoriaImportacao(
           categoria,
@@ -2578,6 +2680,15 @@ Ao final retorne também:
       [CategoriaHardware.VENTOINHA]: 'Ventoinha',
     };
     return rotulos[categoria] ?? categoria;
+  }
+
+  private rotuloDestinoImportacao(categoria: CategoriaImportacaoIa): string {
+    if (ehCategoriaHardwareImportacao(categoria)) {
+      return this.rotuloCategoriaImportacao(categoria);
+    }
+    if (categoria === 'NOTEBOOK') return 'Notebook';
+    if (categoria === 'PC_MONTADO') return 'PC montado';
+    return 'Celular';
   }
 
   private limparValorImportado(valor: unknown): unknown {
@@ -2940,6 +3051,327 @@ Ao final retorne também:
     return { permitida: permitido, adicional: excedente };
   }
 
+  private filtrarEspecificacaoImportadaPorDestino(
+    categoria: CategoriaImportacaoIa,
+    specs: Record<string, unknown>,
+  ): {
+    permitida: Record<string, unknown>;
+    adicional: Record<string, unknown>;
+  } {
+    if (ehCategoriaHardwareImportacao(categoria)) {
+      return this.filtrarEspecificacaoImportada(categoria, specs);
+    }
+
+    const chavesPorDestino: Record<
+      Exclude<CategoriaImportacaoIa, CategoriaHardware>,
+      string[]
+    > = {
+      NOTEBOOK: [
+        'processadorNome',
+        'processadorMarca',
+        'processadorGeracao',
+        'nucleos',
+        'threads',
+        'clockBaseMhz',
+        'clockTurboMhz',
+        'tdpWatts',
+        'gpuNome',
+        'gpuIntegrada',
+        'gpuDedicada',
+        'vramGb',
+        'tgpWatts',
+        'ramInstaladaGb',
+        'tipoMemoria',
+        'frequenciaMhz',
+        'ramSoldadaGb',
+        'slotsRamTotal',
+        'slotsRamLivres',
+        'ramMaximaGb',
+        'upgradeRam',
+        'armazenamentoGb',
+        'tipoArmazenamento',
+        'slotsM2Total',
+        'slotsM2Livres',
+        'upgradeArmazenamento',
+        'tamanhoTelaPolegadas',
+        'resolucaoLargura',
+        'resolucaoAltura',
+        'taxaAtualizacaoHz',
+        'tipoPainel',
+        'brilhoNits',
+        'touch',
+        'bateriaWh',
+        'autonomiaInformadaHoras',
+        'potenciaCarregadorWatts',
+        'pesoKg',
+        'larguraMm',
+        'alturaMm',
+        'profundidadeMm',
+        'wifi',
+        'bluetooth',
+        'usbA',
+        'usbC',
+        'thunderbolt',
+        'hdmi',
+        'displayPort',
+        'ethernet',
+        'leitorCartao',
+        'sistemaOperacional',
+        'webcam',
+        'resolucaoWebcam',
+        'tecladoIluminado',
+        'tecladoNumerico',
+        'leitorDigital',
+      ],
+      CELULAR: [
+        'processadorNome',
+        'ramGb',
+        'armazenamentoGb',
+        'tamanhoTelaPolegadas',
+        'resolucao',
+        'taxaAtualizacaoHz',
+        'tipoTela',
+        'cameraPrincipalMp',
+        'cameraFrontalMp',
+        'bateriaMah',
+        'carregamentoWatts',
+        'cincoG',
+        'nfc',
+        'dualSim',
+        'esim',
+        'wifi',
+        'bluetooth',
+        'sistemaOperacional',
+        'pesoGramas',
+        'cor',
+        'resistenciaAgua',
+      ],
+      PC_MONTADO: ['finalidade', 'resolucaoRecomendada', 'componentes'],
+    };
+
+    const resultado = this.filtrarObjetoPorChaves(
+      specs,
+      new Set(chavesPorDestino[categoria]),
+    );
+
+    if (
+      categoria === 'PC_MONTADO' &&
+      Array.isArray(resultado.permitido.componentes)
+    ) {
+      const chavesComponente = new Set([
+        'categoria',
+        'nome',
+        'marca',
+        'modelo',
+        'quantidade',
+        'especificacoes',
+      ]);
+      resultado.permitido.componentes = resultado.permitido.componentes.flatMap(
+        (componente) => {
+          if (!this.ehRegistro(componente)) return [];
+          return [
+            this.filtrarObjetoPorChaves(componente, chavesComponente).permitido,
+          ];
+        },
+      );
+    }
+
+    return {
+      permitida: resultado.permitido,
+      adicional: resultado.excedente,
+    };
+  }
+
+  private montarPayloadNotebookImportado(
+    normalizacao: Awaited<ReturnType<IaService['normalizarProduto']>>,
+  ) {
+    const raiz = normalizacao.camposRaiz;
+    const payload = this.limparValorImportado({
+      nome: raiz.nome,
+      marca: raiz.marca,
+      modelo: raiz.modelo,
+      descricao: raiz.descricao,
+      mpn: raiz.mpn,
+      gtin: raiz.gtin,
+      imagemUrl: raiz.imagemUrl,
+      imagemHoverUrl: raiz.imagemHoverUrl,
+      especificacao: normalizacao.especificacoesNormalizadas,
+      publicado: false,
+      ativo: true,
+    }) as Record<string, unknown>;
+
+    const faltantes = (['nome', 'marca', 'modelo'] as const).filter((campo) => {
+      const valor = payload[campo];
+      return typeof valor !== 'string' || valor.trim().length === 0;
+    });
+
+    return {
+      payload,
+      prontoParaCadastrar: faltantes.length === 0,
+      camposObrigatoriosAusentes: faltantes,
+    };
+  }
+
+  private async montarPayloadCelularImportado(
+    normalizacao: Awaited<ReturnType<IaService['normalizarProduto']>>,
+  ) {
+    const categoria = await this.prisma.categoriaProduto.findUnique({
+      where: { slug: 'celulares' },
+      select: { id: true },
+    });
+    const raiz = normalizacao.camposRaiz;
+    const payload = this.limparValorImportado({
+      categoriaId: categoria?.id,
+      nome: raiz.nome,
+      marca: raiz.marca,
+      modelo: raiz.modelo,
+      descricao: raiz.descricao,
+      mpn: raiz.mpn,
+      gtin: raiz.gtin,
+      imagemUrl: raiz.imagemUrl,
+      imagemHoverUrl: raiz.imagemHoverUrl,
+      metadados: {
+        tipo: 'CELULAR',
+        especificacoes: normalizacao.especificacoesNormalizadas,
+        dadosAdicionais: raiz.especificacoes,
+      },
+      publicado: false,
+      ativo: true,
+    }) as Record<string, unknown>;
+
+    const faltantes = [
+      ...(['nome'] as const).filter((campo) => {
+        const valor = payload[campo];
+        return typeof valor !== 'string' || valor.trim().length === 0;
+      }),
+      ...(categoria ? [] : ['categoriaId']),
+    ];
+
+    return {
+      payload,
+      prontoParaCadastrar: faltantes.length === 0,
+      camposObrigatoriosAusentes: faltantes,
+    };
+  }
+
+  private async montarPayloadPcMontadoImportado(
+    normalizacao: Awaited<ReturnType<IaService['normalizarProduto']>>,
+  ) {
+    const raiz = normalizacao.camposRaiz;
+    const specs = normalizacao.especificacoesNormalizadas;
+    const componentesBrutos = Array.isArray(specs.componentes)
+      ? specs.componentes.filter((item) => this.ehRegistro(item))
+      : [];
+
+    const componentesDetectados: Array<Record<string, unknown>> = [];
+    const componentesVinculados: Array<Record<string, unknown>> = [];
+
+    for (const componente of componentesBrutos) {
+      const categoriaTexto =
+        typeof componente.categoria === 'string'
+          ? componente.categoria.toUpperCase()
+          : '';
+      if (!ehCategoriaHardwareImportacao(categoriaTexto)) {
+        componentesDetectados.push({
+          ...componente,
+          hardwareId: null,
+          motivoVinculo: 'Categoria técnica não reconhecida.',
+        });
+        continue;
+      }
+
+      const nome =
+        typeof componente.nome === 'string' ? componente.nome.trim() : '';
+      const marca =
+        typeof componente.marca === 'string' ? componente.marca.trim() : '';
+      const modelo =
+        typeof componente.modelo === 'string' ? componente.modelo.trim() : '';
+
+      const hardware = await this.prisma.hardware.findFirst({
+        where: {
+          categoria: categoriaTexto,
+          ativo: true,
+          OR: [
+            ...(modelo
+              ? [{ modelo: { equals: modelo, mode: 'insensitive' as const } }]
+              : []),
+            ...(nome
+              ? [{ nome: { equals: nome, mode: 'insensitive' as const } }]
+              : []),
+          ],
+          ...(marca
+            ? { marca: { equals: marca, mode: 'insensitive' as const } }
+            : {}),
+        },
+        select: { id: true, nome: true, categoria: true },
+      });
+
+      const detectado = {
+        ...componente,
+        categoria: categoriaTexto,
+        hardwareId: hardware?.id ?? null,
+        hardwareNome: hardware?.nome ?? null,
+        motivoVinculo: hardware
+          ? 'Hardware existente encontrado por marca/modelo ou nome exato.'
+          : 'Componente identificado, mas ainda precisa ser vinculado/cadastrado no catálogo técnico.',
+      };
+      componentesDetectados.push(detectado);
+
+      if (hardware) {
+        componentesVinculados.push({
+          hardwareId: hardware.id,
+          categoria: hardware.categoria,
+          quantidade:
+            typeof componente.quantidade === 'number' &&
+            componente.quantidade > 0
+              ? Math.min(Math.floor(componente.quantidade), 64)
+              : 1,
+        });
+      }
+    }
+
+    const payload = this.limparValorImportado({
+      nome: raiz.nome,
+      marca: raiz.marca,
+      modelo: raiz.modelo,
+      descricao: raiz.descricao,
+      imagemUrl: raiz.imagemUrl,
+      imagemHoverUrl: raiz.imagemHoverUrl,
+      finalidade: specs.finalidade,
+      resolucaoRecomendada: specs.resolucaoRecomendada,
+      componentes: componentesVinculados,
+      publicado: false,
+      ativo: true,
+    }) as Record<string, unknown>;
+
+    const categoriasObrigatorias = new Set([
+      CategoriaHardware.PROCESSADOR,
+      CategoriaHardware.PLACA_MAE,
+      CategoriaHardware.MEMORIA_RAM,
+      CategoriaHardware.ARMAZENAMENTO,
+      CategoriaHardware.FONTE,
+      CategoriaHardware.GABINETE,
+    ]);
+    const categoriasVinculadas = new Set(
+      componentesVinculados.map((item) => item.categoria as CategoriaHardware),
+    );
+    const faltantes = [
+      ...(typeof payload.nome === 'string' && payload.nome.trim()
+        ? []
+        : ['nome']),
+      ...[...categoriasObrigatorias]
+        .filter((categoria) => !categoriasVinculadas.has(categoria))
+        .map((categoria) => `componente:${categoria}`),
+    ];
+
+    return {
+      payload,
+      componentesDetectados,
+      prontoParaCadastrar: faltantes.length === 0,
+      camposObrigatoriosAusentes: faltantes,
+    };
+  }
+
   private montarPayloadHardwareImportado(
     categoria: CategoriaHardware,
     normalizacao: Awaited<ReturnType<IaService['normalizarProduto']>>,
@@ -3015,12 +3447,30 @@ Ao final retorne também:
 
   private categoriaImportacaoPorUrl(
     urlOriginal: string,
-  ): CategoriaHardware | null {
+  ): CategoriaImportacaoIa | null {
     let caminho = '';
     try {
       caminho = new URL(urlOriginal).pathname.toLowerCase();
     } catch {
       return null;
+    }
+
+    // Detecta primeiro produtos completos. Assim /notebook-intel-core-i5 não
+    // vira PROCESSADOR apenas por citar a CPU no slug.
+    if (/notebook|laptop|ultrabook/.test(caminho)) return 'NOTEBOOK';
+    if (
+      /pc[-_ ]?(?:montado|gamer|completo)|computador[-_ ]?(?:montado|gamer|completo)|desktop[-_ ]?montado/.test(
+        caminho,
+      )
+    ) {
+      return 'PC_MONTADO';
+    }
+    if (
+      /smartphone|celular|iphone|galaxy|redmi|poco|moto[-_ ]?g|pixel/.test(
+        caminho,
+      )
+    ) {
+      return 'CELULAR';
     }
 
     if (/power[-_]?supply|fonte/.test(caminho)) return CategoriaHardware.FONTE;
@@ -3503,6 +3953,8 @@ Ao final retorne também:
     const categoria =
       dados.categoriaEsperada ?? this.categoriaImportacaoPorUrl(dados.url);
 
+    if (!ehCategoriaHardwareImportacao(categoria)) return null;
+
     if (categoria === CategoriaHardware.FONTE) {
       return this.normalizarFonteDiretamenteSemIa(coleta, dados);
     }
@@ -3649,7 +4101,8 @@ ${dados.categoriaEsperada ? `Categoria escolhida pelo ADMIN: ${dados.categoriaEs
 
 REGRAS:
 - Priorize a ficha técnica oficial do fabricante.
-- Não use preço como especificação de Hardware.
+- Preço pertence a Oferta e não deve ser tratado como especificação técnica.
+- Se o destino escolhido for NOTEBOOK, PC_MONTADO ou CELULAR, trate CPU/GPU/RAM citadas no anúncio como componentes/especificações internas, sem trocar a categoria principal.
 - Não invente MPN, GTIN, dimensões, clocks, consumo, conectores ou compatibilidade.
 - Preserve variantes, capacidades, revisões de PCB e SKUs.
 - Quando um dado não puder ser confirmado, informe que não foi confirmado.
@@ -3686,7 +4139,8 @@ REGRAS:
 - Se a URL inicial for loja/revendedor, use-a apenas para identificar marca, modelo e MPN/part number e localize a página oficial do FABRICANTE.
 - Priorize página oficial de especificações, manual, datasheet ou support page.
 - Para GIGABYTE, MSI, ASUS e fabricantes com rota separada de Specifications/Tech Specs, procure a ficha técnica correspondente.
-- Não use preço como especificação de Hardware.
+- Preço pertence a Oferta e não deve ser tratado como especificação técnica.
+- Se o destino escolhido for NOTEBOOK, PC_MONTADO ou CELULAR, trate CPU/GPU/RAM citadas no anúncio como componentes/especificações internas, sem trocar a categoria principal.
 - Não invente MPN, GTIN, dimensões, clocks, consumo, conectores ou compatibilidade.
 - Preserve variantes e revisões; não misture SKUs diferentes.
 - Quando um dado não puder ser confirmado, diga explicitamente que ele não foi confirmado.
@@ -3740,22 +4194,34 @@ REGRAS:
       typeof categoriaNormalizada === 'string'
         ? categoriaNormalizada.toUpperCase()
         : null;
-    const categoriasHardware = new Set<string>(
-      Object.values(CategoriaHardware),
-    );
+    const categoriasImportacao = new Set<string>([
+      ...Object.values(CategoriaHardware),
+      'NOTEBOOK',
+      'PC_MONTADO',
+      'CELULAR',
+    ]);
 
-    const categoriaEscolhida =
+    const categoriaEscolhida: CategoriaImportacaoIa | null =
       dados.categoriaEsperada ??
-      (categoriaTexto && categoriasHardware.has(categoriaTexto)
-        ? (categoriaTexto as CategoriaHardware)
+      (categoriaTexto && categoriasImportacao.has(categoriaTexto)
+        ? (categoriaTexto as CategoriaImportacaoIa)
         : this.categoriaImportacaoPorUrl(dados.url));
 
     const cadastroSugerido =
       normalizacao && categoriaEscolhida
-        ? this.montarPayloadHardwareImportado(categoriaEscolhida, normalizacao)
+        ? ehCategoriaHardwareImportacao(categoriaEscolhida)
+          ? this.montarPayloadHardwareImportado(
+              categoriaEscolhida,
+              normalizacao,
+            )
+          : categoriaEscolhida === 'NOTEBOOK'
+            ? this.montarPayloadNotebookImportado(normalizacao)
+            : categoriaEscolhida === 'CELULAR'
+              ? await this.montarPayloadCelularImportado(normalizacao)
+              : await this.montarPayloadPcMontadoImportado(normalizacao)
         : null;
 
-    const categoriasComFichaTecnica = [
+    const categoriasComFichaTecnica: CategoriaImportacaoIa[] = [
       CategoriaHardware.PROCESSADOR,
       CategoriaHardware.PLACA_MAE,
       CategoriaHardware.MEMORIA_RAM,
@@ -3765,6 +4231,9 @@ REGRAS:
       CategoriaHardware.GABINETE,
       CategoriaHardware.COOLER,
       CategoriaHardware.VENTOINHA,
+      'NOTEBOOK',
+      'PC_MONTADO',
+      'CELULAR',
     ];
 
     const fontesCombinadas = new Map<
@@ -3795,8 +4264,8 @@ REGRAS:
     }
 
     const opcoesCategoria = categoriasComFichaTecnica.map((categoria) => ({
-      id: `HARDWARE_${categoria}`,
-      rotulo: `Usar como ${this.rotuloCategoriaImportacao(categoria)}`,
+      id: `${ehCategoriaHardwareImportacao(categoria) ? 'HARDWARE' : 'PRODUTO'}_${categoria}`,
+      rotulo: `Usar como ${this.rotuloDestinoImportacao(categoria)}`,
       categoria,
       acao: 'REIMPORTAR_COM_CATEGORIA' as const,
       requisicao: {
@@ -3805,6 +4274,35 @@ REGRAS:
         body: { url: dados.url, categoriaEsperada: categoria },
       },
     }));
+
+    const rotaCadastro =
+      categoriaEscolhida === null
+        ? '/api/admin/produtos'
+        : ehCategoriaHardwareImportacao(categoriaEscolhida)
+          ? '/api/hardwares'
+          : categoriaEscolhida === 'NOTEBOOK'
+            ? '/api/admin/notebooks'
+            : categoriaEscolhida === 'PC_MONTADO'
+              ? '/api/admin/builds'
+              : '/api/admin/produtos';
+
+    const tipoAcaoFrontend =
+      categoriaEscolhida === null
+        ? 'REVISAR_IMPORTACAO'
+        : ehCategoriaHardwareImportacao(categoriaEscolhida)
+          ? 'ABRIR_CADASTRO_HARDWARE'
+          : categoriaEscolhida === 'NOTEBOOK'
+            ? 'ABRIR_CADASTRO_NOTEBOOK'
+            : categoriaEscolhida === 'PC_MONTADO'
+              ? 'ABRIR_CADASTRO_PC_MONTADO'
+              : 'ABRIR_CADASTRO_PRODUTO';
+
+    const destinoSugerido =
+      categoriaEscolhida === null
+        ? 'PRODUTO'
+        : ehCategoriaHardwareImportacao(categoriaEscolhida)
+          ? 'HARDWARE'
+          : categoriaEscolhida;
 
     return {
       status: 'AGUARDANDO_CONFIRMACAO' as const,
@@ -3842,18 +4340,18 @@ REGRAS:
       normalizacao,
       iaDisponivel,
       avisoIa,
-      destinoSugerido: cadastroSugerido ? 'HARDWARE' : 'PRODUTO',
+      destinoSugerido,
       categoriaSugerida: categoriaEscolhida,
       cadastroSugerido,
       opcoesCategoria,
       confirmacaoSugerida:
         cadastroSugerido !== null && categoriaEscolhida !== null
           ? {
-              rotulo: `Cadastrar ${this.rotuloCategoriaImportacao(
+              rotulo: `Cadastrar ${this.rotuloDestinoImportacao(
                 categoriaEscolhida,
               )}`,
               metodo: 'POST' as const,
-              rota: '/api/hardwares',
+              rota: rotaCadastro,
               body: cadastroSugerido.payload,
               habilitada: cadastroSugerido.prontoParaCadastrar,
             }
@@ -3878,15 +4376,22 @@ REGRAS:
       acaoFrontend:
         cadastroSugerido !== null && categoriaEscolhida !== null
           ? {
-              tipo: 'ABRIR_CADASTRO_HARDWARE' as const,
+              tipo: tipoAcaoFrontend,
               abrirAutomaticamente: true,
               salvarAutomaticamente: false,
               requerPapel: 'ADMIN' as const,
               categoria: categoriaEscolhida,
+              rotaCadastro,
               payloadInicial: cadastroSugerido.payload,
               cadastroHabilitado: cadastroSugerido.prontoParaCadastrar,
               camposObrigatoriosAusentes:
                 cadastroSugerido.camposObrigatoriosAusentes,
+              ...('componentesDetectados' in cadastroSugerido
+                ? {
+                    componentesDetectados:
+                      cadastroSugerido.componentesDetectados,
+                  }
+                : {}),
               origem: 'IMPORTACAO_LINK' as const,
             }
           : {
@@ -3902,7 +4407,7 @@ REGRAS:
         'Escolher a categoria correta quando ela não puder ser determinada com segurança.',
         'Priorizar a página oficial do fabricante e a ficha técnica complementar nas fontes consultadas.',
         'Revisar todos os campos do payload; nenhum campo ausente deve ser estimado.',
-        'Cadastrar o Hardware somente quando camposObrigatoriosAusentes estiver vazio.',
+        'Cadastrar somente quando camposObrigatoriosAusentes estiver vazio; notebooks, celulares e PCs montados continuam sujeitos à revisão do ADMIN.',
         'Cadastrar Oferta separadamente quando a URL representar uma loja com preço real.',
       ],
       aviso:
@@ -3968,7 +4473,7 @@ REGRAS ABSOLUTAS:
 - Não invente, estime ou complete por conhecimento geral.
 - Use somente dados sustentados pelo conteúdo fornecido.
 - Quando houver conflito entre página comercial e página de especificações do fabricante, prefira a especificação técnica mais direta e registre o conflito em alertas.
-- Não extraia preço para Hardware; preço pertence a Oferta.
+- Não use preço como especificação técnica; preço pertence a Oferta em Hardware, Notebook, PC Montado e Celular.
 - Não invente MPN/GTIN.
 - Preserve detalhes técnicos adicionais confirmados, mas sem campo estruturado, dentro de "especificacoes".
 - Em CPU que suporta DDR4 e DDR5 com limites diferentes, NÃO reduza isso a um único frequenciaMemoriaMaximaMhz. Deixe o campo ausente e preserve os limites separados em "especificacoes".
@@ -3998,7 +4503,7 @@ Retorne APENAS um objeto JSON válido, sem markdown e sem texto antes/depois:
 
 CATEGORIAS TÉCNICAS PREFERIDAS:
 PROCESSADOR, PLACA_MAE, MEMORIA_RAM, PLACA_VIDEO, ARMAZENAMENTO, FONTE, GABINETE, COOLER, VENTOINHA.
-Se for claramente outro item da Loja, a categoria pode ser MONITOR, MOUSE, TECLADO, FONE, MICROFONE ou NOTEBOOK.
+Se for claramente outro item da Loja, a categoria pode ser MONITOR, MOUSE, TECLADO, FONE, MICROFONE, NOTEBOOK, CELULAR ou PC_MONTADO. Quando o ADMIN informar uma categoria, preserve-a mesmo que o título mencione componentes internos. Um notebook que cita Intel Core/Ryzen continua NOTEBOOK; um PC montado que cita CPU/GPU continua PC_MONTADO.
 
 VALORES DE ENUM QUE O BACKEND ACEITA (copie exatamente quando aplicável):
 - TipoMemoria: DDR3, DDR4, DDR5.
@@ -4048,6 +4553,15 @@ tipo, socketsSuportados, capacidadeTermicaWatts, alturaMm, larguraMm, profundida
 
 VENTOINHA:
 tamanhoMm, espessuraMm, rpmMinima, rpmMaxima, fluxoArCfm, pressaoEstaticaMmH2o, ruidoDb, conector, tensaoVolts, correnteAmperes, pwm, rgb, argb, fluxoReverso.
+
+NOTEBOOK:
+processadorNome, processadorMarca, processadorGeracao, nucleos, threads, clockBaseMhz, clockTurboMhz, tdpWatts, gpuNome, gpuIntegrada, gpuDedicada, vramGb, tgpWatts, ramInstaladaGb, tipoMemoria, frequenciaMhz, ramSoldadaGb, slotsRamTotal, slotsRamLivres, ramMaximaGb, upgradeRam, armazenamentoGb, tipoArmazenamento, slotsM2Total, slotsM2Livres, upgradeArmazenamento, tamanhoTelaPolegadas, resolucaoLargura, resolucaoAltura, taxaAtualizacaoHz, tipoPainel, brilhoNits, touch, bateriaWh, autonomiaInformadaHoras, potenciaCarregadorWatts, pesoKg, larguraMm, alturaMm, profundidadeMm, wifi, bluetooth, usbA, usbC, thunderbolt, hdmi, displayPort, ethernet, leitorCartao, sistemaOperacional, webcam, resolucaoWebcam, tecladoIluminado, tecladoNumerico, leitorDigital.
+
+CELULAR:
+processadorNome, ramGb, armazenamentoGb, tamanhoTelaPolegadas, resolucao, taxaAtualizacaoHz, tipoTela, cameraPrincipalMp, cameraFrontalMp, bateriaMah, carregamentoWatts, cincoG, nfc, dualSim, esim, wifi, bluetooth, sistemaOperacional, pesoGramas, cor, resistenciaAgua.
+
+PC_MONTADO:
+finalidade, resolucaoRecomendada, componentes. Cada item de componentes deve usar: categoria, nome, marca, modelo, quantidade, especificacoes. A categoria do componente deve usar os valores técnicos do Hardware (PROCESSADOR, PLACA_MAE, MEMORIA_RAM, PLACA_VIDEO, ARMAZENAMENTO, FONTE, GABINETE, COOLER, VENTOINHA). Não invente hardwareId.
 
 "especificacoes" deve guardar SOMENTE dados adicionais confirmados na fonte que não tenham campo estruturado próprio (por exemplo: controlador, NAND, TBW, MTBF, perfis de memória condicionais, BIOS/revisões, compartilhamentos complexos ainda não modelados).
 "evidencias" deve mapear campos importantes para pequenos trechos ou identificação da fonte que sustentem cada valor.
@@ -4107,14 +4621,18 @@ tamanhoMm, espessuraMm, rpmMinima, rpmMaxima, fluxoArCfm, pressaoEstaticaMmH2o, 
     const categoriaBruta = dados.categoriaEsperada ?? dadosExtraidos.categoria;
     const categoriaTexto =
       typeof categoriaBruta === 'string' ? categoriaBruta.toUpperCase() : '';
-    const categoriaHardware = Object.values(CategoriaHardware).includes(
-      categoriaTexto as CategoriaHardware,
-    )
-      ? (categoriaTexto as CategoriaHardware)
-      : null;
+    const destinosEspeciais = new Set(['NOTEBOOK', 'PC_MONTADO', 'CELULAR']);
+    const categoriaImportacao: CategoriaImportacaoIa | null =
+      ehCategoriaHardwareImportacao(categoriaTexto) ||
+      destinosEspeciais.has(categoriaTexto)
+        ? (categoriaTexto as CategoriaImportacaoIa)
+        : null;
 
-    const specsFiltradas = categoriaHardware
-      ? this.filtrarEspecificacaoImportada(categoriaHardware, specsBrutas)
+    const specsFiltradas = categoriaImportacao
+      ? this.filtrarEspecificacaoImportadaPorDestino(
+          categoriaImportacao,
+          specsBrutas,
+        )
       : { permitida: {}, adicional: specsBrutas };
 
     const especificacoesExtras = {

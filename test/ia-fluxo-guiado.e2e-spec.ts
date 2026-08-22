@@ -224,6 +224,57 @@ describe('IA — fluxo guiado e peças fora do catálogo (e2e)', () => {
     });
   });
 
+  it('chat ADMIN preserva NOTEBOOK como produto completo mesmo quando o link cita processador', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/admin/ia/chat')
+      .set('Cookie', cookieAdmin)
+      .send({
+        mensagem:
+          'Cadastre este notebook com processador Intel: https://loja.example/notebook-intel-n95-16gb-512gb',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.acaoEstruturada).toMatchObject({
+      tipo: 'IMPORTAR_E_ABRIR_CADASTRO',
+      requisicao: {
+        metodo: 'POST',
+        rota: '/api/admin/ia/importar-link',
+        body: {
+          url: 'https://loja.example/notebook-intel-n95-16gb-512gb',
+          categoriaEsperada: 'NOTEBOOK',
+        },
+      },
+    });
+  });
+
+  it('chat ADMIN reconhece PC montado e celular como destinos de importação por link', async () => {
+    const [pc, celular] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/admin/ia/chat')
+        .set('Cookie', cookieAdmin)
+        .send({
+          mensagem:
+            'Cadastre este PC montado: https://loja.example/pc-gamer-completo-ryzen-rtx',
+        }),
+      request(app.getHttpServer())
+        .post('/api/admin/ia/chat')
+        .set('Cookie', cookieAdmin)
+        .send({
+          mensagem:
+            'Cadastre este celular: https://loja.example/smartphone-galaxy-5g',
+        }),
+    ]);
+
+    expect(pc.status).toBe(200);
+    expect(pc.body.acaoEstruturada.requisicao.body.categoriaEsperada).toBe(
+      'PC_MONTADO',
+    );
+    expect(celular.status).toBe(200);
+    expect(celular.body.acaoEstruturada.requisicao.body.categoriaEsperada).toBe(
+      'CELULAR',
+    );
+  });
+
   it('chat ADMIN pode abrir cadastro de Hardware sem Gemini e sem salvar automaticamente', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/admin/ia/chat')

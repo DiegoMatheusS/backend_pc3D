@@ -81,6 +81,13 @@ export class BuscaOfertasService {
     if (slug.includes('monitor')) return TagBuscaOferta.MONITOR;
     if (slug.includes('notebook')) return TagBuscaOferta.NOTEBOOK;
     if (
+      slug.includes('celular') ||
+      slug.includes('smartphone') ||
+      slug.includes('mobile')
+    ) {
+      return TagBuscaOferta.CELULAR;
+    }
+    if (
       ['mouse', 'teclado', 'headset', 'fone', 'microfone', 'webcam'].some(
         (termo) => slug.includes(termo),
       )

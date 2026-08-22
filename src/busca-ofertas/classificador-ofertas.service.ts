@@ -44,6 +44,13 @@ export class ClassificadorOfertasService {
       return TagBuscaOferta.NOTEBOOK;
     }
     if (
+      /\b(celular|smartphone|iphone|galaxy\s+[asz]|redmi|poco\s+[xmf]|moto\s+g|pixel\s+\d)\b/.test(
+        texto,
+      )
+    ) {
+      return TagBuscaOferta.CELULAR;
+    }
+    if (
       /\b(mouse|teclado|keyboard|headset|fone|microfone|webcam)\b/.test(texto)
     ) {
       return TagBuscaOferta.PERIFERICOS;

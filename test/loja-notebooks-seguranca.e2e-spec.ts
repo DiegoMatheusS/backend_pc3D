@@ -118,6 +118,45 @@ describe('Loja, notebooks e validações administrativas (e2e)', () => {
     expect(res.status).toBe(400);
   });
 
+  it('permite cadastrar notebook como rascunho sem especificação e aceita números vindos de inputs HTML', async () => {
+    const criarBasico = await request(app.getHttpServer())
+      .post('/api/admin/notebooks')
+      .set('Cookie', cookieAdmin)
+      .send({
+        nome: `Notebook básico E2E ${sufixo}`,
+        marca: 'Marca E2E',
+        modelo: `NB-BASICO-${sufixo}`,
+        publicado: false,
+      });
+
+    expect(criarBasico.status).toBe(201);
+    notebookIds.push(criarBasico.body.id as number);
+    produtoIds.push(criarBasico.body.produtoId as number);
+    expect(criarBasico.body.especificacao).toBeNull();
+
+    const criarComStrings = await request(app.getHttpServer())
+      .post('/api/admin/notebooks')
+      .set('Cookie', cookieAdmin)
+      .send({
+        nome: `Notebook inputs E2E ${sufixo}`,
+        marca: 'Marca E2E',
+        modelo: `NB-INPUT-${sufixo}`,
+        publicado: false,
+        especificacao: {
+          ramInstaladaGb: '16',
+          armazenamentoGb: '512',
+          tamanhoTelaPolegadas: '15.6',
+          taxaAtualizacaoHz: '144',
+        },
+      });
+
+    expect(criarComStrings.status).toBe(201);
+    notebookIds.push(criarComStrings.body.id as number);
+    produtoIds.push(criarComStrings.body.produtoId as number);
+    expect(criarComStrings.body.especificacao.ramInstaladaGb).toBe(16);
+    expect(criarComStrings.body.especificacao.armazenamentoGb).toBe(512);
+  });
+
   it('notebook permite limpar campos opcionais sem erro 500', async () => {
     const criar = await request(app.getHttpServer())
       .post('/api/admin/notebooks')
