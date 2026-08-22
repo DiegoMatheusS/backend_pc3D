@@ -30,7 +30,7 @@ type UsuarioReq = { id: number; papel: string } | null;
 
 @ApiTags('IA Admin')
 @Controller('admin/ia')
-@Throttle({ global: { limit: 30, ttl: 60_000 } })
+@Throttle({ global: { limit: 15, ttl: 60_000 } })
 @UseGuards(AuthGuard, PapelGuard)
 export class IaAdminController {
   constructor(

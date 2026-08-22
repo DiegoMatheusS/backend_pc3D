@@ -8,6 +8,7 @@ import {
 import {
   ConflictException,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -39,6 +40,8 @@ type ErroAws = Error & {
 
 @Injectable()
 export class R2StorageService {
+  private readonly logger = new Logger(R2StorageService.name);
+
   constructor(private readonly configService: ConfigService) {}
 
   status() {
@@ -352,16 +355,12 @@ export class R2StorageService {
     const status = erroAws.$metadata?.httpStatusCode;
     const codigo = erroAws.name || erroAws.Code;
 
-    const detalhes = [
-      status ? `HTTP ${status}` : null,
-      codigo ? `código ${codigo}` : null,
-      erroAws.message ? erroAws.message.slice(0, 180) : null,
-    ]
-      .filter(Boolean)
-      .join(' — ');
-
-    return new ServiceUnavailableException(
-      detalhes ? `${mensagem} ${detalhes}` : mensagem,
+    this.logger.warn(
+      `${mensagem} ${status ? `HTTP ${status}` : 'HTTP desconhecido'}${
+        codigo ? ` — código ${codigo}` : ''
+      }`,
     );
+
+    return new ServiceUnavailableException(mensagem);
   }
 }

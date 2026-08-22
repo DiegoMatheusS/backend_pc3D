@@ -130,6 +130,7 @@ export class HardwaresAdminController {
 
   @Post('importar')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { limit: 5, ttl: 60_000 } })
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   importarProduto(@Body() dados: ImportarProdutoDto) {
     return this.hardwaresService.importarProdutoPorUrl(dados.urlOriginal);
@@ -179,12 +180,12 @@ export class HardwaresAdminController {
   @Post(':hardwareId/modelos-3d/upload')
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   @ApiConsumes('multipart/form-data')
-  @Throttle({ global: { limit: 10, ttl: 60_000 } })
+  @Throttle({ global: { limit: 3, ttl: 60_000 } })
   @UseInterceptors(
     FileInterceptor('arquivo', {
       limits: {
         files: 1,
-        fileSize: 100 * 1024 * 1024,
+        fileSize: 60 * 1024 * 1024,
       },
     }),
   )

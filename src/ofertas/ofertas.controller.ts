@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
@@ -179,6 +180,7 @@ export class OfertasAdminController {
 
   @Post('verificar-precos')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { limit: 2, ttl: 60_000 } })
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   verificarPrecos(@Body() dados: VerificarPrecosOfertasDto) {
     return this.ofertasService.verificarPrecosOfertas(dados.limite);

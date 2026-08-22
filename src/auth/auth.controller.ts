@@ -73,7 +73,7 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Autenticar usuário e criar sessão (cookie)' })
-  @Throttle({ global: { limit: 10, ttl: 60_000 } })
+  @Throttle({ global: { limit: 8, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -95,7 +95,7 @@ export class AuthController {
     description:
       'Valida a credential do Google no servidor. Se o e-mail já existir, vincula a conta; caso contrário, cria um novo USUARIO.',
   })
-  @Throttle({ global: { limit: 10, ttl: 60_000 } })
+  @Throttle({ global: { limit: 5, ttl: 60_000 } })
   @Post('google')
   @HttpCode(HttpStatus.OK)
   async google(

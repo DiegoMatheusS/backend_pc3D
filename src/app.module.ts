@@ -20,12 +20,14 @@ import { AvaliacoesModule } from './avaliacoes/avaliacoes.module';
 import { ComunidadeModule } from './comunidade/comunidade.module';
 import { BuscaOfertasModule } from './busca-ofertas/busca-ofertas.module';
 import { SugestoesOfertasModule } from './sugestoes-ofertas/sugestoes-ofertas.module';
+import { validarVariaveisAmbiente } from './config/env.validation';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
+      validate: validarVariaveisAmbiente,
     }),
     // Rate limiting global: 120 requisições por minuto por IP.
     // Rotas sensíveis/caras sobrescrevem esse limite com @Throttle.

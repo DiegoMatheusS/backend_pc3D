@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import {
+  criarProtecaoCacheSensivel,
   criarProtecaoOrigemNavegador,
   limitarComplexidadeJson,
   normalizarOrigensPermitidas,
@@ -71,6 +72,7 @@ async function bootstrap(): Promise<void> {
   app.use(criarProtecaoOrigemNavegador(allowedOrigins));
 
   app.use(cookieParser());
+  app.use(criarProtecaoCacheSensivel(sessionCookieName));
   app.setGlobalPrefix('api');
 
   // ── Corpo da requisição / abuso de payload ───────────────────────────────

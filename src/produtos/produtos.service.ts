@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import {
+  obterCabecalhoHttp,
+  requisitarUrlPublicaUmaVez,
+  validarUrlPublica,
+} from '../common/security/external-http-security';
 import {
   BadRequestException,
   ConflictException,
@@ -90,131 +93,6 @@ export class ProdutosService {
       slug: this.criarSlug(nome),
       grupo: GrupoCategoriaProduto.COMPONENTES,
     };
-  }
-
-  private enderecoIpPrivado(endereco: string): boolean {
-    const ip = endereco.replace(/^\[|\]$/g, '').toLowerCase();
-    const versao = isIP(ip);
-
-    if (versao === 4) {
-      const partes = ip.split('.').map(Number);
-      const [a, b] = partes;
-      return (
-        a === 0 ||
-        a === 10 ||
-        a === 127 ||
-        (a === 100 && b >= 64 && b <= 127) ||
-        (a === 169 && b === 254) ||
-        (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 168) ||
-        a >= 224
-      );
-    }
-
-    if (versao === 6) {
-      if (
-        ip === '::' ||
-        ip === '::1' ||
-        ip.startsWith('fc') ||
-        ip.startsWith('fd') ||
-        /^fe[89ab]/.test(ip) ||
-        ip.startsWith('ff')
-      ) {
-        return true;
-      }
-      if (ip.startsWith('::ffff:')) {
-        return this.enderecoIpPrivado(ip.slice('::ffff:'.length));
-      }
-    }
-
-    return false;
-  }
-
-  private async validarUrlPublica(valor: string): Promise<URL> {
-    let url: URL;
-    try {
-      url = new URL(valor);
-    } catch {
-      throw new BadRequestException('A URL informada é inválida.');
-    }
-
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      throw new BadRequestException('A importação aceita apenas HTTP/HTTPS.');
-    }
-    if (url.username || url.password) {
-      throw new BadRequestException('URLs com credenciais não são permitidas.');
-    }
-
-    const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-    if (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.local') ||
-      this.enderecoIpPrivado(hostname)
-    ) {
-      throw new BadRequestException(
-        'O endereço informado não pode apontar para uma rede interna.',
-      );
-    }
-
-    try {
-      const enderecos = await lookup(hostname, { all: true, verbatim: true });
-      if (
-        enderecos.length === 0 ||
-        enderecos.some(({ address }) => this.enderecoIpPrivado(address))
-      ) {
-        throw new BadRequestException(
-          'O endereço informado não pode apontar para uma rede interna.',
-        );
-      }
-    } catch (erro) {
-      if (erro instanceof BadRequestException) throw erro;
-      throw new BadRequestException(
-        'Não foi possível resolver o endereço informado.',
-      );
-    }
-
-    return url;
-  }
-
-  private async lerHtmlLimitado(
-    resposta: Response,
-    limiteBytes = 2_000_000,
-  ): Promise<string> {
-    const tamanhoInformado = Number(
-      resposta.headers.get('content-length') ?? '0',
-    );
-
-    if (tamanhoInformado > limiteBytes) {
-      throw new BadRequestException(
-        'A página é grande demais para importação.',
-      );
-    }
-
-    if (!resposta.body) return '';
-
-    const leitor = resposta.body.getReader();
-    const decoder = new TextDecoder();
-    let totalBytes = 0;
-    let html = '';
-
-    while (true) {
-      const { done, value } = await leitor.read();
-      if (done) break;
-
-      totalBytes += value.byteLength;
-      if (totalBytes > limiteBytes) {
-        await leitor.cancel();
-        throw new BadRequestException(
-          'A página é grande demais para importação.',
-        );
-      }
-
-      html += decoder.decode(value, { stream: true });
-    }
-
-    html += decoder.decode();
-    return html;
   }
 
   private extrairMeta(html: string, propriedade: string): string | null {
@@ -1412,15 +1290,26 @@ export class ProdutosService {
   }
 
   async importarProdutoPorUrl(urlOriginal: string) {
-    const url = await this.validarUrlPublica(urlOriginal);
-    const resposta = await fetch(url, {
-      redirect: 'manual',
-      headers: {
-        'User-Agent': 'CriaByte-Importer/1.0',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      signal: AbortSignal.timeout(12_000),
-    });
+    let url: URL;
+    let resposta: Awaited<ReturnType<typeof requisitarUrlPublicaUmaVez>>;
+
+    try {
+      url = (await validarUrlPublica(urlOriginal)).url;
+      resposta = await requisitarUrlPublicaUmaVez(url, {
+        timeoutMs: 12_000,
+        limiteRespostaBytes: 2_000_000,
+        headers: {
+          'User-Agent': 'CriaByte-Importer/1.0',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+      });
+    } catch (erro) {
+      throw new BadRequestException(
+        erro instanceof Error
+          ? erro.message
+          : 'Não foi possível acessar a URL informada.',
+      );
+    }
 
     if (resposta.status >= 300 && resposta.status < 400) {
       throw new BadRequestException(
@@ -1433,12 +1322,12 @@ export class ProdutosService {
       );
     }
 
-    const contentType = resposta.headers.get('content-type') ?? '';
-    if (!contentType.includes('text/html')) {
+    const contentType = obterCabecalhoHttp(resposta, 'content-type') ?? '';
+    if (!contentType.toLowerCase().includes('text/html')) {
       throw new BadRequestException('A URL não retornou uma página HTML.');
     }
 
-    const texto = await this.lerHtmlLimitado(resposta);
+    const texto = resposta.corpo.toString('utf8');
 
     const jsonLd = this.extrairJsonLdProduto(texto);
     const nome =

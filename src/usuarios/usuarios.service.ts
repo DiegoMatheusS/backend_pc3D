@@ -8,6 +8,7 @@ import {
 import * as argon2 from 'argon2';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
 import { AlterarMinhaSenhaDto } from './dtos/alterar-minha-senha.dto';
 import { AtualizarMeuPerfilDto } from './dtos/atualizar-meu-perfil.dto';
 import { AtualizarUsuarioDto } from './dtos/atualizar-usuario.dto';
@@ -17,7 +18,10 @@ import { PapelUsuario } from '../generated/prisma/enums';
 
 @Injectable()
 export class UsuariosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authService: AuthService,
+  ) {}
 
   listar() {
     return this.prisma.usuario.findMany({
@@ -169,7 +173,10 @@ export class UsuariosService {
             },
           });
 
-          if (dados.ativo === false) {
+          const papelAlterado =
+            dados.papel !== undefined && dados.papel !== usuarioAtual.papel;
+
+          if (dados.ativo === false || papelAlterado) {
             await transacao.sessao.updateMany({
               where: {
                 usuarioId: id,
@@ -199,7 +206,25 @@ export class UsuariosService {
   }
 
   async atualizarMeuPerfil(id: number, dados: AtualizarMeuPerfilDto) {
-    await this.buscarPorId(id);
+    const usuarioAtual = await this.prisma.usuario.findUnique({
+      where: { id },
+      select: { id: true, email: true, ativo: true },
+    });
+
+    if (!usuarioAtual || !usuarioAtual.ativo) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+
+    const novoEmail = dados.email?.trim().toLowerCase();
+    const alterandoEmail =
+      novoEmail !== undefined && novoEmail !== usuarioAtual.email.toLowerCase();
+
+    if (alterandoEmail) {
+      await this.authService.reautenticarParaAcaoSensivel(id, {
+        senhaAtual: dados.senhaAtual,
+        googleCredential: dados.googleCredential,
+      });
+    }
 
     try {
       return await this.prisma.usuario.update({
@@ -208,7 +233,7 @@ export class UsuariosService {
         },
         data: {
           nome: dados.nome?.trim(),
-          email: dados.email?.trim().toLowerCase(),
+          email: novoEmail,
         },
         select: {
           id: true,

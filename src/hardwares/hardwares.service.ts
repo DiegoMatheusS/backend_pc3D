@@ -1,5 +1,8 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import {
+  obterCabecalhoHttp,
+  requisitarUrlPublicaUmaVez,
+  validarUrlPublica,
+} from '../common/security/external-http-security';
 import {
   BadRequestException,
   ConflictException,
@@ -51,144 +54,16 @@ export class HardwaresService {
     private readonly r2StorageService: R2StorageService,
   ) {}
 
-  private enderecoIpPrivado(endereco: string): boolean {
-    const ip = endereco.replace(/^\[|\]$/g, '').toLowerCase();
-    const versao = isIP(ip);
-
-    if (versao === 4) {
-      const partes = ip.split('.').map(Number);
-      const [a, b] = partes;
-
-      return (
-        a === 0 ||
-        a === 10 ||
-        a === 127 ||
-        (a === 100 && b >= 64 && b <= 127) ||
-        (a === 169 && b === 254) ||
-        (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 168) ||
-        a >= 224
-      );
-    }
-
-    if (versao === 6) {
-      if (
-        ip === '::' ||
-        ip === '::1' ||
-        ip.startsWith('fc') ||
-        ip.startsWith('fd') ||
-        /^fe[89ab]/.test(ip) ||
-        ip.startsWith('ff')
-      ) {
-        return true;
-      }
-
-      if (ip.startsWith('::ffff:')) {
-        return this.enderecoIpPrivado(ip.slice('::ffff:'.length));
-      }
-    }
-
-    return false;
-  }
-
   private async validarUrlPublicaImportacao(valor: string): Promise<URL> {
-    let url: URL;
-
     try {
-      url = new URL(valor);
-    } catch {
-      throw new BadRequestException('A URL informada é inválida.');
-    }
-
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new BadRequestException(
-        'A importação aceita apenas endereços HTTP ou HTTPS.',
-      );
-    }
-
-    if (url.username || url.password) {
-      throw new BadRequestException(
-        'URLs com credenciais embutidas não são permitidas.',
-      );
-    }
-
-    const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-
-    if (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.local') ||
-      this.enderecoIpPrivado(hostname)
-    ) {
-      throw new BadRequestException(
-        'O endereço informado não pode apontar para uma rede interna.',
-      );
-    }
-
-    try {
-      const enderecos = await lookup(hostname, { all: true, verbatim: true });
-
-      if (
-        enderecos.length === 0 ||
-        enderecos.some(({ address }) => this.enderecoIpPrivado(address))
-      ) {
-        throw new BadRequestException(
-          'O endereço informado não pode apontar para uma rede interna.',
-        );
-      }
+      return (await validarUrlPublica(valor)).url;
     } catch (erro) {
-      if (erro instanceof BadRequestException) {
-        throw erro;
-      }
-
       throw new BadRequestException(
-        'Não foi possível resolver o endereço informado.',
+        erro instanceof Error
+          ? erro.message
+          : 'Não foi possível validar o endereço informado.',
       );
     }
-
-    return url;
-  }
-
-  private async lerHtmlLimitado(
-    resposta: Response,
-    limiteBytes = 2_000_000,
-  ): Promise<string> {
-    const tamanhoInformado = Number(
-      resposta.headers.get('content-length') ?? '0',
-    );
-
-    if (tamanhoInformado > limiteBytes) {
-      throw new BadRequestException(
-        'A página informada é grande demais para importação automática.',
-      );
-    }
-
-    if (!resposta.body) {
-      return '';
-    }
-
-    const leitor = resposta.body.getReader();
-    const decoder = new TextDecoder();
-    let totalBytes = 0;
-    let html = '';
-
-    while (true) {
-      const { done, value } = await leitor.read();
-      if (done) break;
-
-      totalBytes += value.byteLength;
-      if (totalBytes > limiteBytes) {
-        await leitor.cancel();
-        throw new BadRequestException(
-          'A página informada é grande demais para importação automática.',
-        );
-      }
-
-      html += decoder.decode(value, { stream: true });
-    }
-
-    html += decoder.decode();
-    return html;
   }
 
   private criarSlug(texto: string): string {
@@ -4247,9 +4122,9 @@ export class HardwaresService {
       );
     }
 
-    if (arquivo.size <= 0 || arquivo.size > 100 * 1024 * 1024) {
+    if (arquivo.size <= 0 || arquivo.size > 60 * 1024 * 1024) {
       throw new BadRequestException(
-        'O arquivo GLB precisa ter entre 1 byte e 100 MB.',
+        'O arquivo GLB precisa ter entre 1 byte e 60 MB.',
       );
     }
 
@@ -6542,64 +6417,78 @@ export class HardwaresService {
     let urlAtual = await this.validarUrlPublicaImportacao(
       urlOriginal instanceof URL ? urlOriginal.toString() : urlOriginal,
     );
-    let resposta: Response | null = null;
 
     for (
       let redirecionamentos = 0;
       redirecionamentos <= 3;
       redirecionamentos++
     ) {
-      resposta = await fetch(urlAtual, {
-        redirect: 'manual',
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (compatible; CriaByteCatalogBot/1.0; +https://criabyte.com.br)',
-          Accept: 'text/html,application/xhtml+xml',
-          'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-          'Cache-Control': 'no-cache',
-        },
-        signal: AbortSignal.timeout(15_000),
-      });
+      let resposta: Awaited<ReturnType<typeof requisitarUrlPublicaUmaVez>>;
 
-      if (
-        resposta.status >= 300 &&
-        resposta.status < 400 &&
-        resposta.headers.has('location')
-      ) {
+      try {
+        resposta = await requisitarUrlPublicaUmaVez(urlAtual, {
+          timeoutMs: 15_000,
+          limiteRespostaBytes: 2_000_000,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (compatible; CriaByteCatalogBot/1.0; +https://criabyte.com.br)',
+            Accept: 'text/html,application/xhtml+xml',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+            'Cache-Control': 'no-cache',
+          },
+        });
+      } catch (erro) {
+        throw new BadRequestException(
+          erro instanceof Error
+            ? erro.message
+            : 'Não foi possível acessar o endereço informado.',
+        );
+      }
+
+      if (resposta.status >= 300 && resposta.status < 400) {
+        const local = obterCabecalhoHttp(resposta, 'location');
+        if (!local) {
+          throw new BadRequestException(
+            'A página retornou um redirecionamento sem destino.',
+          );
+        }
+
         if (redirecionamentos === 3) {
           throw new BadRequestException(
             'A página realizou redirecionamentos demais.',
           );
         }
 
-        const destino = new URL(
-          resposta.headers.get('location') ?? '',
-          urlAtual,
-        );
+        const destino = new URL(local, urlAtual);
         urlAtual = await this.validarUrlPublicaImportacao(destino.toString());
         continue;
       }
 
-      break;
+      if (!resposta.ok) {
+        throw new BadRequestException(
+          `A página retornou o status ${resposta.status}. Verifique o endereço.`,
+        );
+      }
+
+      const tipo = obterCabecalhoHttp(resposta, 'content-type') ?? '';
+      if (
+        !tipo.toLowerCase().includes('text/html') &&
+        !tipo.toLowerCase().includes('application/xhtml+xml')
+      ) {
+        throw new BadRequestException(
+          'O endereço não retornou uma página HTML de produto.',
+        );
+      }
+
+      return {
+        urlFinal: urlAtual,
+        html: resposta.corpo.toString('utf8'),
+      };
     }
 
-    if (!resposta?.ok) {
-      throw new BadRequestException(
-        `A página retornou o status ${resposta?.status ?? 'desconhecido'}. Verifique o endereço.`,
-      );
-    }
-
-    const tipo = resposta.headers.get('content-type') ?? '';
-    if (
-      !tipo.includes('text/html') &&
-      !tipo.includes('application/xhtml+xml')
-    ) {
-      throw new BadRequestException(
-        'O endereço não retornou uma página HTML de produto.',
-      );
-    }
-
-    return { urlFinal: urlAtual, html: await this.lerHtmlLimitado(resposta) };
+    throw new BadRequestException(
+      'Não foi possível concluir a coleta da página.',
+    );
   }
 
   private descobrirUrlsTecnicasImportacao(html: string, principal: URL): URL[] {

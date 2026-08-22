@@ -91,7 +91,7 @@ export class ProdutosAdminController {
 
   @Post('importar')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ global: { limit: 15, ttl: 60_000 } })
+  @Throttle({ global: { limit: 5, ttl: 60_000 } })
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   async importar(
     @Body() dados: ImportarProdutoLojaDto,

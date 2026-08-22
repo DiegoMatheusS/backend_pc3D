@@ -16,7 +16,7 @@ import { MontagemGuiadaIaDto } from './dtos/montagem-guiada-ia.dto';
 
 @ApiTags('IA Pública')
 @Controller('ia')
-@Throttle({ global: { limit: 20, ttl: 60_000 } })
+@Throttle({ global: { limit: 15, ttl: 60_000 } })
 export class IaController {
   constructor(private readonly iaService: IaService) {}
 

@@ -5,6 +5,7 @@
  * não dependam de um usuário previamente existente no banco.
  */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
@@ -14,6 +15,7 @@ import { PapelUsuario } from '../src/generated/prisma/enums';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import {
+  criarProtecaoCacheSensivel,
   criarProtecaoOrigemNavegador,
   limitarComplexidadeJson,
   tratarErrosParserCorpo,
@@ -36,6 +38,10 @@ export async function criarApp(): Promise<App> {
   expressApp.set('query parser', 'simple');
   app.use(criarProtecaoOrigemNavegador(['http://localhost:5173']));
   app.use(cookieParser());
+  const configService = app.get(ConfigService);
+  const sessionCookieName =
+    configService.get<string>('SESSION_COOKIE_NAME') ?? 'pcbuilder_session';
+  app.use(criarProtecaoCacheSensivel(sessionCookieName));
   app.use(json({ limit: '1mb', strict: true }));
   app.use(
     urlencoded({

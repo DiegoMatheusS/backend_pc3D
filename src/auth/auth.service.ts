@@ -1,5 +1,7 @@
 import {
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -19,11 +21,72 @@ const HASH_SENHA_DUMMY =
 
 @Injectable()
 export class AuthService {
+  private readonly tentativasLoginPorConta = new Map<
+    string,
+    { falhas: number; janelaIniciadaEm: number; bloqueadoAte: number }
+  >();
+  private readonly janelaTentativasLoginMs = 15 * 60 * 1_000;
+  private readonly maximoFalhasLoginPorConta = 12;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly googleIdentityService: GoogleIdentityService,
   ) {}
+
+  private chaveContaLogin(email: string): string {
+    return createHash('sha256').update(email).digest('hex');
+  }
+
+  private verificarLimiteLoginConta(email: string): void {
+    const chave = this.chaveContaLogin(email);
+    const agora = Date.now();
+    const registro = this.tentativasLoginPorConta.get(chave);
+
+    if (!registro) return;
+
+    if (registro.bloqueadoAte > agora) {
+      throw new HttpException(
+        'Muitas tentativas de login. Tente novamente mais tarde.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    if (agora - registro.janelaIniciadaEm > this.janelaTentativasLoginMs) {
+      this.tentativasLoginPorConta.delete(chave);
+    }
+  }
+
+  private registrarFalhaLoginConta(email: string): void {
+    const chave = this.chaveContaLogin(email);
+    const agora = Date.now();
+    const atual = this.tentativasLoginPorConta.get(chave);
+    const registro =
+      !atual || agora - atual.janelaIniciadaEm > this.janelaTentativasLoginMs
+        ? { falhas: 0, janelaIniciadaEm: agora, bloqueadoAte: 0 }
+        : atual;
+
+    registro.falhas += 1;
+    if (registro.falhas >= this.maximoFalhasLoginPorConta) {
+      registro.bloqueadoAte = agora + this.janelaTentativasLoginMs;
+    }
+    this.tentativasLoginPorConta.set(chave, registro);
+
+    if (this.tentativasLoginPorConta.size > 5_000) {
+      for (const [itemChave, item] of this.tentativasLoginPorConta) {
+        if (
+          item.bloqueadoAte <= agora &&
+          agora - item.janelaIniciadaEm > this.janelaTentativasLoginMs
+        ) {
+          this.tentativasLoginPorConta.delete(itemChave);
+        }
+      }
+    }
+  }
+
+  private limparFalhasLoginConta(email: string): void {
+    this.tentativasLoginPorConta.delete(this.chaveContaLogin(email));
+  }
 
   private gerarHashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
@@ -48,7 +111,9 @@ export class AuthService {
       this.configService.get<string>('SESSION_DURATION_HOURS') ?? 8,
     );
     const duracaoValida =
-      Number.isFinite(duracaoHoras) && duracaoHoras > 0 ? duracaoHoras : 8;
+      Number.isFinite(duracaoHoras) && duracaoHoras >= 1 && duracaoHoras <= 168
+        ? duracaoHoras
+        : 8;
     const expiraEm = new Date(Date.now() + duracaoValida * 60 * 60 * 1000);
 
     await this.prisma.sessao.create({
@@ -111,6 +176,7 @@ export class AuthService {
 
   async login(dados: LoginDto) {
     const email = dados.email.trim().toLowerCase();
+    this.verificarLimiteLoginConta(email);
 
     const usuario = await this.prisma.usuario.findUnique({
       where: {
@@ -129,9 +195,11 @@ export class AuthService {
     }
 
     if (!usuario || !usuario.ativo || !senhaCorreta) {
+      this.registrarFalhaLoginConta(email);
       throw new UnauthorizedException('E-mail ou senha incorretos.');
     }
 
+    this.limparFalhasLoginConta(email);
     return this.criarSessao(usuario);
   }
 
@@ -250,6 +318,47 @@ export class AuthService {
       ...sessao,
       novoUsuario,
     };
+  }
+
+  async reautenticarParaAcaoSensivel(
+    usuarioId: number,
+    dados: { senhaAtual?: string; googleCredential?: string },
+  ): Promise<void> {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: {
+        senhaHash: true,
+        googleSub: true,
+        ativo: true,
+      },
+    });
+
+    if (!usuario || !usuario.ativo) {
+      throw new UnauthorizedException('Sessão inválida ou expirada.');
+    }
+
+    let autenticado = false;
+
+    if (dados.senhaAtual) {
+      try {
+        autenticado = await argon2.verify(usuario.senhaHash, dados.senhaAtual);
+      } catch {
+        autenticado = false;
+      }
+    }
+
+    if (!autenticado && dados.googleCredential && usuario.googleSub) {
+      const identidade = await this.googleIdentityService.verificarCredential(
+        dados.googleCredential,
+      );
+      autenticado = identidade.sub === usuario.googleSub;
+    }
+
+    if (!autenticado) {
+      throw new UnauthorizedException(
+        'Confirme sua identidade antes de alterar o e-mail.',
+      );
+    }
   }
 
   async validarSessao(token: string | undefined) {

@@ -5,6 +5,7 @@ import { AuthGuardOpcional } from './auth-guard-opcional.guard';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { GoogleIdentityService } from './google-identity.service';
+import { SessaoCleanupService } from './sessao-cleanup.service';
 
 @Module({
   controllers: [AuthController],
@@ -14,6 +15,7 @@ import { GoogleIdentityService } from './google-identity.service';
     AuthGuard,
     AuthGuardOpcional,
     AdminGuard,
+    SessaoCleanupService,
   ],
   exports: [AuthService, AuthGuard, AuthGuardOpcional, AdminGuard],
 })

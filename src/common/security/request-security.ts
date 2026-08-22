@@ -258,3 +258,37 @@ export function limitarComplexidadeJson(
     next();
   };
 }
+
+/**
+ * Impede cache de respostas privadas/sensíveis em browser, proxy e CDN.
+ * Também marca como privada qualquer resposta feita com cookie de sessão,
+ * mesmo quando a rota consultada é pública para usuários anônimos.
+ */
+export function criarProtecaoCacheSensivel(nomeCookieSessao: string) {
+  const caminhosSensiveis = [
+    /^\/api\/auth(?:\/|$)/u,
+    /^\/api\/usuarios(?:\/|$)/u,
+    /^\/api\/admin(?:\/|$)/u,
+    /^\/api\/auditoria(?:\/|$)/u,
+    /^\/api\/busca-ofertas(?:\/|$)/u,
+  ];
+
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const cookies = req.cookies as Record<string, unknown> | undefined;
+    const possuiSessao = typeof cookies?.[nomeCookieSessao] === 'string';
+    const caminho = req.originalUrl.split('?')[0] ?? req.path;
+    const caminhoSensivel = caminhosSensiveis.some((regex) =>
+      regex.test(caminho),
+    );
+
+    if (possuiSessao || caminhoSensivel) {
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.vary('Cookie');
+      res.vary('Origin');
+    }
+
+    next();
+  };
+}

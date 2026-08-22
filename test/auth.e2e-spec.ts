@@ -145,6 +145,36 @@ describe('Auth (e2e)', () => {
     expect(res.body).toHaveProperty('email', ADMIN_E2E_EMAIL);
   });
 
+  it('PATCH /api/usuarios/me — exige reautenticação para trocar e-mail', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: emailCadastro, senha: 'CadastroE2E@123456' });
+    const cookieHeader = login.headers['set-cookie'];
+    const cookie = Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader;
+    expect(cookie).toBeDefined();
+
+    const novoEmail = `alterado.${emailCadastro}`;
+    const semConfirmar = await request(app.getHttpServer())
+      .patch('/api/usuarios/me')
+      .set('Cookie', cookie as string)
+      .send({ email: novoEmail });
+
+    expect(semConfirmar.status).toBe(401);
+
+    const confirmado = await request(app.getHttpServer())
+      .patch('/api/usuarios/me')
+      .set('Cookie', cookie as string)
+      .send({ email: novoEmail, senhaAtual: 'CadastroE2E@123456' });
+
+    expect(confirmado.status).toBe(200);
+    expect(confirmado.body.email).toBe(novoEmail);
+
+    await prisma.usuario.update({
+      where: { email: novoEmail },
+      data: { email: emailCadastro },
+    });
+  });
+
   it('POST /api/auth/logout — com cookie → 204 + limpa cookie', async () => {
     const cookie = await loginAdmin(app);
 

@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiException } from '../exceptions/api.exception';
-import { Prisma } from '../../generated/prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 
 /**
  * Filtro global que padroniza TODAS as respostas de erro da API no formato:
@@ -57,6 +57,17 @@ export class FiltroHttpExcecoes implements ExceptionFilter {
     } catch {
       return 'Valor não serializável';
     }
+  }
+
+  private mascararSegredos(valor: string): string {
+    return valor
+      .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/giu, '$1[REDACTED]')
+      .replace(/(cookie\s*[:=]\s*)[^\n]+/giu, '$1[REDACTED]')
+      .replace(
+        /((?:token|secret|password|senha|credential)\s*[:=]\s*)[^\s,;]+/giu,
+        '$1[REDACTED]',
+      )
+      .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/gu, '[REDACTED]');
   }
 
   catch(excecao: unknown, host: ArgumentsHost): void {
@@ -114,11 +125,11 @@ export class FiltroHttpExcecoes implements ExceptionFilter {
     }
 
     // ── 3. Erros do Prisma ─────────────────────────────────────────────────
-    if (excecao instanceof Prisma.PrismaClientKnownRequestError) {
+    if (excecao instanceof PrismaClientKnownRequestError) {
       const { codigo, status, mensagem } = this.traduzirErroPrisma(excecao);
 
       this.logger.warn(
-        `Prisma ${excecao.code} em ${requisicao.method} ${requisicao.url}: ${excecao.message}`,
+        `Prisma ${excecao.code} em ${requisicao.method} ${requisicao.path}`,
       );
 
       resposta.status(status).json({
@@ -133,9 +144,11 @@ export class FiltroHttpExcecoes implements ExceptionFilter {
     // ── 4. Erro genérico inesperado ────────────────────────────────────────
     this.logger.error(
       `Erro inesperado em ${requisicao.method} ${requisicao.url}`,
-      excecao instanceof Error
-        ? (excecao.stack ?? excecao.message)
-        : this.converterParaTexto(excecao),
+      this.mascararSegredos(
+        excecao instanceof Error
+          ? (excecao.stack ?? excecao.message)
+          : this.converterParaTexto(excecao),
+      ),
     );
 
     resposta.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
@@ -164,7 +177,7 @@ export class FiltroHttpExcecoes implements ExceptionFilter {
     return mapa[status] ?? 'ERRO_DESCONHECIDO';
   }
 
-  private traduzirErroPrisma(erro: Prisma.PrismaClientKnownRequestError): {
+  private traduzirErroPrisma(erro: PrismaClientKnownRequestError): {
     codigo: string;
     status: number;
     mensagem: string;

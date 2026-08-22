@@ -208,4 +208,18 @@ describe('Segurança — hardening de entradas e navegador (e2e)', () => {
     expect(res.status).toBe(413);
     expect(res.body.codigo).toBe('PAYLOAD_MUITO_GRANDE');
   });
+  it('marca respostas de autenticação como no-store', async () => {
+    const res = await request(app.getHttpServer()).get('/api/auth/perfil');
+
+    expect(res.headers['cache-control']).toContain('no-store');
+  });
+
+  it('health público não expõe ambiente nem quantidade de usuários', async () => {
+    const res = await request(app.getHttpServer()).get('/api/health');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'ok', bancoDeDados: 'conectado' });
+    expect(res.body).not.toHaveProperty('ambiente');
+    expect(res.body).not.toHaveProperty('usuariosCadastrados');
+  });
 });

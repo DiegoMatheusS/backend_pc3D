@@ -1,6 +1,9 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { Injectable } from '@nestjs/common';
+import {
+  obterCabecalhoHttp,
+  requisitarUrlPublicaUmaVez,
+  validarUrlPublica,
+} from '../common/security/external-http-security';
 
 type ResultadoConsultaPreco =
   | {
@@ -30,107 +33,6 @@ export class VerificadorPrecosOfertasService {
 
   private ehRegistro(valor: unknown): valor is Record<string, unknown> {
     return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
-  }
-
-  private enderecoIpPrivado(endereco: string): boolean {
-    const ip = endereco.replace(/^\[|\]$/g, '').toLowerCase();
-    const versao = isIP(ip);
-
-    if (versao === 4) {
-      const partes = ip.split('.').map(Number);
-      const [a, b] = partes;
-      return (
-        a === 0 ||
-        a === 10 ||
-        a === 127 ||
-        (a === 100 && b >= 64 && b <= 127) ||
-        (a === 169 && b === 254) ||
-        (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 168) ||
-        a >= 224
-      );
-    }
-
-    if (versao === 6) {
-      if (
-        ip === '::' ||
-        ip === '::1' ||
-        ip.startsWith('fc') ||
-        ip.startsWith('fd') ||
-        /^fe[89ab]/.test(ip) ||
-        ip.startsWith('ff')
-      ) {
-        return true;
-      }
-      if (ip.startsWith('::ffff:')) {
-        return this.enderecoIpPrivado(ip.slice('::ffff:'.length));
-      }
-    }
-
-    return false;
-  }
-
-  private async validarUrlPublica(valor: string): Promise<URL> {
-    let url: URL;
-    try {
-      url = new URL(valor);
-    } catch {
-      throw new Error('URL inválida.');
-    }
-
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      throw new Error('A URL precisa usar HTTP ou HTTPS.');
-    }
-    if (url.username || url.password) {
-      throw new Error('URLs com credenciais não são permitidas.');
-    }
-
-    const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-    if (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.local') ||
-      this.enderecoIpPrivado(hostname)
-    ) {
-      throw new Error('A URL aponta para uma rede interna.');
-    }
-
-    const enderecos = await lookup(hostname, { all: true, verbatim: true });
-    if (
-      enderecos.length === 0 ||
-      enderecos.some(({ address }) => this.enderecoIpPrivado(address))
-    ) {
-      throw new Error('A URL aponta para uma rede interna.');
-    }
-
-    return url;
-  }
-
-  private async lerHtmlLimitado(resposta: Response): Promise<string> {
-    const tamanho = Number(resposta.headers.get('content-length') ?? '0');
-    if (tamanho > this.limiteHtmlBytes) {
-      throw new Error('Página grande demais para verificação.');
-    }
-    if (!resposta.body) return '';
-
-    const leitor = resposta.body.getReader();
-    const decoder = new TextDecoder();
-    let total = 0;
-    let html = '';
-
-    while (true) {
-      const { done, value } = await leitor.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > this.limiteHtmlBytes) {
-        await leitor.cancel();
-        throw new Error('Página grande demais para verificação.');
-      }
-      html += decoder.decode(value, { stream: true });
-    }
-
-    html += decoder.decode();
-    return html;
   }
 
   private normalizarPreco(valor: unknown): number | null {
@@ -321,7 +223,7 @@ export class VerificadorPrecosOfertasService {
   private async consultarUrl(valor: string): Promise<ResultadoConsultaPreco> {
     let atual: URL;
     try {
-      atual = await this.validarUrlPublica(valor);
+      atual = (await validarUrlPublica(valor)).url;
     } catch (erro) {
       return {
         status: 'FALHOU',
@@ -334,29 +236,29 @@ export class VerificadorPrecosOfertasService {
       redirecionamentos <= this.maximoRedirecionamentos;
       redirecionamentos++
     ) {
-      let resposta: Response;
+      let resposta: Awaited<ReturnType<typeof requisitarUrlPublicaUmaVez>>;
       try {
-        resposta = await fetch(atual, {
-          redirect: 'manual',
+        resposta = await requisitarUrlPublicaUmaVez(atual, {
+          timeoutMs: 12_000,
+          limiteRespostaBytes: this.limiteHtmlBytes,
           headers: {
             'User-Agent': 'CriaByte-OfferVerifier/1.0',
             Accept: 'text/html,application/xhtml+xml',
             'Accept-Language': 'pt-BR,pt;q=0.9',
           },
-          signal: AbortSignal.timeout(12_000),
         });
       } catch (erro) {
         return {
           status: 'FALHOU',
           motivo:
             erro instanceof Error
-              ? `Falha de rede: ${erro.message}`
-              : 'Falha de rede.',
+              ? erro.message
+              : 'Falha de rede ao consultar a página.',
         };
       }
 
       if (resposta.status >= 300 && resposta.status < 400) {
-        const local = resposta.headers.get('location');
+        const local = obterCabecalhoHttp(resposta, 'location');
         if (!local) {
           return {
             status: 'FALHOU',
@@ -370,9 +272,7 @@ export class VerificadorPrecosOfertasService {
           };
         }
         try {
-          atual = await this.validarUrlPublica(
-            new URL(local, atual).toString(),
-          );
+          atual = (await validarUrlPublica(new URL(local, atual))).url;
         } catch (erro) {
           return {
             status: 'FALHOU',
@@ -400,7 +300,7 @@ export class VerificadorPrecosOfertasService {
         };
       }
 
-      const contentType = resposta.headers.get('content-type') ?? '';
+      const contentType = obterCabecalhoHttp(resposta, 'content-type') ?? '';
       if (!contentType.toLowerCase().includes('text/html')) {
         return {
           status: 'FALHOU',
@@ -408,17 +308,7 @@ export class VerificadorPrecosOfertasService {
         };
       }
 
-      let html: string;
-      try {
-        html = await this.lerHtmlLimitado(resposta);
-      } catch (erro) {
-        return {
-          status: 'FALHOU',
-          motivo:
-            erro instanceof Error ? erro.message : 'Falha ao ler a página.',
-        };
-      }
-
+      const html = resposta.corpo.toString('utf8');
       const extraido = this.extrairPrecoEstruturado(html);
       if (extraido.indisponivel) {
         return {

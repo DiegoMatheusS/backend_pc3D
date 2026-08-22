@@ -24,7 +24,8 @@
     "db:test:migrate": "node scripts/prisma-test.mjs migrate",
     "db:test:studio": "node scripts/prisma-test.mjs studio",
     "verify": "npm run lint && npm run build && npm test && npm run test:e2e",
-    "security:audit": "npm audit --omit=dev --audit-level=high"
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "verify:security": "npm run verify && npm run security:audit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1111.0",
@@ -84,24 +85,23 @@
     "typescript-eslint": "^8.20.0"
   },
   "jest": {
-  "moduleFileExtensions": [
-    "js",
-    "json",
-    "ts"
-  ],
-  "rootDir": "src",
-  "testRegex": ".*\\.spec\\.ts$",
-  "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
-  },
-  "moduleNameMapper": {
-    "^(\\.{1,2}/.*)\\.js$": "$1"
-  },
-  "collectCoverageFrom": [
-    "**/*.(t|j)s"
-  ],
-  "coverageDirectory": "../coverage",
-  "testEnvironment": "node"
-}
-
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    }
+  }
 }
