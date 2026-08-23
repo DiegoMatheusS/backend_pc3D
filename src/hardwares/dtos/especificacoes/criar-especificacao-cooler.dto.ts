@@ -113,6 +113,30 @@ export class CriarEspecificacaoCoolerDto {
   consumoWatts?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000)
+  ruidoDb?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10_000_000)
+  vidaUtilHoras?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
+  pesoGramas?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  velocidadeMaxRpm?: number;
+
+  @IsOptional()
   @IsBoolean()
   rgb?: boolean;
 

@@ -550,6 +550,10 @@ model EspecificacaoCooler {
   conectorBomba           String?    @map("conector_bomba") @db.VarChar(50)
   consumoBombaWatts       Float?     @map("consumo_bomba_watts")
   consumoWatts            Float?     @map("consumo_watts")
+  ruidoDb                 Float?     @map("ruido_db")
+  vidaUtilHoras           Int?       @map("vida_util_horas")
+  pesoGramas              Float?     @map("peso_gramas")
+  velocidadeMaxRpm        Int?       @map("velocidade_max_rpm")
   rgb                     Boolean    @default(false)
   argb                    Boolean    @default(false)
 
