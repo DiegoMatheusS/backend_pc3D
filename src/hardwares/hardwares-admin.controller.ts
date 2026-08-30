@@ -33,6 +33,7 @@ import { CriarCompatibilidadeCpuPlacaMaeDto } from './dtos/criar-compatibilidade
 import { CriarCompatibilidadeMemoriaPlacaMaeDto } from './dtos/criar-compatibilidade-memoria-placa-mae.dto';
 import { CriarModelo3DHardwareDto } from './dtos/modelos-3d/criar-modelo-3d-hardware.dto';
 import { AtualizarStatusModelo3DDto } from './dtos/modelos-3d/atualizar-status-modelo-3d.dto';
+import { AtualizarModeloHome3DDto } from './dtos/modelos-3d/atualizar-modelo-home-3d.dto';
 import { AtualizarModelo3DHardwareDto } from './dtos/modelos-3d/atualizar-modelo-3d-hardware.dto';
 import { CriarPontoEncaixeHardwareDto } from './dtos/modelos-3d/criar-ponto-encaixe-hardware.dto';
 import { CriarAjusteEncaixeHardwareDto } from './dtos/modelos-3d/criar-ajuste-encaixe-hardware.dto';
@@ -361,6 +362,18 @@ export class HardwaresAdminController {
       ip: req.ip,
     });
     return resultado;
+  }
+
+  @Patch('modelos-3d/:modeloId/mostrar-no-home')
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  atualizarModeloHome3D(
+    @Param('modeloId', ParsePositiveIntPipe) modeloId: number,
+    @Body() dados: AtualizarModeloHome3DDto,
+  ) {
+    return this.hardwaresService.atualizarModeloHome3D(
+      modeloId,
+      dados.mostrarNoHome,
+    );
   }
 
   @Patch('modelos-3d/:modeloId/status')

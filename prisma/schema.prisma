@@ -689,6 +689,7 @@ model Modelo3DHardware {
   escalaCorrecaoZ    Float           @default(1) @map("escala_correcao_z")
   ativo              Boolean         @default(true)
   aprovado           Boolean         @default(false)
+  mostrarNoHome      Boolean         @default(false) @map("mostrar_no_home")
   criadoEm           DateTime        @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm       DateTime        @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 

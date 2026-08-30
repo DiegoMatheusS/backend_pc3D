@@ -225,6 +225,25 @@ export class OfertasService {
     });
   }
 
+  async removerParceiro(id: number) {
+    const parceiro = await this.prisma.parceiro.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        nome: true,
+        _count: { select: { ofertas: true, sugestoesOfertas: true } },
+      },
+    });
+    if (!parceiro) throw new NotFoundException('Parceiro não encontrado.');
+    if (parceiro._count.ofertas > 0 || parceiro._count.sugestoesOfertas > 0) {
+      throw new ConflictException(
+        'Não é possível excluir este parceiro porque existem ofertas ou sugestões vinculadas. Desative-o ou remova os vínculos primeiro.',
+      );
+    }
+    await this.prisma.parceiro.delete({ where: { id } });
+    return { removido: true, id: parceiro.id, nome: parceiro.nome };
+  }
+
   async listarOfertas() {
     const ofertas = await this.prisma.oferta.findMany({
       orderBy: { atualizadoEm: 'desc' },
@@ -582,10 +601,12 @@ export class OfertasService {
     const ha24Horas = new Date(agora.getTime() - 24 * 60 * 60 * 1000);
     const base = {
       status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
-      urlAfiliada: { not: null },
       parceiro: { ativo: true },
       produto: { ativo: true },
-      OR: [{ validoAte: null }, { validoAte: { gte: agora } }],
+      AND: [
+        { OR: [{ urlOriginal: { not: '' } }, { urlAfiliada: { not: null } }] },
+        { OR: [{ validoAte: null }, { validoAte: { gte: agora } }] },
+      ],
     };
 
     const [elegiveis, nuncaVerificadas, desatualizadas, ultima] =
@@ -624,10 +645,14 @@ export class OfertasService {
     const ofertas = await this.prisma.oferta.findMany({
       where: {
         status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
-        urlAfiliada: { not: null },
         parceiro: { ativo: true },
         produto: { ativo: true },
-        OR: [{ validoAte: null }, { validoAte: { gte: agora } }],
+        AND: [
+          {
+            OR: [{ urlOriginal: { not: '' } }, { urlAfiliada: { not: null } }],
+          },
+          { OR: [{ validoAte: null }, { validoAte: { gte: agora } }] },
+        ],
       },
       orderBy: [{ coletadoEm: 'asc' }, { id: 'asc' }],
       take: limite,
@@ -644,10 +669,14 @@ export class OfertasService {
     const totalElegiveisAntes = await this.prisma.oferta.count({
       where: {
         status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
-        urlAfiliada: { not: null },
         parceiro: { ativo: true },
         produto: { ativo: true },
-        OR: [{ validoAte: null }, { validoAte: { gte: agora } }],
+        AND: [
+          {
+            OR: [{ urlOriginal: { not: '' } }, { urlAfiliada: { not: null } }],
+          },
+          { OR: [{ validoAte: null }, { validoAte: { gte: agora } }] },
+        ],
       },
     });
 

@@ -5,18 +5,21 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { validarUrlPublica } from '../common/security/external-http-security';
 import { HardwaresService } from '../hardwares/hardwares.service';
 import { CategoriaHardware, StatusOferta } from '../generated/prisma/enums';
 import { IaProvider } from './ia.provider';
+import { ProdutoIaPythonService } from './produto-ia-python.service';
 import { ChatIaDto, UsoPC } from './dtos/chat-ia.dto';
 import { ChatAdminIaDto } from './dtos/chat-admin-ia.dto';
 import { MontarPcIaDto } from './dtos/montar-pc-ia.dto';
 import { RecomendarLojaIaDto } from './dtos/recomendar-loja-ia.dto';
 import { ImportarLinkIaDto } from './dtos/importar-link-ia.dto';
 import {
-  CategoriaImportacaoIa,
+  CATEGORIAS_IMPORTACAO_IA,
   ehCategoriaHardwareImportacao,
 } from './dtos/categoria-importacao-ia';
+import type { CategoriaImportacaoIa } from './dtos/categoria-importacao-ia';
 import {
   AcaoMontagemGuiadaIa,
   ComponenteSnapshotIaDto,
@@ -90,6 +93,7 @@ export class IaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly iaProvider: IaProvider,
+    private readonly produtoIaPython: ProdutoIaPythonService,
     private readonly hardwaresService: HardwaresService,
   ) {}
 
@@ -2686,9 +2690,50 @@ Ao final retorne também:
     if (ehCategoriaHardwareImportacao(categoria)) {
       return this.rotuloCategoriaImportacao(categoria);
     }
-    if (categoria === 'NOTEBOOK') return 'Notebook';
-    if (categoria === 'PC_MONTADO') return 'PC montado';
-    return 'Celular';
+    const rotulosProduto: Partial<Record<CategoriaImportacaoIa, string>> = {
+      NOTEBOOK: 'Notebook',
+      PC_MONTADO: 'PC montado',
+      CELULAR: 'Celular',
+      PROJETOR: 'Projetor',
+      CALCULADORA: 'Calculadora',
+      TELEFONE: 'Telefone',
+      IMPRESSORA: 'Impressora',
+      SCANNER: 'Scanner',
+      CAIXA_DE_SOM: 'Caixa de som',
+      ROTEADOR: 'Roteador',
+      REPETIDOR_WIFI: 'Repetidor Wi-Fi',
+      SWITCH_REDE: 'Switch de rede',
+      ADAPTADOR_WIFI_BLUETOOTH: 'Adaptador Wi-Fi/Bluetooth',
+      NOBREAK: 'Nobreak',
+      ESTABILIZADOR: 'Estabilizador',
+      FILTRO_DE_LINHA: 'Filtro de linha',
+      WEBCAM: 'Webcam',
+      TABLET: 'Tablet',
+      MICROCONTROLADOR: 'Microcontrolador',
+      KIT_ARDUINO_ROBOTICA: 'Kit Arduino/Robótica',
+      MINI_COMPUTADOR: 'Mini computador',
+      RELOGIO_INTELIGENTE: 'Relógio inteligente',
+      JOYSTICK: 'Joystick',
+      CONTROLE_VIDEO_GAME: 'Controle de videogame',
+      VOLANTE: 'Volante',
+      VIDEOGAME: 'Videogame',
+      JOGO: 'Jogo',
+      SMART_TV: 'Smart TV',
+      CAMERA: 'Câmera',
+      MOUSEPAD: 'Mousepad',
+      CARREGADOR: 'Carregador',
+      POWER_BANK: 'Power bank',
+      CABO_ADAPTADOR: 'Cabo/adaptador',
+      HUB_USB: 'Hub USB',
+      DOCK_STATION: 'Dock station',
+      PEN_DRIVE: 'Pen drive',
+      CARTAO_MEMORIA: 'Cartão de memória',
+      LEITOR_CARTAO: 'Leitor de cartão',
+      ARMAZENAMENTO_EXTERNO: 'Armazenamento externo',
+      IMPRESSORA_3D: 'Impressora 3D',
+      ACESSORIO_IMPRESSAO_3D: 'Acessório para impressão 3D',
+    };
+    return rotulosProduto[categoria] ?? categoria;
   }
 
   private limparValorImportado(valor: unknown): unknown {
@@ -3066,9 +3111,8 @@ Ao final retorne também:
       return this.filtrarEspecificacaoImportada(categoria, specs);
     }
 
-    const chavesPorDestino: Record<
-      Exclude<CategoriaImportacaoIa, CategoriaHardware>,
-      string[]
+    const chavesPorDestino: Partial<
+      Record<Exclude<CategoriaImportacaoIa, CategoriaHardware>, string[]>
     > = {
       NOTEBOOK: [
         'processadorNome',
@@ -3155,7 +3199,7 @@ Ao final retorne também:
 
     const resultado = this.filtrarObjetoPorChaves(
       specs,
-      new Set(chavesPorDestino[categoria]),
+      new Set(chavesPorDestino[categoria] ?? []),
     );
 
     if (
@@ -3967,455 +4011,299 @@ Ao final retorne também:
   }
 
   async importarLinkAdmin(dados: ImportarLinkIaDto) {
-    const coleta = await this.hardwaresService.importarProdutoPorUrl(dados.url);
-
-    const urlsParaContextoIa = Array.isArray(coleta.urlsParaContextoIa)
-      ? coleta.urlsParaContextoIa.filter(
-          (url): url is string =>
-            typeof url === 'string' && url.startsWith('http'),
-        )
-      : [dados.url];
-
-    const fontesColetadas = Array.isArray(coleta.fontesConsultadas)
-      ? coleta.fontesConsultadas.filter((fonte) => this.ehRegistro(fonte))
-      : [];
-    const avisosColeta = Array.isArray(coleta.avisosColeta)
-      ? coleta.avisosColeta.filter(
-          (aviso): aviso is string => typeof aviso === 'string',
-        )
-      : [];
-
-    const iaDisponivel = this.iaProvider.estaDisponivel();
-    const coletaDiretaTecnica = this.coletaDiretaPareceTecnica(coleta, dados);
-
-    let pesquisaWeb: Awaited<
-      ReturnType<IaProvider['pesquisarWebComFontes']>
-    > | null = null;
-    let normalizacao: NormalizacaoProdutoIa | null = null;
-    let avisoIa: string | null = null;
-    let quotaAtingida = false;
-    let estrategiaImportacao:
-      | 'HTML_DIRETO_COM_IA'
-      | 'URL_CONTEXT'
-      | 'GOOGLE_SEARCH'
-      | 'HTML_DIRETO_SEM_IA'
-      | 'COLETA_SEM_NORMALIZACAO' = 'COLETA_SEM_NORMALIZACAO';
-
-    const erroEhQuota = (erro: unknown) => {
-      const mensagem =
+    // Mantém a proteção SSRF do backend antes de chamar qualquer processo externo.
+    try {
+      await validarUrlPublica(dados.url);
+    } catch (erro) {
+      throw new BadRequestException(
         erro instanceof Error
-          ? erro.message.toLowerCase()
-          : typeof erro === 'string'
-            ? erro.toLowerCase()
-            : '';
-      return (
-        mensagem.includes('429') ||
-        mensagem.includes('cota') ||
-        mensagem.includes('quota') ||
-        mensagem.includes('resource_exhausted') ||
-        mensagem.includes('rate limit')
+          ? erro.message
+          : 'Não foi possível validar o endereço informado.',
       );
-    };
-
-    const montarConteudoParaIa = (
-      pesquisa: Awaited<ReturnType<IaProvider['pesquisarWebComFontes']>> | null,
-    ) =>
-      JSON.stringify(
-        {
-          url: dados.url,
-          categoriaEsperada: dados.categoriaEsperada,
-          fontesConsultadasDiretamente: fontesColetadas,
-          avisosColeta,
-          jsonLd: coleta.jsonLd,
-          meta: coleta.meta,
-          metasPorFonte: coleta.metasPorFonte,
-          textoExtraido: coleta.textoExtraido,
-          pesquisaWebComFontes: pesquisa
-            ? {
-                texto: pesquisa.texto,
-                fontes: pesquisa.fontes,
-              }
-            : null,
-        },
-        null,
-        2,
-      ).slice(0, 70000);
-
-    const tentarNormalizar = async (
-      pesquisa: Awaited<ReturnType<IaProvider['pesquisarWebComFontes']>> | null,
-      origem: string,
-    ): Promise<boolean> => {
-      try {
-        normalizacao = await this.normalizarProduto({
-          conteudoBruto: montarConteudoParaIa(pesquisa),
-          urlOrigem: dados.url,
-          categoriaEsperada: dados.categoriaEsperada,
-        });
-        return true;
-      } catch (erro) {
-        quotaAtingida ||= erroEhQuota(erro);
-        const mensagem =
-          erro instanceof Error ? erro.message : 'erro desconhecido';
-        this.logger.warn(
-          `Falha ao normalizar importação (${origem}): ${mensagem}`,
-        );
-        return false;
-      }
-    };
-
-    // 1) Se a página oficial já trouxe ficha técnica suficiente e existe parser
-    // determinístico para a categoria, use-o PRIMEIRO. Isso evita gastar uma
-    // chamada do Gemini para dados que já estão explícitos no fabricante e
-    // mantém a importação funcionando mesmo com cota 429.
-    if (coletaDiretaTecnica) {
-      const normalizacaoDireta = this.normalizarDiretamenteSemIa(coleta, dados);
-      if (normalizacaoDireta) {
-        normalizacao = normalizacaoDireta;
-        estrategiaImportacao = 'HTML_DIRETO_SEM_IA';
-        avisoIa = iaDisponivel
-          ? 'Ficha técnica oficial reconhecida pelo parser local; o Gemini não foi chamado nesta importação.'
-          : 'Ficha técnica oficial reconhecida pelo parser local; prévia gerada sem Gemini.';
-      }
     }
 
-    // 2) Para categorias ainda sem parser local, uma ficha técnica direta pode
-    // ser normalizada pela IA sem usar URL Context/Google Search.
-    if (iaDisponivel && !normalizacao && coletaDiretaTecnica) {
-      estrategiaImportacao = 'HTML_DIRETO_COM_IA';
-      await tentarNormalizar(null, 'HTML direto');
-    }
+    // Produto IA própria é a única interpretadora deste fluxo. Gemini permanece
+    // disponível para outras funcionalidades, mas não participa da importação por URL.
+    const resultado = await this.produtoIaPython.importarUrl(
+      dados.url,
+      dados.categoriaEsperada,
+    );
 
-    // 3) Quando o HTML direto é insuficiente, tente primeiro somente URL Context.
-    // Google Search fica como último recurso para reduzir custo/cota e evitar
-    // procurar fora do fabricante quando a própria URL já é suficiente.
-    if (
-      iaDisponivel &&
-      !normalizacao &&
-      !quotaAtingida &&
-      !coletaDiretaTecnica &&
-      urlsParaContextoIa.length > 0
-    ) {
-      try {
-        pesquisaWeb = await this.iaProvider.pesquisarWebComFontes({
-          urls: urlsParaContextoIa,
-          usarPesquisaGoogle: false,
-          prompt: `
-Leia as URLs fornecidas e identifique o produto EXATO para auxiliar um cadastro técnico no CriaByte.
-${dados.categoriaEsperada ? `Categoria escolhida pelo ADMIN: ${dados.categoriaEsperada}.` : ''}
-
-REGRAS:
-- Priorize a ficha técnica oficial do fabricante.
-- Preço pertence a Oferta e não deve ser tratado como especificação técnica.
-- Se o destino escolhido for NOTEBOOK, PC_MONTADO ou CELULAR, trate CPU/GPU/RAM citadas no anúncio como componentes/especificações internas, sem trocar a categoria principal.
-- Não invente MPN, GTIN, dimensões, clocks, consumo, conectores ou compatibilidade.
-- Preserve variantes, capacidades, revisões de PCB e SKUs.
-- Quando um dado não puder ser confirmado, informe que não foi confirmado.
-`,
-        });
-        estrategiaImportacao = 'URL_CONTEXT';
-        await tentarNormalizar(pesquisaWeb, 'URL Context');
-      } catch (erro) {
-        quotaAtingida ||= erroEhQuota(erro);
-        avisoIa = quotaAtingida
-          ? 'A cota do Gemini foi atingida. O backend não fará novas chamadas web nesta importação e continuará com os dados coletados diretamente.'
-          : 'Não foi possível usar URL Context. O backend continuará com a coleta direta e poderá tentar Google Search somente se necessário.';
-        this.logger.warn(
-          `Falha no URL Context da importação: ${
-            erro instanceof Error ? erro.message : 'erro desconhecido'
-          }`,
-        );
-      }
-    }
-
-    // 4) Google Search é o último recurso. Só é chamado se HTML direto/URL Context
-    // não foram suficientes e não houve 429. Isso evita multiplicar chamadas
-    // quando a cota já está esgotada.
-    if (iaDisponivel && !normalizacao && !quotaAtingida) {
-      try {
-        pesquisaWeb = await this.iaProvider.pesquisarWebComFontes({
-          urls: urlsParaContextoIa,
-          usarPesquisaGoogle: true,
-          prompt: `
-Identifique o produto EXATO da URL fornecida para auxiliar um cadastro técnico no CriaByte.
-${dados.categoriaEsperada ? `Categoria escolhida pelo ADMIN: ${dados.categoriaEsperada}.` : ''}
-
-REGRAS:
-- Se a URL inicial for loja/revendedor, use-a apenas para identificar marca, modelo e MPN/part number e localize a página oficial do FABRICANTE.
-- Priorize página oficial de especificações, manual, datasheet ou support page.
-- Para GIGABYTE, MSI, ASUS e fabricantes com rota separada de Specifications/Tech Specs, procure a ficha técnica correspondente.
-- Preço pertence a Oferta e não deve ser tratado como especificação técnica.
-- Se o destino escolhido for NOTEBOOK, PC_MONTADO ou CELULAR, trate CPU/GPU/RAM citadas no anúncio como componentes/especificações internas, sem trocar a categoria principal.
-- Não invente MPN, GTIN, dimensões, clocks, consumo, conectores ou compatibilidade.
-- Preserve variantes e revisões; não misture SKUs diferentes.
-- Quando um dado não puder ser confirmado, diga explicitamente que ele não foi confirmado.
-`,
-        });
-        estrategiaImportacao = 'GOOGLE_SEARCH';
-        await tentarNormalizar(pesquisaWeb, 'Google Search');
-      } catch (erro) {
-        quotaAtingida ||= erroEhQuota(erro);
-        avisoIa = quotaAtingida
-          ? 'A cota do Gemini foi atingida. O backend continuará com o parser local e com a página oficial já coletada.'
-          : 'Não foi possível complementar a importação com pesquisa web. O backend continuará com a página coletada diretamente.';
-        this.logger.warn(
-          `Falha na pesquisa web da importação: ${
-            erro instanceof Error ? erro.message : 'erro desconhecido'
-          }`,
-        );
-      }
-    }
-
-    // 5) Fallback determinístico. Para páginas que expõem ficha técnica de forma
-    // clara (começando por fontes de alimentação), a importação continua mesmo
-    // sem Gemini. Nenhum valor é estimado: o parser só usa campos explicitamente
-    // presentes no HTML/JSON-LD coletado.
-    if (!normalizacao) {
-      const normalizacaoDireta = this.normalizarDiretamenteSemIa(coleta, dados);
-      if (normalizacaoDireta) {
-        normalizacao = normalizacaoDireta;
-        estrategiaImportacao = 'HTML_DIRETO_SEM_IA';
-        avisoIa = [
-          avisoIa,
-          quotaAtingida
-            ? 'Prévia gerada sem Gemini porque a cota 429 foi atingida.'
-            : !iaDisponivel
-              ? 'Prévia gerada sem Gemini porque a IA está indisponível.'
-              : 'Prévia gerada pelo parser local após falha na normalização por IA.',
-        ]
-          .filter(Boolean)
-          .join(' ');
-      }
-    }
-
-    if (!normalizacao && !avisoIa) {
-      avisoIa = iaDisponivel
-        ? 'A coleta foi concluída, mas não foi possível normalizar o produto com segurança. Revise as fontes ou escolha a categoria e tente novamente.'
-        : 'GEMINI_API_KEY não está disponível. A coleta HTML foi executada; use cadastro manual quando o parser local não reconhecer a ficha.';
-    }
-
-    const categoriaNormalizada = normalizacao?.camposRaiz.categoria;
     const categoriaTexto =
-      typeof categoriaNormalizada === 'string'
-        ? categoriaNormalizada.toUpperCase()
-        : null;
-    const categoriasImportacao = new Set<string>([
-      ...Object.values(CategoriaHardware),
-      'NOTEBOOK',
-      'PC_MONTADO',
-      'CELULAR',
-    ]);
-
-    const categoriaEscolhida: CategoriaImportacaoIa | null =
-      dados.categoriaEsperada ??
-      (categoriaTexto && categoriasImportacao.has(categoriaTexto)
+      dados.categoriaEsperada ?? resultado.categoriaDetectada ?? null;
+    const categoriasImportacao = new Set<string>(
+      CATEGORIAS_IMPORTACAO_IA as readonly string[],
+    );
+    const categoriaEscolhida =
+      categoriaTexto && categoriasImportacao.has(categoriaTexto)
         ? (categoriaTexto as CategoriaImportacaoIa)
-        : this.categoriaImportacaoPorUrl(dados.url));
-
-    const cadastroSugerido =
-      normalizacao && categoriaEscolhida
-        ? ehCategoriaHardwareImportacao(categoriaEscolhida)
-          ? this.montarPayloadHardwareImportado(
-              categoriaEscolhida,
-              normalizacao,
-            )
-          : categoriaEscolhida === 'NOTEBOOK'
-            ? this.montarPayloadNotebookImportado(normalizacao)
-            : categoriaEscolhida === 'CELULAR'
-              ? await this.montarPayloadCelularImportado(normalizacao)
-              : await this.montarPayloadPcMontadoImportado(normalizacao)
         : null;
 
-    const categoriasComFichaTecnica: CategoriaImportacaoIa[] = [
-      CategoriaHardware.PROCESSADOR,
-      CategoriaHardware.PLACA_MAE,
-      CategoriaHardware.MEMORIA_RAM,
-      CategoriaHardware.PLACA_VIDEO,
-      CategoriaHardware.ARMAZENAMENTO,
-      CategoriaHardware.FONTE,
-      CategoriaHardware.GABINETE,
-      CategoriaHardware.COOLER,
-      CategoriaHardware.VENTOINHA,
-      'NOTEBOOK',
-      'PC_MONTADO',
-      'CELULAR',
-    ];
+    const payloadParcial = this.ehRegistro(resultado.payloadParcialBackend)
+      ? resultado.payloadParcialBackend
+      : {};
+    const oferta = this.ehRegistro(resultado.ofertaColetada)
+      ? resultado.ofertaColetada
+      : {};
 
-    const fontesCombinadas = new Map<
-      string,
-      { url: string; tipo: string; titulo?: string }
-    >();
-
-    for (const fonte of fontesColetadas) {
-      const url = fonte.url;
-      if (typeof url !== 'string' || !url.startsWith('http')) continue;
-      fontesCombinadas.set(url, {
-        url,
-        tipo:
-          typeof fonte.tipo === 'string' ? fonte.tipo : 'COLETA_HTML_DIRETA',
-        ...(typeof fonte.titulo === 'string' && fonte.titulo.trim()
-          ? { titulo: fonte.titulo.trim() }
-          : {}),
-      });
+    let cadastroSugerido: {
+      payload: Record<string, unknown>;
+      prontoParaCadastrar: boolean;
+      camposObrigatoriosAusentes: string[];
+    } | null = null;
+    if (categoriaEscolhida && Object.keys(payloadParcial).length > 0) {
+      if (ehCategoriaHardwareImportacao(categoriaEscolhida)) {
+        cadastroSugerido = {
+          payload: payloadParcial,
+          prontoParaCadastrar:
+            (resultado.camposObrigatoriosAusentes ?? []).length === 0,
+          camposObrigatoriosAusentes:
+            resultado.camposObrigatoriosAusentes ?? [],
+        };
+      } else {
+        const slugsProduto: Partial<Record<CategoriaImportacaoIa, string>> = {
+          NOTEBOOK: 'notebooks',
+          PC_MONTADO: 'pcs-montados',
+          CELULAR: 'celulares',
+          MONITOR: 'monitores',
+          MOUSE: 'mouses',
+          TECLADO: 'teclados',
+          HEADSET: 'headsets',
+          FONE: 'fones',
+          MICROFONE: 'microfones',
+          WEBCAM: 'webcams',
+          CONTROLE: 'controles',
+          MOUSEPAD: 'mousepads',
+          CADEIRA: 'cadeiras',
+          MESA: 'mesas',
+          SUPORTE_MONITOR: 'suportes-monitor',
+          ILUMINACAO: 'iluminacao',
+          ORGANIZADOR_CABOS: 'organizadores-cabos',
+          ACESSORIO: 'acessorios',
+          PROJETOR: 'projetores',
+          CALCULADORA: 'calculadoras',
+          TELEFONE: 'telefones',
+          IMPRESSORA: 'impressoras',
+          SCANNER: 'scanners',
+          CAIXA_DE_SOM: 'caixas-de-som',
+          ROTEADOR: 'roteadores',
+          REPETIDOR_WIFI: 'repetidores-wifi',
+          SWITCH_REDE: 'switches-de-rede',
+          ADAPTADOR_WIFI_BLUETOOTH: 'adaptadores-wifi-bluetooth',
+          NOBREAK: 'nobreaks',
+          ESTABILIZADOR: 'estabilizadores',
+          FILTRO_DE_LINHA: 'filtros-de-linha',
+          TABLET: 'tablets',
+          MICROCONTROLADOR: 'microcontroladores',
+          KIT_ARDUINO_ROBOTICA: 'kits-arduino-robotica',
+          MINI_COMPUTADOR: 'mini-computadores',
+          RELOGIO_INTELIGENTE: 'relogios-inteligentes',
+          JOYSTICK: 'joysticks',
+          CONTROLE_VIDEO_GAME: 'controles-videogame',
+          VOLANTE: 'volantes',
+          VIDEOGAME: 'videogames-consoles',
+          JOGO: 'jogos',
+          SMART_TV: 'smart-tvs',
+          CAMERA: 'cameras',
+          CARREGADOR: 'carregadores',
+          POWER_BANK: 'power-banks',
+          CABO_ADAPTADOR: 'cabos-adaptadores',
+          HUB_USB: 'hubs-usb',
+          DOCK_STATION: 'dock-stations',
+          PEN_DRIVE: 'pen-drives',
+          CARTAO_MEMORIA: 'cartoes-de-memoria',
+          LEITOR_CARTAO: 'leitores-de-cartao',
+          ARMAZENAMENTO_EXTERNO: 'armazenamento-externo',
+          IMPRESSORA_3D: 'impressoras-3d',
+          ACESSORIO_IMPRESSAO_3D: 'acessorios-impressao-3d',
+        };
+        const slug =
+          resultado.categoriaSlugSugerida ?? slugsProduto[categoriaEscolhida];
+        const categoriaProduto = slug
+          ? await this.prisma.categoriaProduto.findUnique({
+              where: { slug },
+              select: { id: true },
+            })
+          : null;
+        cadastroSugerido = {
+          payload: {
+            ...(categoriaProduto ? { categoriaId: categoriaProduto.id } : {}),
+            ...payloadParcial,
+            metadados: {
+              origem: 'PRODUTO_IA_V14_3',
+              informacoesProdutoEncontradas:
+                resultado.informacoesProdutoEncontradas ?? [],
+              especificacoesEncontradas:
+                resultado.especificacoesEncontradas ?? {},
+            },
+          },
+          prontoParaCadastrar: Boolean(categoriaProduto && payloadParcial.nome),
+          camposObrigatoriosAusentes: [
+            ...(categoriaProduto ? [] : ['categoriaId']),
+            ...(payloadParcial.nome ? [] : ['nome']),
+          ],
+        };
+      }
     }
 
-    for (const fonte of pesquisaWeb?.fontes ?? []) {
-      if (fontesCombinadas.has(fonte.url)) continue;
-      fontesCombinadas.set(fonte.url, {
-        url: fonte.url,
-        tipo: fonte.origem,
-        ...(fonte.titulo ? { titulo: fonte.titulo } : {}),
+    // Reconciliação conservadora: identifica existentes sem gravar nada.
+    // Prioridade: GTIN -> MPN+marca -> marca+modelo. Nome semelhante nunca confirma sozinho.
+    const marca =
+      typeof payloadParcial.marca === 'string'
+        ? payloadParcial.marca.trim()
+        : '';
+    const modelo =
+      typeof payloadParcial.modelo === 'string'
+        ? payloadParcial.modelo.trim()
+        : '';
+    const mpn =
+      typeof payloadParcial.mpn === 'string' ? payloadParcial.mpn.trim() : '';
+    const gtin =
+      typeof payloadParcial.gtin === 'string' ? payloadParcial.gtin.trim() : '';
+
+    let produtoExistente = gtin
+      ? await this.prisma.produto.findFirst({
+          where: { gtin },
+          include: { hardware: true },
+        })
+      : null;
+    let criterioProduto: 'GTIN' | 'MPN_MARCA' | 'MARCA_MODELO' | null =
+      produtoExistente ? 'GTIN' : null;
+    if (!produtoExistente && mpn && marca) {
+      produtoExistente = await this.prisma.produto.findFirst({
+        where: { mpn, marca: { equals: marca, mode: 'insensitive' } },
+        include: { hardware: true },
       });
+      if (produtoExistente) criterioProduto = 'MPN_MARCA';
+    }
+    if (!produtoExistente && marca && modelo) {
+      produtoExistente = await this.prisma.produto.findFirst({
+        where: {
+          marca: { equals: marca, mode: 'insensitive' },
+          modelo: { equals: modelo, mode: 'insensitive' },
+        },
+        include: { hardware: true },
+      });
+      if (produtoExistente) criterioProduto = 'MARCA_MODELO';
     }
 
-    const opcoesCategoria = categoriasComFichaTecnica.map((categoria) => ({
-      id: `${ehCategoriaHardwareImportacao(categoria) ? 'HARDWARE' : 'PRODUTO'}_${categoria}`,
-      rotulo: `Usar como ${this.rotuloDestinoImportacao(categoria)}`,
-      categoria,
-      acao: 'REIMPORTAR_COM_CATEGORIA' as const,
-      requisicao: {
-        metodo: 'POST' as const,
-        rota: '/api/admin/ia/importar-link',
-        body: { url: dados.url, categoriaEsperada: categoria },
+    const urlOriginal =
+      typeof oferta.urlOriginal === 'string' ? oferta.urlOriginal : dados.url;
+    const ofertaExistente = produtoExistente
+      ? await this.prisma.oferta.findFirst({
+          where: { produtoId: produtoExistente.id, urlOriginal },
+          select: {
+            id: true,
+            produtoId: true,
+            parceiroId: true,
+            preco: true,
+            status: true,
+            urlOriginal: true,
+            urlAfiliada: true,
+          },
+        })
+      : null;
+
+    const camposPreenchiveis: string[] = [];
+    const conflitos: Array<{
+      campo: string;
+      existente: unknown;
+      coletado: unknown;
+    }> = [];
+    if (produtoExistente) {
+      const comparar: Array<[string, unknown, unknown]> = [
+        ['nome', produtoExistente.nome, payloadParcial.nome],
+        ['marca', produtoExistente.marca, payloadParcial.marca],
+        ['modelo', produtoExistente.modelo, payloadParcial.modelo],
+        ['mpn', produtoExistente.mpn, payloadParcial.mpn],
+        ['gtin', produtoExistente.gtin, payloadParcial.gtin],
+        ['imagemUrl', produtoExistente.imagemUrl, payloadParcial.imagemUrl],
+        ['descricao', produtoExistente.descricao, payloadParcial.descricao],
+      ];
+      const normalizarComparacao = (valor: unknown): string => {
+        if (typeof valor === 'string') return valor.trim().toLocaleLowerCase();
+        if (
+          typeof valor === 'number' ||
+          typeof valor === 'boolean' ||
+          typeof valor === 'bigint'
+        ) {
+          return valor.toString().trim().toLocaleLowerCase();
+        }
+        if (valor instanceof Date) return valor.toISOString();
+        if (valor === null || valor === undefined) return '';
+        try {
+          return JSON.stringify(valor);
+        } catch {
+          return '';
+        }
+      };
+
+      for (const [campo, existente, coletado] of comparar) {
+        if (coletado === null || coletado === undefined || coletado === '')
+          continue;
+        if (existente === null || existente === undefined || existente === '') {
+          camposPreenchiveis.push(campo);
+        } else if (
+          normalizarComparacao(existente) !== normalizarComparacao(coletado)
+        ) {
+          conflitos.push({ campo, existente, coletado });
+        }
+      }
+    }
+
+    const reconciliacao = {
+      produtoExistente: produtoExistente
+        ? {
+            id: produtoExistente.id,
+            hardwareId: produtoExistente.hardware?.id ?? null,
+          }
+        : null,
+      criterioProduto,
+      ofertaExistente,
+      camposPreenchiveis,
+      conflitos,
+      sobrescreverCamposPreenchidosAutomaticamente: false,
+      requerRevisaoConflitos: conflitos.length > 0,
+      proveniencia: {
+        origem: 'PRODUTO_IA_V14_3',
+        url: dados.url,
+        coletadoEm: new Date().toISOString(),
       },
-    }));
+    };
 
     const rotaCadastro =
-      categoriaEscolhida === null
-        ? '/api/admin/produtos'
-        : ehCategoriaHardwareImportacao(categoriaEscolhida)
-          ? '/api/hardwares'
-          : categoriaEscolhida === 'NOTEBOOK'
-            ? '/api/admin/notebooks'
-            : categoriaEscolhida === 'PC_MONTADO'
-              ? '/api/admin/builds'
-              : '/api/admin/produtos';
-
-    const tipoAcaoFrontend =
-      categoriaEscolhida === null
-        ? 'REVISAR_IMPORTACAO'
-        : ehCategoriaHardwareImportacao(categoriaEscolhida)
-          ? 'ABRIR_CADASTRO_HARDWARE'
-          : categoriaEscolhida === 'NOTEBOOK'
-            ? 'ABRIR_CADASTRO_NOTEBOOK'
-            : categoriaEscolhida === 'PC_MONTADO'
-              ? 'ABRIR_CADASTRO_PC_MONTADO'
-              : 'ABRIR_CADASTRO_PRODUTO';
-
-    const destinoSugerido =
-      categoriaEscolhida === null
-        ? 'PRODUTO'
-        : ehCategoriaHardwareImportacao(categoriaEscolhida)
-          ? 'HARDWARE'
-          : categoriaEscolhida;
+      categoriaEscolhida && ehCategoriaHardwareImportacao(categoriaEscolhida)
+        ? '/api/hardwares'
+        : categoriaEscolhida === 'NOTEBOOK'
+          ? '/api/admin/notebooks'
+          : categoriaEscolhida === 'PC_MONTADO'
+            ? '/api/admin/builds'
+            : '/api/admin/produtos';
 
     return {
       status: 'AGUARDANDO_CONFIRMACAO' as const,
+      integracao: 'PRODUTO_IA_HTTP_V14_3' as const,
+      interpretadorGeminiUtilizado: false,
       urlOrigem: dados.url,
-      urlFinal:
-        typeof coleta.urlFinal === 'string' ? coleta.urlFinal : dados.url,
       categoriaEsperada: dados.categoriaEsperada ?? null,
-      estrategiaImportacao,
-      coletaDiretaConsideradaSuficiente: coletaDiretaTecnica,
-      quotaGeminiAtingida: quotaAtingida,
-      fontesConsultadas: [...fontesCombinadas.values()],
-      pesquisaWeb: pesquisaWeb
-        ? {
-            utilizada: true,
-            modo: estrategiaImportacao,
-            resumoTecnico: pesquisaWeb.texto,
-            fontes: pesquisaWeb.fontes,
-          }
-        : {
-            utilizada: false,
-            motivo: coletaDiretaTecnica
-              ? 'A ficha técnica coletada diretamente foi considerada suficiente; pesquisa web foi evitada para economizar cota.'
-              : quotaAtingida
-                ? 'Pesquisa web interrompida após limite/cota 429.'
-                : 'Pesquisa web não foi necessária ou não ficou disponível.',
-            fontes: [],
-          },
-      coleta: {
-        disponivel: coleta.coletaHtmlDisponivel === true,
-        avisos: avisosColeta,
-        meta: coleta.meta,
-        jsonLd: coleta.jsonLd,
-        textoExtraido: coleta.textoExtraido,
-      },
-      normalizacao,
-      iaDisponivel,
-      avisoIa,
-      destinoSugerido,
       categoriaSugerida: categoriaEscolhida,
+      resultadoProdutoIa: resultado,
       cadastroSugerido,
-      opcoesCategoria,
-      confirmacaoSugerida:
-        cadastroSugerido !== null && categoriaEscolhida !== null
-          ? {
-              rotulo: `Cadastrar ${this.rotuloDestinoImportacao(
-                categoriaEscolhida,
-              )}`,
-              metodo: 'POST' as const,
-              rota: rotaCadastro,
-              body: cadastroSugerido.payload,
-              habilitada: cadastroSugerido.prontoParaCadastrar,
-            }
-          : {
-              rotulo: 'Revisar como produto comercial',
-              metodo: 'POST' as const,
-              rota: '/api/admin/produtos',
-              habilitada: false,
-            },
+      ofertaColetada: oferta,
+      reconciliacao,
+      confirmacaoSugerida: cadastroSugerido
+        ? {
+            rotulo: categoriaEscolhida
+              ? `Cadastrar ${this.rotuloDestinoImportacao(categoriaEscolhida)}`
+              : 'Revisar produto',
+            metodo: 'POST' as const,
+            rota: rotaCadastro,
+            body: cadastroSugerido.payload,
+            habilitada: cadastroSugerido.prontoParaCadastrar,
+          }
+        : null,
       confirmacaoObrigatoria: true,
       nenhumRegistroCriado: true,
-      interfaceSugerida: {
-        exibirBotoesCategoria: true,
-        botoes: opcoesCategoria,
-        exibirBotaoCadastrar:
-          cadastroSugerido !== null && categoriaEscolhida !== null,
-        cadastroHabilitado:
-          cadastroSugerido !== null &&
-          categoriaEscolhida !== null &&
-          cadastroSugerido.prontoParaCadastrar,
-      },
-      acaoFrontend:
-        cadastroSugerido !== null && categoriaEscolhida !== null
-          ? {
-              tipo: tipoAcaoFrontend,
-              abrirAutomaticamente: true,
-              salvarAutomaticamente: false,
-              requerPapel: 'ADMIN' as const,
-              categoria: categoriaEscolhida,
-              rotaCadastro,
-              payloadInicial: cadastroSugerido.payload,
-              cadastroHabilitado: cadastroSugerido.prontoParaCadastrar,
-              camposObrigatoriosAusentes:
-                cadastroSugerido.camposObrigatoriosAusentes,
-              ...('componentesDetectados' in cadastroSugerido
-                ? {
-                    componentesDetectados:
-                      cadastroSugerido.componentesDetectados,
-                  }
-                : {}),
-              origem: 'IMPORTACAO_LINK' as const,
-            }
-          : {
-              tipo: 'REVISAR_IMPORTACAO' as const,
-              abrirAutomaticamente: false,
-              salvarAutomaticamente: false,
-              requerPapel: 'ADMIN' as const,
-              motivo:
-                'A categoria ou o payload técnico ainda não foi determinado com segurança.',
-              origem: 'IMPORTACAO_LINK' as const,
-            },
-      proximosPassos: [
-        'Escolher a categoria correta quando ela não puder ser determinada com segurança.',
-        'Priorizar a página oficial do fabricante e a ficha técnica complementar nas fontes consultadas.',
-        'Revisar todos os campos do payload; nenhum campo ausente deve ser estimado.',
-        'Cadastrar somente quando camposObrigatoriosAusentes estiver vazio; notebooks, celulares e PCs montados continuam sujeitos à revisão do ADMIN.',
-        'Cadastrar Oferta separadamente quando a URL representar uma loja com preço real.',
-      ],
-      aviso:
-        'A importação por link prepara um payload revisável e as ações para os botões do frontend, mas nunca publica nem cadastra automaticamente. O ADMIN precisa confirmar o cadastro.',
     };
   }
 

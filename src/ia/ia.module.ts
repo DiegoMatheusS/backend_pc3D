@@ -7,10 +7,11 @@ import { IaController } from './ia.controller';
 import { IaAdminController } from './ia-admin.controller';
 import { IaService } from './ia.service';
 import { IaProvider } from './ia.provider';
+import { ProdutoIaPythonService } from './produto-ia-python.service';
 
 @Module({
   imports: [AuthModule, HardwaresModule, AuditoriaModule],
   controllers: [IaController, IaAdminController],
-  providers: [IaService, IaProvider, PapelGuard],
+  providers: [IaService, IaProvider, ProdutoIaPythonService, PapelGuard],
 })
 export class IaModule {}

@@ -181,6 +181,11 @@ export class HardwaresController {
     return this.hardwaresService.verificarCompatibilidadeMontagem(dados);
   }
 
+  @Get('modelos-3d/home')
+  buscarModelo3DHome() {
+    return this.hardwaresService.buscarModelo3DHome();
+  }
+
   @Get(':hardwareId/modelos-3d')
   listarModelos3DHardwarePublico(
     @Param('hardwareId', ParsePositiveIntPipe) hardwareId: number,

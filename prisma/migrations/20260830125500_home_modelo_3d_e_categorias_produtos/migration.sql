@@ -1,0 +1,45 @@
+-- Seleção global do modelo 3D exibido na Home.
+ALTER TABLE "modelos_3d_hardwares"
+ADD COLUMN "mostrar_no_home" BOOLEAN NOT NULL DEFAULT false;
+
+-- Categorias comerciais. Não alteram CategoriaHardware nem o PC Builder 3D.
+INSERT INTO "categorias_produtos" ("nome", "slug", "grupo", "ordem", "atualizado_em") VALUES
+  ('Projetores', 'projetores', 'SETUP', 40, CURRENT_TIMESTAMP),
+  ('Calculadoras', 'calculadoras', 'ACESSORIOS', 41, CURRENT_TIMESTAMP),
+  ('Telefones', 'telefones', 'COMPUTADORES', 42, CURRENT_TIMESTAMP),
+  ('Impressoras', 'impressoras', 'SETUP', 43, CURRENT_TIMESTAMP),
+  ('Scanners', 'scanners', 'SETUP', 44, CURRENT_TIMESTAMP),
+  ('Caixas de som', 'caixas-de-som', 'PERIFERICOS', 45, CURRENT_TIMESTAMP),
+  ('Roteadores', 'roteadores', 'SETUP', 46, CURRENT_TIMESTAMP),
+  ('Repetidores Wi-Fi', 'repetidores-wifi', 'SETUP', 47, CURRENT_TIMESTAMP),
+  ('Switches de rede', 'switches-de-rede', 'SETUP', 48, CURRENT_TIMESTAMP),
+  ('Adaptadores Wi-Fi e Bluetooth', 'adaptadores-wifi-bluetooth', 'ACESSORIOS', 49, CURRENT_TIMESTAMP),
+  ('Nobreaks', 'nobreaks', 'SETUP', 50, CURRENT_TIMESTAMP),
+  ('Estabilizadores', 'estabilizadores', 'ACESSORIOS', 51, CURRENT_TIMESTAMP),
+  ('Filtros de linha', 'filtros-de-linha', 'ACESSORIOS', 52, CURRENT_TIMESTAMP),
+  ('Webcams', 'webcams', 'PERIFERICOS', 53, CURRENT_TIMESTAMP),
+  ('Tablets', 'tablets', 'COMPUTADORES', 54, CURRENT_TIMESTAMP),
+  ('Microcontroladores', 'microcontroladores', 'ACESSORIOS', 55, CURRENT_TIMESTAMP),
+  ('Kits Arduino e Robótica', 'kits-arduino-robotica', 'ACESSORIOS', 56, CURRENT_TIMESTAMP),
+  ('Mini computadores', 'mini-computadores', 'COMPUTADORES', 57, CURRENT_TIMESTAMP),
+  ('Relógios inteligentes', 'relogios-inteligentes', 'ACESSORIOS', 58, CURRENT_TIMESTAMP),
+  ('Joysticks', 'joysticks', 'PERIFERICOS', 59, CURRENT_TIMESTAMP),
+  ('Controles de videogame', 'controles-videogame', 'PERIFERICOS', 60, CURRENT_TIMESTAMP),
+  ('Volantes', 'volantes', 'PERIFERICOS', 61, CURRENT_TIMESTAMP),
+  ('Videogames e Consoles', 'videogames-consoles', 'COMPUTADORES', 62, CURRENT_TIMESTAMP),
+  ('Jogos', 'jogos', 'ACESSORIOS', 63, CURRENT_TIMESTAMP),
+  ('Smart TVs', 'smart-tvs', 'SETUP', 64, CURRENT_TIMESTAMP),
+  ('Câmeras', 'cameras', 'PERIFERICOS', 65, CURRENT_TIMESTAMP),
+  ('Mousepads', 'mousepads', 'PERIFERICOS', 66, CURRENT_TIMESTAMP),
+  ('Carregadores', 'carregadores', 'ACESSORIOS', 67, CURRENT_TIMESTAMP),
+  ('Power banks', 'power-banks', 'ACESSORIOS', 68, CURRENT_TIMESTAMP),
+  ('Cabos e adaptadores', 'cabos-adaptadores', 'ACESSORIOS', 69, CURRENT_TIMESTAMP),
+  ('Hubs USB', 'hubs-usb', 'ACESSORIOS', 70, CURRENT_TIMESTAMP),
+  ('Dock stations', 'dock-stations', 'ACESSORIOS', 71, CURRENT_TIMESTAMP),
+  ('Pen drives', 'pen-drives', 'ACESSORIOS', 72, CURRENT_TIMESTAMP),
+  ('Cartões de memória', 'cartoes-de-memoria', 'ACESSORIOS', 73, CURRENT_TIMESTAMP),
+  ('Leitores de cartão', 'leitores-de-cartao', 'ACESSORIOS', 74, CURRENT_TIMESTAMP),
+  ('HDs e SSDs externos', 'armazenamento-externo', 'ACESSORIOS', 75, CURRENT_TIMESTAMP),
+  ('Impressoras 3D', 'impressoras-3d', 'SETUP', 76, CURRENT_TIMESTAMP),
+  ('Acessórios para impressão 3D', 'acessorios-impressao-3d', 'ACESSORIOS', 77, CURRENT_TIMESTAMP)
+ON CONFLICT ("slug") DO NOTHING;

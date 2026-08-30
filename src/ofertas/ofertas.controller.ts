@@ -176,6 +176,25 @@ export class OfertasAdminController {
     return resultado;
   }
 
+  @Delete('parceiros/:id')
+  @UseGuards(AdminGuard)
+  async removerParceiro(
+    @Param('id', ParsePositiveIntPipe) id: number,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.ofertasService.removerParceiro(id);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.PARCEIRO_ATUALIZADO,
+      entidade: 'Parceiro',
+      entidadeId: id,
+      dadosNovos: { removido: true },
+      ip: req.ip,
+    });
+    return resultado;
+  }
+
   // ── Ofertas — ADMIN e EDITOR ──────────────────────────────────────────────
 
   @Post('verificar-precos')

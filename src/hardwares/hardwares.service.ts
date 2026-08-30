@@ -4408,6 +4408,92 @@ export class HardwaresService {
       modelos,
     };
   }
+  async buscarModelo3DHome() {
+    return this.prisma.modelo3DHardware.findFirst({
+      where: {
+        mostrarNoHome: true,
+        ativo: true,
+        aprovado: true,
+        hardware: {
+          ativo: true,
+          publicado: true,
+          categoria: CategoriaHardware.PLACA_VIDEO,
+        },
+      },
+      include: {
+        hardware: {
+          select: {
+            id: true,
+            nome: true,
+            marca: true,
+            modelo: true,
+            categoria: true,
+          },
+        },
+      },
+      orderBy: { atualizadoEm: 'desc' },
+    });
+  }
+
+  async atualizarModeloHome3D(modeloId: number, mostrarNoHome: boolean) {
+    const modelo = await this.prisma.modelo3DHardware.findUnique({
+      where: { id: modeloId },
+      include: {
+        hardware: {
+          select: {
+            id: true,
+            nome: true,
+            categoria: true,
+            ativo: true,
+            publicado: true,
+          },
+        },
+      },
+    });
+
+    if (!modelo) throw new NotFoundException('Modelo 3D não encontrado.');
+
+    if (mostrarNoHome) {
+      if (modelo.hardware.categoria !== CategoriaHardware.PLACA_VIDEO) {
+        throw new BadRequestException(
+          'A Home aceita somente modelo 3D de placa de vídeo.',
+        );
+      }
+      if (
+        !modelo.ativo ||
+        !modelo.aprovado ||
+        !modelo.hardware.ativo ||
+        !modelo.hardware.publicado
+      ) {
+        throw new BadRequestException(
+          'Para aparecer na Home, o modelo deve estar ativo e aprovado e o Hardware deve estar ativo e publicado.',
+        );
+      }
+
+      return this.prisma.$transaction(async (tx) => {
+        await tx.modelo3DHardware.updateMany({
+          where: { mostrarNoHome: true, id: { not: modeloId } },
+          data: { mostrarNoHome: false },
+        });
+        return tx.modelo3DHardware.update({
+          where: { id: modeloId },
+          data: { mostrarNoHome: true },
+          include: {
+            hardware: { select: { id: true, nome: true, categoria: true } },
+          },
+        });
+      });
+    }
+
+    return this.prisma.modelo3DHardware.update({
+      where: { id: modeloId },
+      data: { mostrarNoHome: false },
+      include: {
+        hardware: { select: { id: true, nome: true, categoria: true } },
+      },
+    });
+  }
+
   async atualizarStatusModelo3DHardware(
     modeloId: number,
     dados: AtualizarStatusModelo3DDto,
@@ -4428,6 +4514,7 @@ export class HardwaresService {
       },
       data: {
         ativo: dados.ativo,
+        ...(dados.ativo === false && { mostrarNoHome: false }),
       },
       include: {
         hardware: {
