@@ -47,6 +47,8 @@ import { ResolverMontagemCompletaDto } from './dtos/modelos-3d/resolver-montagem
 import { FiltrarHardwaresDto } from './dtos/filtrar-hardwares.dto';
 import { UploadModelo3DHardwareDto } from './dtos/modelos-3d/upload-modelo-3d-hardware.dto';
 
+type BancoHardware = Prisma.TransactionClient | PrismaService;
+
 @Injectable()
 export class HardwaresService {
   constructor(
@@ -81,6 +83,7 @@ export class HardwaresService {
   private async criarSlugUnico(
     texto: string,
     ignorarId?: number,
+    banco: BancoHardware = this.prisma,
   ): Promise<string> {
     const slugBase = this.criarSlug(texto);
 
@@ -88,7 +91,7 @@ export class HardwaresService {
     let numero = 2;
 
     while (true) {
-      const hardwareExistente = await this.prisma.hardware.findUnique({
+      const hardwareExistente = await banco.hardware.findUnique({
         where: {
           slug,
         },
@@ -577,6 +580,17 @@ export class HardwaresService {
   }
 
   async criar(dados: CriarHardwareDto) {
+    return this.criarComBanco(dados, this.prisma);
+  }
+
+  async criarEmTransacao(
+    tx: Prisma.TransactionClient,
+    dados: CriarHardwareDto,
+  ) {
+    return this.criarComBanco(dados, tx);
+  }
+
+  private async criarComBanco(dados: CriarHardwareDto, banco: BancoHardware) {
     if (!this.categoriaParticipaMontagem3D(dados.categoria)) {
       throw new BadRequestException(
         `A categoria ${dados.categoria} agora pertence ao catálogo geral da Loja. Cadastre-a pela rota de produtos, não como Hardware técnico.`,
@@ -590,7 +604,7 @@ export class HardwaresService {
     const marca = dados.marca.trim();
     const modelo = dados.modelo.trim();
 
-    const duplicadoHardware = await this.prisma.hardware.findFirst({
+    const duplicadoHardware = await banco.hardware.findFirst({
       where: {
         OR: [
           ...(dados.mpn?.trim() ? [{ mpn: dados.mpn.trim() }] : []),
@@ -610,7 +624,11 @@ export class HardwaresService {
       );
     }
 
-    const slug = await this.criarSlugUnico(`${marca} ${modelo} ${nome}`);
+    const slug = await this.criarSlugUnico(
+      `${marca} ${modelo} ${nome}`,
+      undefined,
+      banco,
+    );
 
     const dadosGabinete = dados.especificacaoGabinete
       ? (() => {
@@ -634,7 +652,7 @@ export class HardwaresService {
       : undefined;
 
     try {
-      return await this.prisma.hardware.create({
+      return await banco.hardware.create({
         data: {
           nome,
           slug,
@@ -3202,6 +3220,8 @@ export class HardwaresService {
       );
     }
 
+    const especificacaoGabinete = gabinete.especificacaoGabinete;
+
     const ventoinhasPorId = new Map(
       ventoinhas.map((ventoinha) => [ventoinha.id, ventoinha]),
     );
@@ -3237,7 +3257,7 @@ export class HardwaresService {
     }
 
     const ocupacoes = [...ocupacao.values()].map((item) => {
-      const suporte = gabinete.especificacaoGabinete.suportesFans.find(
+      const suporte = especificacaoGabinete.suportesFans.find(
         (suporte) =>
           suporte.posicao === item.posicao &&
           suporte.tamanhoMm === item.tamanhoMm,
