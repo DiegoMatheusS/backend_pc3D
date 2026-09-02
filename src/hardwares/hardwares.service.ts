@@ -3254,10 +3254,8 @@ export class HardwaresService {
       ocupacao.set(chave, atual);
     }
 
-    const especificacaoGabinete = gabinete.especificacaoGabinete;
-
     const ocupacoes = [...ocupacao.values()].map((item) => {
-      const suporte = especificacaoGabinete.suportesFans.find(
+      const suporte = gabinete.especificacaoGabinete.suportesFans.find(
         (suporte) =>
           suporte.posicao === item.posicao &&
           suporte.tamanhoMm === item.tamanhoMm,

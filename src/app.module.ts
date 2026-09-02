@@ -22,6 +22,7 @@ import { BuscaOfertasModule } from './busca-ofertas/busca-ofertas.module';
 import { SugestoesOfertasModule } from './sugestoes-ofertas/sugestoes-ofertas.module';
 import { NotificacoesModule } from './notificacoes/notificacoes.module';
 import { ChatbotAdminModule } from './chatbot-admin/chatbot-admin.module';
+import { HardwaresDescobertaIaModule } from './hardwares-descoberta-ia/hardwares-descoberta-ia.module';
 import { validarVariaveisAmbiente } from './config/env.validation';
 
 @Module({
@@ -54,6 +55,7 @@ import { validarVariaveisAmbiente } from './config/env.validation';
     AuditoriaModule,
     IaModule,
     ChatbotAdminModule,
+    HardwaresDescobertaIaModule,
     ProdutosModule,
     NotebooksModule,
     BuildsModule,
