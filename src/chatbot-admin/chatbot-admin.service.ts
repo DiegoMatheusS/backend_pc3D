@@ -244,7 +244,7 @@ export class ChatbotAdminService {
 
   private categoriaTecnica(valor: string | null): CategoriaHardware | null {
     if (!valor) return null;
-    if (!(Object.values(CategoriaHardware) as string[]).includes(valor)) {
+    if (!Object.values(CategoriaHardware).includes(valor)) {
       return null;
     }
     const categoria = valor as CategoriaHardware;

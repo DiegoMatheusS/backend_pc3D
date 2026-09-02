@@ -93,7 +93,7 @@ export class ProdutoIaPythonService {
       );
     }
 
-    const endpoint = `${this.normalizarProdutoIaUrl(produtoIaUrl)}/v1/descobrir-hardwares`;
+    const endpoint = `${this.normalizarProdutoIaUrl(produtoIaUrl)}/descobrir-hardwares`;
     const controller = new AbortController();
     const timeoutConfigurado = Number(
       process.env.PRODUTO_IA_DESCOBERTA_TIMEOUT_MS ??

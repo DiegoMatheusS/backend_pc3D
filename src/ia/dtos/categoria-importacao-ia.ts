@@ -69,7 +69,7 @@ export function ehCategoriaHardwareImportacao(
 ): valor is CategoriaHardware {
   return (
     typeof valor === 'string' &&
-    (Object.values(CategoriaHardware) as string[]).includes(valor)
+    Object.values(CategoriaHardware).includes(valor)
   );
 }
 
