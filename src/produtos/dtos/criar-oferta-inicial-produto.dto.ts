@@ -31,6 +31,11 @@ export class CriarOfertaInicialProdutoDto {
   @MaxLength(200)
   vendedorIdentificador?: string | null;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  codigoMarketplace?: string | null;
+
   @IsUrl({
     protocols: ['http', 'https'],
     require_protocol: true,
@@ -39,13 +44,14 @@ export class CriarOfertaInicialProdutoDto {
   @MaxLength(500)
   urlOriginal!: string;
 
+  @IsOptional()
   @IsUrl({
     protocols: ['http', 'https'],
     require_protocol: true,
     disallow_auth: true,
   })
   @MaxLength(500)
-  urlAfiliada!: string;
+  urlAfiliada?: string | null;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()

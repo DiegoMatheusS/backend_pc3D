@@ -3220,8 +3220,6 @@ export class HardwaresService {
       );
     }
 
-    const especificacaoGabinete = gabinete.especificacaoGabinete;
-
     const ventoinhasPorId = new Map(
       ventoinhas.map((ventoinha) => [ventoinha.id, ventoinha]),
     );
@@ -3255,6 +3253,8 @@ export class HardwaresService {
       atual.quantidade += item.quantidade;
       ocupacao.set(chave, atual);
     }
+
+    const especificacaoGabinete = gabinete.especificacaoGabinete;
 
     const ocupacoes = [...ocupacao.values()].map((item) => {
       const suporte = especificacaoGabinete.suportesFans.find(

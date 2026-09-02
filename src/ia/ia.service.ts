@@ -4039,12 +4039,24 @@ Ao final retorne também:
         ? (categoriaTexto as CategoriaImportacaoIa)
         : null;
 
-    const payloadParcial = this.ehRegistro(resultado.payloadParcialBackend)
-      ? resultado.payloadParcialBackend
-      : {};
+    const payloadCadastroIa = this.ehRegistro(
+      resultado.cadastroSugerido?.payload,
+    )
+      ? resultado.cadastroSugerido?.payload
+      : null;
+    const payloadParcial =
+      payloadCadastroIa ??
+      (this.ehRegistro(resultado.payloadParcialBackend)
+        ? resultado.payloadParcialBackend
+        : {});
     const oferta = this.ehRegistro(resultado.ofertaColetada)
       ? resultado.ofertaColetada
       : {};
+    const servicoProdutoIa = resultado.servicoProdutoIa ?? null;
+    const integracaoProdutoIa =
+      servicoProdutoIa?.integracao?.trim() || 'PRODUTO_IA_HTTP';
+    const origemProdutoIa =
+      servicoProdutoIa?.proveniencia?.trim() || 'PRODUTO_IA';
 
     let cadastroSugerido: {
       payload: Record<string, unknown>;
@@ -4130,7 +4142,9 @@ Ao final retorne também:
             ...(categoriaProduto ? { categoriaId: categoriaProduto.id } : {}),
             ...payloadParcial,
             metadados: {
-              origem: 'PRODUTO_IA_V14_3',
+              origem: origemProdutoIa,
+              integracao: integracaoProdutoIa,
+              versao: servicoProdutoIa?.versao ?? null,
               informacoesProdutoEncontradas:
                 resultado.informacoesProdutoEncontradas ?? [],
               especificacoesEncontradas:
@@ -4265,7 +4279,9 @@ Ao final retorne também:
       sobrescreverCamposPreenchidosAutomaticamente: false,
       requerRevisaoConflitos: conflitos.length > 0,
       proveniencia: {
-        origem: 'PRODUTO_IA_V14_3',
+        origem: origemProdutoIa,
+        integracao: integracaoProdutoIa,
+        versao: servicoProdutoIa?.versao ?? null,
         url: dados.url,
         coletadoEm: new Date().toISOString(),
       },
@@ -4282,7 +4298,7 @@ Ao final retorne também:
 
     return {
       status: 'AGUARDANDO_CONFIRMACAO' as const,
-      integracao: 'PRODUTO_IA_HTTP_V14_3' as const,
+      integracao: integracaoProdutoIa,
       interpretadorGeminiUtilizado: false,
       urlOrigem: dados.url,
       categoriaEsperada: dados.categoriaEsperada ?? null,

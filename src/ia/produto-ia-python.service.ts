@@ -11,6 +11,11 @@ export type ResultadoProdutoIaPython = {
   categoriaSlugSugerida?: string | null;
   tipoCadastro?: string | null;
   payloadParcialBackend?: Record<string, unknown>;
+  cadastroSugerido?: {
+    payload?: Record<string, unknown>;
+    prontoParaCadastrar?: boolean;
+    camposObrigatoriosAusentes?: string[];
+  } | null;
   ofertaColetada?: Record<string, unknown>;
   informacoesProdutoEncontradas?: unknown[];
   especificacoesEncontradas?: Record<string, unknown>;
@@ -20,8 +25,21 @@ export type ResultadoProdutoIaPython = {
   origemColeta?: Record<string, unknown>;
   politicaColeta?: Record<string, unknown>;
   marketplace?: Record<string, unknown>;
+  reconciliacao?: Record<string, unknown>;
+  servicoProdutoIa?: {
+    versao?: string | null;
+    modo?: string | null;
+    integracao?: string | null;
+    proveniencia?: string | null;
+  } | null;
   fonte?: string | null;
   erro?: string | null;
+};
+
+export type OpcoesProdutoIa = {
+  enrich?: boolean;
+  criabytePlan?: boolean;
+  noBrowser?: boolean;
 };
 
 @Injectable()
@@ -35,6 +53,7 @@ export class ProdutoIaPythonService {
   async importarUrl(
     url: string,
     categoria?: CategoriaImportacaoIa,
+    opcoes: OpcoesProdutoIa = {},
   ): Promise<ResultadoProdutoIaPython> {
     const produtoIaUrl = process.env.PRODUTO_IA_URL?.trim();
     const apiKey = process.env.PRODUTO_IA_API_KEY?.trim();
@@ -53,7 +72,14 @@ export class ProdutoIaPythonService {
 
     const endpoint = `${this.normalizarProdutoIaUrl(produtoIaUrl)}/analisar`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90_000);
+    const timeoutConfigurado = Number(
+      process.env.PRODUTO_IA_TIMEOUT_MS ?? 90_000,
+    );
+    const timeoutMs =
+      Number.isFinite(timeoutConfigurado) && timeoutConfigurado >= 5_000
+        ? Math.min(timeoutConfigurado, 180_000)
+        : 90_000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const resposta = await fetch(endpoint, {
@@ -65,9 +91,9 @@ export class ProdutoIaPythonService {
         body: JSON.stringify({
           url,
           categoria: categoria ?? null,
-          enrich: false,
-          criabytePlan: false,
-          noBrowser: false,
+          enrich: opcoes.enrich ?? false,
+          criabytePlan: opcoes.criabytePlan ?? false,
+          noBrowser: opcoes.noBrowser ?? false,
         }),
         signal: controller.signal,
       });

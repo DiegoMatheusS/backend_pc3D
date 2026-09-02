@@ -13,5 +13,6 @@ import { ProdutoIaPythonService } from './produto-ia-python.service';
   imports: [AuthModule, HardwaresModule, AuditoriaModule],
   controllers: [IaController, IaAdminController],
   providers: [IaService, IaProvider, ProdutoIaPythonService, PapelGuard],
+  exports: [ProdutoIaPythonService],
 })
 export class IaModule {}

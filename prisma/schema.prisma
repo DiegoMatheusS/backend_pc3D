@@ -274,6 +274,8 @@ model Usuario {
   sugestoesOfertasAnalisadas   SugestaoOferta[] @relation("SugestoesOfertasAnalisadas")
   produtosOrigem               Produto[]        @relation("ProdutosUsuarioOrigem")
   ofertasOrigem                Oferta[]         @relation("OfertasUsuarioOrigem")
+  notificacoes                 Notificacao[]
+  tokensChatbotCadastro        ChatbotCadastroToken[]
 
   @@map("usuarios")
 }
@@ -291,6 +293,49 @@ model Sessao {
   @@index([usuarioId])
   @@index([expiraEm])
   @@map("sessoes")
+}
+
+model Notificacao {
+  id             Int       @id @default(autoincrement())
+  usuarioId      Int       @map("usuario_id")
+  tipo           String    @db.VarChar(80)
+  titulo         String    @db.VarChar(160)
+  mensagem       String    @db.Text
+  referenciaTipo String?   @map("referencia_tipo") @db.VarChar(80)
+  referenciaId   String?   @map("referencia_id") @db.VarChar(100)
+  chaveDedupe    String?   @unique @map("chave_dedupe") @db.VarChar(180)
+  lida           Boolean   @default(false)
+  lidaEm         DateTime? @map("lida_em") @db.Timestamptz(3)
+  criadoEm       DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, lida, criadoEm])
+  @@index([usuarioId, criadoEm])
+  @@map("notificacoes")
+}
+
+model ChatbotCadastroToken {
+  id                   Int       @id @default(autoincrement())
+  token                String    @unique @db.VarChar(64)
+  usuarioId            Int       @map("usuario_id")
+  acao                 String    @db.VarChar(40)
+  url                  String    @db.VarChar(1000)
+  categoriaEsperada    String?   @map("categoria_esperada") @db.VarChar(80)
+  resultadoNormalizado Json      @map("resultado_normalizado")
+  reconciliacao        Json
+  status               String    @default("PENDENTE") @db.VarChar(20)
+  resultadoFinal       Json?     @map("resultado_final")
+  expiraEm             DateTime  @map("expira_em") @db.Timestamptz(3)
+  consumidoEm          DateTime? @map("consumido_em") @db.Timestamptz(3)
+  criadoEm             DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm         DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, status, expiraEm])
+  @@index([expiraEm])
+  @@map("chatbot_cadastro_tokens")
 }
 
 model Hardware {
@@ -955,6 +1000,7 @@ model Oferta {
   parceiroId            Int          @map("parceiro_id")
   vendedorNome          String?      @map("vendedor_nome") @db.VarChar(200)
   vendedorIdentificador String?      @map("vendedor_identificador") @db.VarChar(200)
+  codigoMarketplace     String?      @map("codigo_marketplace") @db.VarChar(160)
   urlOriginal           String       @map("url_original") @db.VarChar(500)
   urlAfiliada           String?      @map("url_afiliada") @db.VarChar(500)
   preco                 Decimal      @db.Decimal(10, 2)
@@ -980,6 +1026,7 @@ model Oferta {
   @@index([hardwareId, status])
   @@index([parceiroId])
   @@index([vendedorIdentificador])
+  @@index([codigoMarketplace])
   @@map("ofertas")
 }
 

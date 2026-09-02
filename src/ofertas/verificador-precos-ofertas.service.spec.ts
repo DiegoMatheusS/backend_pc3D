@@ -1,3 +1,4 @@
+import { ProdutoIaPythonService } from '../ia/produto-ia-python.service';
 import { VerificadorPrecosOfertasService } from './verificador-precos-ofertas.service';
 
 type ExtratorTeste = {
@@ -12,7 +13,10 @@ type ExtratorTeste = {
 };
 
 describe('VerificadorPrecosOfertasService', () => {
-  const service = new VerificadorPrecosOfertasService();
+  const produtoIa = {
+    importarUrl: jest.fn(),
+  } as unknown as ProdutoIaPythonService;
+  const service = new VerificadorPrecosOfertasService(produtoIa);
   const extrator = service as unknown as ExtratorTeste;
 
   it('extrai preço confiável de Offer em JSON-LD', () => {

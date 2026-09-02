@@ -9,6 +9,7 @@ import {
   StatusOferta,
   TipoProduto,
 } from '../generated/prisma/enums';
+import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AtualizarOfertaDto } from './dtos/atualizar-oferta.dto';
 import { AtualizarParceiroDto } from './dtos/atualizar-parceiro.dto';
@@ -345,6 +346,7 @@ export class OfertasService {
         parceiroId: dados.parceiroId,
         vendedorNome: dados.vendedorNome?.trim() ?? null,
         vendedorIdentificador: dados.vendedorIdentificador?.trim() ?? null,
+        codigoMarketplace: dados.codigoMarketplace?.trim() || null,
         urlOriginal: dados.urlOriginal,
         urlAfiliada: dados.urlAfiliada ?? null,
         preco: dados.preco,
@@ -638,107 +640,379 @@ export class OfertasService {
     };
   }
 
+  private calcularVariacaoPercentual(
+    precoSalvo: number,
+    precoEncontrado: number,
+  ): number {
+    if (precoSalvo <= 0) return 0;
+    return Number(
+      ((Math.abs(precoEncontrado - precoSalvo) / precoSalvo) * 100).toFixed(2),
+    );
+  }
+
+  private normalizarIdentidade(valor: string | null | undefined): string {
+    return (valor ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/gu, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  private identidadeProdutoIaConfere(
+    produto: {
+      marca: string | null;
+      modelo: string | null;
+      mpn: string | null;
+      gtin: string | null;
+    },
+    codigoMarketplaceSalvo: string | null,
+    confirmacao: {
+      identidade: {
+        marca: string | null;
+        modelo: string | null;
+        mpn: string | null;
+        gtin: string | null;
+      };
+      codigoMarketplace: string | null;
+    },
+  ): { confere: boolean; motivo?: string } {
+    const pares: Array<[string, string | null, string | null]> = [
+      ['GTIN', produto.gtin, confirmacao.identidade.gtin],
+      ['MPN', produto.mpn, confirmacao.identidade.mpn],
+      ['marca', produto.marca, confirmacao.identidade.marca],
+      ['modelo', produto.modelo, confirmacao.identidade.modelo],
+    ];
+
+    for (const [campo, banco, ia] of pares) {
+      if (!banco || !ia) continue;
+      if (this.normalizarIdentidade(banco) !== this.normalizarIdentidade(ia)) {
+        return {
+          confere: false,
+          motivo: `A Produto IA retornou ${campo} diferente do Produto cadastrado.`,
+        };
+      }
+    }
+
+    if (
+      codigoMarketplaceSalvo &&
+      confirmacao.codigoMarketplace &&
+      this.normalizarIdentidade(codigoMarketplaceSalvo) !==
+        this.normalizarIdentidade(confirmacao.codigoMarketplace)
+    ) {
+      return {
+        confere: false,
+        motivo:
+          'O código do marketplace mudou; a página pode ter redirecionado para outro item.',
+      };
+    }
+
+    return { confere: true };
+  }
+
   async verificarPrecosOfertas(limiteInformado?: number) {
     const limite = Math.min(Math.max(limiteInformado ?? 20, 1), 50);
     const agora = new Date();
+    const limiteVariacaoPercentual = 35;
+
+    const baseWhere: Prisma.OfertaWhereInput = {
+      status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
+      parceiro: { ativo: true },
+      produto: { ativo: true },
+      AND: [
+        { OR: [{ urlOriginal: { not: '' } }, { urlAfiliada: { not: null } }] },
+        { OR: [{ validoAte: null }, { validoAte: { gte: agora } }] },
+      ],
+    };
 
     const ofertas = await this.prisma.oferta.findMany({
-      where: {
-        status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
-        parceiro: { ativo: true },
-        produto: { ativo: true },
-        AND: [
-          {
-            OR: [{ urlOriginal: { not: '' } }, { urlAfiliada: { not: null } }],
-          },
-          { OR: [{ validoAte: null }, { validoAte: { gte: agora } }] },
-        ],
-      },
+      where: baseWhere,
       orderBy: [{ coletadoEm: 'asc' }, { id: 'asc' }],
       take: limite,
       select: {
         id: true,
         preco: true,
+        precoAnterior: true,
         urlOriginal: true,
         urlAfiliada: true,
-        produto: { select: { id: true, nome: true } },
+        codigoMarketplace: true,
+        produto: {
+          select: {
+            id: true,
+            nome: true,
+            marca: true,
+            modelo: true,
+            mpn: true,
+            gtin: true,
+          },
+        },
         parceiro: { select: { id: true, nome: true } },
       },
     });
 
     const totalElegiveisAntes = await this.prisma.oferta.count({
-      where: {
-        status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
-        parceiro: { ativo: true },
-        produto: { ativo: true },
-        AND: [
-          {
-            OR: [{ urlOriginal: { not: '' } }, { urlAfiliada: { not: null } }],
-          },
-          { OR: [{ validoAte: null }, { validoAte: { gte: agora } }] },
-        ],
-      },
+      where: baseWhere,
     });
+
+    type StatusResultado =
+      | 'ATUALIZADO'
+      | 'SEM_ALTERACAO'
+      | 'REVISAR'
+      | 'BLOQUEADO'
+      | 'ERRO'
+      | 'INDISPONIVEL';
 
     const resultados: Array<{
       ofertaId: number;
       produtoId: number;
-      produto: string;
+      produtoNome: string;
       parceiro: string;
-      status: 'ATUALIZADA' | 'SEM_ALTERACAO' | 'INDISPONIVEL' | 'FALHOU';
-      precoAnterior: number;
-      precoAtual: number | null;
-      urlConsultada?: 'ORIGINAL' | 'AFILIADA';
-      origemPreco?: 'JSON_LD' | 'META';
-      motivo?: string;
+      precoAnteriorBanco: number;
+      precoEncontrado: number | null;
+      precoAnteriorEncontrado: number | null;
+      variacaoPercentual: number | null;
+      fontePreco: string | null;
+      urlConsultada: 'ORIGINAL' | 'AFILIADA' | null;
+      urlFinal: string | null;
+      status: StatusResultado;
+      revisaoNecessaria: boolean;
+      motivo: string | null;
+      produtoIaUtilizada: boolean;
+      verificadoEm: Date;
     }> = [];
 
     for (const oferta of ofertas) {
       const precoSalvo = Number(oferta.preco);
+      const tentativaEm = new Date();
       const verificacao = await this.verificadorPrecos.verificarOferta({
         urlOriginal: oferta.urlOriginal,
         urlAfiliada: oferta.urlAfiliada,
       });
 
-      if (verificacao.status === 'SUCESSO') {
-        const mudouPreco = verificacao.preco !== precoSalvo;
-        const verificadoEm = new Date();
+      let precoEncontrado: number | null =
+        verificacao.status === 'SUCESSO' ? verificacao.preco : null;
+      let precoAnteriorEncontrado: number | null = null;
+      let fontePreco: string | null =
+        verificacao.status === 'SUCESSO' ? verificacao.origemPreco : null;
+      let urlFinal: string | null =
+        'urlFinal' in verificacao ? (verificacao.urlFinal ?? null) : null;
+      let produtoIaUtilizada = false;
+      let confirmacaoIa: Awaited<
+        ReturnType<VerificadorPrecosOfertasService['confirmarComProdutoIa']>
+      > | null = null;
 
-        await this.prisma.$transaction(async (tx) => {
-          await tx.oferta.update({
+      const variacaoDireta =
+        precoEncontrado === null
+          ? null
+          : this.calcularVariacaoPercentual(precoSalvo, precoEncontrado);
+      const precisaProdutoIa =
+        verificacao.status !== 'SUCESSO' ||
+        (variacaoDireta !== null && variacaoDireta > limiteVariacaoPercentual);
+
+      if (precisaProdutoIa) {
+        produtoIaUtilizada = true;
+        const urlParaIa =
+          verificacao.urlConsultada === 'AFILIADA' && oferta.urlAfiliada
+            ? oferta.urlAfiliada
+            : oferta.urlOriginal;
+        confirmacaoIa =
+          await this.verificadorPrecos.confirmarComProdutoIa(urlParaIa);
+      }
+
+      if (confirmacaoIa?.status === 'SUCESSO') {
+        const identidade = this.identidadeProdutoIaConfere(
+          oferta.produto,
+          oferta.codigoMarketplace,
+          confirmacaoIa,
+        );
+        if (!identidade.confere) {
+          await this.prisma.oferta.update({
             where: { id: oferta.id },
-            data: {
-              ...(mudouPreco && {
-                precoAnterior: oferta.preco,
-                preco: verificacao.preco,
-              }),
-              verificadoEm,
-              coletadoEm: verificadoEm,
-              status: StatusOferta.ATIVA,
-            },
+            data: { coletadoEm: tentativaEm },
           });
+          resultados.push({
+            ofertaId: oferta.id,
+            produtoId: oferta.produto.id,
+            produtoNome: oferta.produto.nome,
+            parceiro: oferta.parceiro.nome,
+            precoAnteriorBanco: precoSalvo,
+            precoEncontrado: confirmacaoIa.preco,
+            precoAnteriorEncontrado: confirmacaoIa.precoAnterior,
+            variacaoPercentual: this.calcularVariacaoPercentual(
+              precoSalvo,
+              confirmacaoIa.preco,
+            ),
+            fontePreco: confirmacaoIa.fontePreco,
+            urlConsultada: verificacao.urlConsultada ?? null,
+            urlFinal: confirmacaoIa.urlFinal,
+            status: 'REVISAR',
+            revisaoNecessaria: true,
+            motivo: identidade.motivo ?? 'Identidade do item não confirmada.',
+            produtoIaUtilizada,
+            verificadoEm: tentativaEm,
+          });
+          continue;
+        }
+      }
 
-          if (mudouPreco) {
-            await tx.historicoPrecoOferta.create({
-              data: {
-                ofertaId: oferta.id,
-                preco: verificacao.preco,
-                verificadoEm,
-              },
+      if (verificacao.status === 'SUCESSO') {
+        const variacao = this.calcularVariacaoPercentual(
+          precoSalvo,
+          verificacao.preco,
+        );
+
+        if (variacao > limiteVariacaoPercentual) {
+          if (confirmacaoIa?.status !== 'SUCESSO') {
+            await this.prisma.oferta.update({
+              where: { id: oferta.id },
+              data: { coletadoEm: tentativaEm },
             });
+            resultados.push({
+              ofertaId: oferta.id,
+              produtoId: oferta.produto.id,
+              produtoNome: oferta.produto.nome,
+              parceiro: oferta.parceiro.nome,
+              precoAnteriorBanco: precoSalvo,
+              precoEncontrado: verificacao.preco,
+              precoAnteriorEncontrado: null,
+              variacaoPercentual: variacao,
+              fontePreco: verificacao.origemPreco,
+              urlConsultada: verificacao.urlConsultada ?? null,
+              urlFinal: verificacao.urlFinal,
+              status:
+                confirmacaoIa?.status === 'BLOQUEADO' ? 'BLOQUEADO' : 'REVISAR',
+              revisaoNecessaria: true,
+              motivo:
+                confirmacaoIa?.status === 'BLOQUEADO'
+                  ? confirmacaoIa.motivo
+                  : 'Variação superior a 35% sem confirmação confiável da Produto IA.',
+              produtoIaUtilizada,
+              verificadoEm: tentativaEm,
+            });
+            continue;
           }
-        });
 
+          const divergenciaFontes = this.calcularVariacaoPercentual(
+            verificacao.preco,
+            confirmacaoIa.preco,
+          );
+          if (divergenciaFontes > 2) {
+            await this.prisma.oferta.update({
+              where: { id: oferta.id },
+              data: { coletadoEm: tentativaEm },
+            });
+            resultados.push({
+              ofertaId: oferta.id,
+              produtoId: oferta.produto.id,
+              produtoNome: oferta.produto.nome,
+              parceiro: oferta.parceiro.nome,
+              precoAnteriorBanco: precoSalvo,
+              precoEncontrado: verificacao.preco,
+              precoAnteriorEncontrado: confirmacaoIa.precoAnterior,
+              variacaoPercentual: variacao,
+              fontePreco: verificacao.origemPreco,
+              urlConsultada: verificacao.urlConsultada ?? null,
+              urlFinal: confirmacaoIa.urlFinal ?? verificacao.urlFinal,
+              status: 'REVISAR',
+              revisaoNecessaria: true,
+              motivo:
+                'O preço da página e o preço confirmado pela Produto IA divergem; o valor salvo foi preservado.',
+              produtoIaUtilizada,
+              verificadoEm: tentativaEm,
+            });
+            continue;
+          }
+        }
+      } else if (confirmacaoIa?.status === 'SUCESSO') {
+        precoEncontrado = confirmacaoIa.preco;
+        precoAnteriorEncontrado = confirmacaoIa.precoAnterior;
+        fontePreco = confirmacaoIa.fontePreco ?? 'PRODUTO_IA';
+        urlFinal = confirmacaoIa.urlFinal;
+        const variacaoIa = this.calcularVariacaoPercentual(
+          precoSalvo,
+          confirmacaoIa.preco,
+        );
+        if (variacaoIa > limiteVariacaoPercentual) {
+          await this.prisma.oferta.update({
+            where: { id: oferta.id },
+            data: { coletadoEm: tentativaEm },
+          });
+          resultados.push({
+            ofertaId: oferta.id,
+            produtoId: oferta.produto.id,
+            produtoNome: oferta.produto.nome,
+            parceiro: oferta.parceiro.nome,
+            precoAnteriorBanco: precoSalvo,
+            precoEncontrado,
+            precoAnteriorEncontrado,
+            variacaoPercentual: variacaoIa,
+            fontePreco,
+            urlConsultada: verificacao.urlConsultada ?? null,
+            urlFinal,
+            status: 'REVISAR',
+            revisaoNecessaria: true,
+            motivo:
+              'A coleta direta falhou e a Produto IA encontrou uma variação superior a 35%; é necessária revisão manual.',
+            produtoIaUtilizada,
+            verificadoEm: tentativaEm,
+          });
+          continue;
+        }
+      } else if (verificacao.status === 'INDISPONIVEL') {
+        if (
+          confirmacaoIa?.status === 'BLOQUEADO' ||
+          confirmacaoIa?.status === 'ERRO'
+        ) {
+          await this.prisma.oferta.update({
+            where: { id: oferta.id },
+            data: { coletadoEm: tentativaEm },
+          });
+          resultados.push({
+            ofertaId: oferta.id,
+            produtoId: oferta.produto.id,
+            produtoNome: oferta.produto.nome,
+            parceiro: oferta.parceiro.nome,
+            precoAnteriorBanco: precoSalvo,
+            precoEncontrado: null,
+            precoAnteriorEncontrado: null,
+            variacaoPercentual: null,
+            fontePreco: null,
+            urlConsultada: verificacao.urlConsultada ?? null,
+            urlFinal: verificacao.urlFinal,
+            status: 'REVISAR',
+            revisaoNecessaria: true,
+            motivo:
+              'A página indicou indisponibilidade, mas a segunda fonte não conseguiu confirmar. O status salvo não foi alterado.',
+            produtoIaUtilizada,
+            verificadoEm: tentativaEm,
+          });
+          continue;
+        }
+      } else {
+        await this.prisma.oferta.update({
+          where: { id: oferta.id },
+          data: { coletadoEm: tentativaEm },
+        });
         resultados.push({
           ofertaId: oferta.id,
           produtoId: oferta.produto.id,
-          produto: oferta.produto.nome,
+          produtoNome: oferta.produto.nome,
           parceiro: oferta.parceiro.nome,
-          status: mudouPreco ? 'ATUALIZADA' : 'SEM_ALTERACAO',
-          precoAnterior: precoSalvo,
-          precoAtual: verificacao.preco,
-          urlConsultada: verificacao.urlConsultada,
-          origemPreco: verificacao.origemPreco,
+          precoAnteriorBanco: precoSalvo,
+          precoEncontrado: null,
+          precoAnteriorEncontrado: null,
+          variacaoPercentual: null,
+          fontePreco: null,
+          urlConsultada: verificacao.urlConsultada ?? null,
+          urlFinal,
+          status:
+            verificacao.status === 'BLOQUEADO' ||
+            confirmacaoIa?.status === 'BLOQUEADO'
+              ? 'BLOQUEADO'
+              : 'ERRO',
+          revisaoNecessaria: false,
+          motivo: confirmacaoIa ? confirmacaoIa.motivo : verificacao.motivo,
+          produtoIaUtilizada,
+          verificadoEm: tentativaEm,
         });
         continue;
       }
@@ -748,50 +1022,131 @@ export class OfertasService {
           where: { id: oferta.id },
           data: {
             status: StatusOferta.INDISPONIVEL,
-            verificadoEm: new Date(),
+            verificadoEm: tentativaEm,
+            coletadoEm: tentativaEm,
           },
         });
-
         resultados.push({
           ofertaId: oferta.id,
           produtoId: oferta.produto.id,
-          produto: oferta.produto.nome,
+          produtoNome: oferta.produto.nome,
           parceiro: oferta.parceiro.nome,
+          precoAnteriorBanco: precoSalvo,
+          precoEncontrado: null,
+          precoAnteriorEncontrado: null,
+          variacaoPercentual: null,
+          fontePreco: null,
+          urlConsultada: verificacao.urlConsultada ?? null,
+          urlFinal: verificacao.urlFinal,
           status: 'INDISPONIVEL',
-          precoAnterior: precoSalvo,
-          precoAtual: null,
-          urlConsultada: verificacao.urlConsultada,
+          revisaoNecessaria: false,
           motivo: verificacao.motivo,
+          produtoIaUtilizada,
+          verificadoEm: tentativaEm,
         });
         continue;
       }
 
-      await this.prisma.oferta.update({
-        where: { id: oferta.id },
-        data: { coletadoEm: new Date() },
+      if (precoEncontrado === null) {
+        await this.prisma.oferta.update({
+          where: { id: oferta.id },
+          data: { coletadoEm: tentativaEm },
+        });
+        resultados.push({
+          ofertaId: oferta.id,
+          produtoId: oferta.produto.id,
+          produtoNome: oferta.produto.nome,
+          parceiro: oferta.parceiro.nome,
+          precoAnteriorBanco: precoSalvo,
+          precoEncontrado: null,
+          precoAnteriorEncontrado: null,
+          variacaoPercentual: null,
+          fontePreco,
+          urlConsultada: verificacao.urlConsultada ?? null,
+          urlFinal,
+          status: 'ERRO',
+          revisaoNecessaria: false,
+          motivo:
+            'Nenhum preço confiável foi encontrado. O valor salvo não foi alterado.',
+          produtoIaUtilizada,
+          verificadoEm: tentativaEm,
+        });
+        continue;
+      }
+
+      const variacao = this.calcularVariacaoPercentual(
+        precoSalvo,
+        precoEncontrado,
+      );
+      const mudouPreco = precoEncontrado !== precoSalvo;
+      await this.prisma.$transaction(async (tx) => {
+        await tx.oferta.update({
+          where: { id: oferta.id },
+          data: {
+            ...(mudouPreco && {
+              precoAnterior:
+                precoAnteriorEncontrado !== null
+                  ? precoAnteriorEncontrado
+                  : oferta.preco,
+              preco: precoEncontrado,
+            }),
+            ...(confirmacaoIa?.status === 'SUCESSO' &&
+              confirmacaoIa.codigoMarketplace &&
+              !oferta.codigoMarketplace && {
+                codigoMarketplace: confirmacaoIa.codigoMarketplace,
+              }),
+            verificadoEm: tentativaEm,
+            coletadoEm: tentativaEm,
+            status: StatusOferta.ATIVA,
+          },
+        });
+
+        if (mudouPreco) {
+          await tx.historicoPrecoOferta.create({
+            data: {
+              ofertaId: oferta.id,
+              preco: precoEncontrado,
+              verificadoEm: tentativaEm,
+            },
+          });
+        }
       });
 
       resultados.push({
         ofertaId: oferta.id,
         produtoId: oferta.produto.id,
-        produto: oferta.produto.nome,
+        produtoNome: oferta.produto.nome,
         parceiro: oferta.parceiro.nome,
-        status: 'FALHOU',
-        precoAnterior: precoSalvo,
-        precoAtual: null,
-        motivo: verificacao.motivo,
+        precoAnteriorBanco: precoSalvo,
+        precoEncontrado,
+        precoAnteriorEncontrado,
+        variacaoPercentual: variacao,
+        fontePreco,
+        urlConsultada: verificacao.urlConsultada ?? null,
+        urlFinal,
+        status: mudouPreco ? 'ATUALIZADO' : 'SEM_ALTERACAO',
+        revisaoNecessaria: false,
+        motivo: null,
+        produtoIaUtilizada,
+        verificadoEm: tentativaEm,
       });
     }
 
     const resumo = {
       verificadas: resultados.length,
-      atualizadas: resultados.filter((item) => item.status === 'ATUALIZADA')
+      atualizadas: resultados.filter((item) => item.status === 'ATUALIZADO')
         .length,
       semAlteracao: resultados.filter((item) => item.status === 'SEM_ALTERACAO')
         .length,
+      revisar: resultados.filter((item) => item.status === 'REVISAR').length,
+      bloqueadas: resultados.filter((item) => item.status === 'BLOQUEADO')
+        .length,
+      erros: resultados.filter((item) => item.status === 'ERRO').length,
+      falharam: resultados.filter((item) =>
+        ['REVISAR', 'BLOQUEADO', 'ERRO'].includes(item.status),
+      ).length,
       indisponiveis: resultados.filter((item) => item.status === 'INDISPONIVEL')
         .length,
-      falharam: resultados.filter((item) => item.status === 'FALHOU').length,
     };
 
     const restantesElegiveis = Math.max(
@@ -802,10 +1157,25 @@ export class OfertasService {
     return {
       ...resumo,
       limiteDoLote: limite,
+      limiteVariacaoPercentual,
       restantesElegiveis,
-      resultados,
+      resultados: resultados.map((item) => ({
+        ...item,
+        // Aliases mantidos por compatibilidade com a tela administrativa atual.
+        produto: item.produtoNome,
+        precoAnterior: item.precoAnteriorBanco,
+        precoAtual: item.precoEncontrado,
+        statusLegado:
+          item.status === 'ATUALIZADO'
+            ? 'ATUALIZADA'
+            : item.status === 'SEM_ALTERACAO'
+              ? 'SEM_ALTERACAO'
+              : item.status === 'INDISPONIVEL'
+                ? 'INDISPONIVEL'
+                : 'FALHOU',
+      })),
       observacao:
-        'Falha de verificação nunca altera o preço salvo. Itens só são marcados como indisponíveis quando a fonte confirma indisponibilidade de forma objetiva.',
+        'REVISAR, BLOQUEADO e ERRO preservam o preço salvo. A verificação altera somente a Oferta e nunca modifica Produto ou Hardware.',
     };
   }
 
@@ -839,6 +1209,12 @@ export class OfertasService {
               dados.vendedorIdentificador === null
                 ? null
                 : dados.vendedorIdentificador.trim() || null,
+          }),
+          ...(dados.codigoMarketplace !== undefined && {
+            codigoMarketplace:
+              dados.codigoMarketplace === null
+                ? null
+                : dados.codigoMarketplace.trim() || null,
           }),
           ...(dados.urlOriginal !== undefined && {
             urlOriginal: dados.urlOriginal,

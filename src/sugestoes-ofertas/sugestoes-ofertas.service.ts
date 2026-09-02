@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, StatusOferta, TipoProduto } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import {
   CATEGORIAS_SUGESTAO_OFERTA,
   CategoriaSugestaoOferta,
@@ -62,7 +63,10 @@ type BancoTransacional = Prisma.TransactionClient | PrismaService;
 
 @Injectable()
 export class SugestoesOfertasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificacoesService: NotificacoesService,
+  ) {}
 
   obterFormulario() {
     return {
@@ -521,6 +525,19 @@ export class SugestoesOfertasService {
         WHERE "id" = ${id}
       `);
 
+      await this.notificacoesService.criar(
+        {
+          usuarioId: sugestao.usuarioId,
+          tipo: 'SUGESTAO_OFERTA_APROVADA',
+          titulo: 'Sugestão aprovada',
+          mensagem: 'Sua sugestão de oferta foi aprovada e publicada.',
+          referenciaTipo: 'SUGESTAO_OFERTA',
+          referenciaId: String(id),
+          chaveDedupe: `sugestao-oferta:${id}:APROVADA`,
+        },
+        tx,
+      );
+
       return criada;
     });
 
@@ -640,6 +657,19 @@ export class SugestoesOfertasService {
         WHERE "id" = ${id}
       `);
 
+      await this.notificacoesService.criar(
+        {
+          usuarioId: sugestao.usuarioId,
+          tipo: 'SUGESTAO_OFERTA_APROVADA',
+          titulo: 'Sugestão aprovada',
+          mensagem: 'Sua sugestão de oferta foi aprovada e publicada.',
+          referenciaTipo: 'SUGESTAO_OFERTA',
+          referenciaId: String(id),
+          chaveDedupe: `sugestao-oferta:${id}:APROVADA`,
+        },
+        tx,
+      );
+
       return oferta.id;
     });
 
@@ -668,8 +698,12 @@ export class SugestoesOfertasService {
   async rejeitar(id: number, adminId: number, motivo: string) {
     const motivoNormalizado = motivo.trim();
     await this.prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
-        SELECT "status"::text AS "status"
+      const rows = await tx.$queryRaw<
+        Array<{ status: string; usuarioId: number }>
+      >(Prisma.sql`
+        SELECT
+          "status"::text AS "status",
+          "usuario_id" AS "usuarioId"
         FROM "sugestoes_ofertas"
         WHERE "id" = ${id}
         FOR UPDATE
@@ -689,6 +723,19 @@ export class SugestoesOfertasService {
           "atualizado_em" = NOW()
         WHERE "id" = ${id}
       `);
+
+      await this.notificacoesService.criar(
+        {
+          usuarioId: rows[0].usuarioId,
+          tipo: 'SUGESTAO_OFERTA_REJEITADA',
+          titulo: 'Sugestão rejeitada',
+          mensagem: `Sua sugestão de oferta foi rejeitada. Motivo: ${motivoNormalizado}`,
+          referenciaTipo: 'SUGESTAO_OFERTA',
+          referenciaId: String(id),
+          chaveDedupe: `sugestao-oferta:${id}:REJEITADA`,
+        },
+        tx,
+      );
     });
 
     return this.buscarAdmin(id);

@@ -20,6 +20,8 @@ import { AvaliacoesModule } from './avaliacoes/avaliacoes.module';
 import { ComunidadeModule } from './comunidade/comunidade.module';
 import { BuscaOfertasModule } from './busca-ofertas/busca-ofertas.module';
 import { SugestoesOfertasModule } from './sugestoes-ofertas/sugestoes-ofertas.module';
+import { NotificacoesModule } from './notificacoes/notificacoes.module';
+import { ChatbotAdminModule } from './chatbot-admin/chatbot-admin.module';
 import { validarVariaveisAmbiente } from './config/env.validation';
 
 @Module({
@@ -47,9 +49,11 @@ import { validarVariaveisAmbiente } from './config/env.validation';
     // Registre as rotas específicas de sugestões antes de /admin/ofertas/:id
     // para evitar que "sugestoes" seja interpretado como id de Oferta.
     SugestoesOfertasModule,
+    NotificacoesModule,
     OfertasModule,
     AuditoriaModule,
     IaModule,
+    ChatbotAdminModule,
     ProdutosModule,
     NotebooksModule,
     BuildsModule,

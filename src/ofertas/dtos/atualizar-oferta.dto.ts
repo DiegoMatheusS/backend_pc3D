@@ -16,6 +16,7 @@ export class AtualizarOfertaDto {
   @IsOptional() @IsString() @MaxLength(200) vendedorNome?: string | null;
   @IsOptional() @IsString() @MaxLength(200) vendedorIdentificador?:
     string | null;
+  @IsOptional() @IsString() @MaxLength(160) codigoMarketplace?: string | null;
   @IsOptional()
   @IsUrl({
     protocols: ['http', 'https'],

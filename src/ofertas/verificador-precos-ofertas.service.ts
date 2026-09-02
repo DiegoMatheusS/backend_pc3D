@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ProdutoIaPythonService } from '../ia/produto-ia-python.service';
 import {
   obterCabecalhoHttp,
   requisitarUrlPublicaUmaVez,
@@ -21,9 +22,34 @@ type ResultadoConsultaPreco =
       motivo: string;
     }
   | {
+      status: 'BLOQUEADO';
+      motivo: string;
+      urlFinal?: string;
+    }
+  | {
       status: 'FALHOU';
       motivo: string;
+      urlFinal?: string;
     };
+
+export type ResultadoConfirmacaoProdutoIa =
+  | {
+      status: 'SUCESSO';
+      preco: number;
+      precoAnterior: number | null;
+      fontePreco: string | null;
+      disponivel: boolean | null;
+      urlFinal: string | null;
+      codigoMarketplace: string | null;
+      identidade: {
+        mpn: string | null;
+        gtin: string | null;
+        marca: string | null;
+        modelo: string | null;
+      };
+    }
+  | { status: 'BLOQUEADO'; motivo: string }
+  | { status: 'ERRO'; motivo: string };
 
 export type ResultadoVerificacaoOferta = ResultadoConsultaPreco & {
   urlConsultada?: 'ORIGINAL' | 'AFILIADA';
@@ -43,6 +69,8 @@ type CandidatoPrecoJson = {
 
 @Injectable()
 export class VerificadorPrecosOfertasService {
+  constructor(private readonly produtoIa: ProdutoIaPythonService) {}
+
   // Marketplaces atuais costumam entregar HTML/estado de hidratação acima de 2 MB.
   // O limite continua finito para evitar consumo ilimitado de memória.
   private readonly limiteHtmlBytes = 5_000_000;
@@ -593,6 +621,9 @@ export class VerificadorPrecosOfertasService {
       'verifique que voce e humano',
       'robot or human',
       'unusual traffic',
+      'az-request-verify',
+      'acessou nosso site de uma forma um pouco diferente do comum',
+      'para sua segurança precisamos de uma verificação rápida',
     ].some((trecho) => inicio.includes(trecho));
   }
 
@@ -675,8 +706,16 @@ export class VerificadorPrecosOfertasService {
       }
 
       if (!resposta.ok) {
+        if (resposta.status === 403 || resposta.status === 429) {
+          return {
+            status: 'BLOQUEADO',
+            urlFinal: atual.toString(),
+            motivo: `O marketplace bloqueou a consulta automática (HTTP ${resposta.status}).`,
+          };
+        }
         return {
           status: 'FALHOU',
+          urlFinal: atual.toString(),
           motivo: `A página retornou HTTP ${resposta.status}.`,
         };
       }
@@ -692,7 +731,8 @@ export class VerificadorPrecosOfertasService {
       const html = resposta.corpo.toString('utf8');
       if (this.paginaPareceBloqueio(html)) {
         return {
-          status: 'FALHOU',
+          status: 'BLOQUEADO',
+          urlFinal: atual.toString(),
           motivo:
             'O marketplace bloqueou a consulta automática desta página. O valor salvo não foi alterado.',
         };
@@ -727,6 +767,97 @@ export class VerificadorPrecosOfertasService {
     return { status: 'FALHOU', motivo: 'Não foi possível verificar a URL.' };
   }
 
+  async confirmarComProdutoIa(
+    url: string,
+  ): Promise<ResultadoConfirmacaoProdutoIa> {
+    try {
+      const resultado = await this.produtoIa.importarUrl(url, undefined, {
+        enrich: false,
+        criabytePlan: false,
+        noBrowser: false,
+      });
+      const oferta = this.ehRegistro(resultado.ofertaColetada)
+        ? resultado.ofertaColetada
+        : {};
+      const payload = this.ehRegistro(resultado.cadastroSugerido?.payload)
+        ? (resultado.cadastroSugerido?.payload ?? {})
+        : this.ehRegistro(resultado.payloadParcialBackend)
+          ? resultado.payloadParcialBackend
+          : {};
+      const fonte =
+        typeof resultado.fonte === 'string'
+          ? resultado.fonte.toUpperCase()
+          : '';
+      const erro =
+        typeof resultado.erro === 'string' ? resultado.erro.trim() : '';
+      const bloqueado =
+        (Boolean(erro) && /BLOQUE|CAPTCHA|ANTI.?BOT|403|429/iu.test(erro)) ||
+        fonte.includes('BLOQUEADO') ||
+        (this.ehRegistro(resultado.marketplace) &&
+          resultado.marketplace.bloqueadoNoNavegador === true);
+
+      if (bloqueado) {
+        return {
+          status: 'BLOQUEADO',
+          motivo: erro || 'A Produto IA identificou bloqueio do marketplace.',
+        };
+      }
+      if (erro) return { status: 'ERRO', motivo: erro };
+
+      const preco = this.normalizarPreco(oferta.preco);
+      if (preco === null) {
+        return {
+          status: 'ERRO',
+          motivo: 'A Produto IA não retornou preço confiável para esta oferta.',
+        };
+      }
+
+      return {
+        status: 'SUCESSO',
+        preco,
+        precoAnterior: this.normalizarPreco(oferta.precoAnterior),
+        fontePreco:
+          typeof oferta.fontePreco === 'string' ? oferta.fontePreco : null,
+        disponivel:
+          typeof oferta.disponivel === 'boolean' ? oferta.disponivel : null,
+        urlFinal:
+          typeof oferta.urlProduto === 'string'
+            ? oferta.urlProduto
+            : typeof oferta.urlOriginal === 'string'
+              ? oferta.urlOriginal
+              : null,
+        codigoMarketplace:
+          typeof oferta.codigoMarketplace === 'string'
+            ? oferta.codigoMarketplace
+            : null,
+        identidade: {
+          mpn:
+            typeof payload.mpn === 'string' ? payload.mpn.trim() || null : null,
+          gtin:
+            typeof payload.gtin === 'string'
+              ? payload.gtin.trim() || null
+              : null,
+          marca:
+            typeof payload.marca === 'string'
+              ? payload.marca.trim() || null
+              : null,
+          modelo:
+            typeof payload.modelo === 'string'
+              ? payload.modelo.trim() || null
+              : null,
+        },
+      };
+    } catch (erro) {
+      return {
+        status: 'ERRO',
+        motivo:
+          erro instanceof Error
+            ? erro.message
+            : 'Falha ao consultar a Produto IA.',
+      };
+    }
+  }
+
   async verificarOferta(dados: {
     urlOriginal: string;
     urlAfiliada: string | null;
@@ -746,6 +877,12 @@ export class VerificadorPrecosOfertasService {
         afiliada.status === 'INDISPONIVEL'
       ) {
         return { ...original, urlConsultada: 'ORIGINAL' };
+      }
+      if (original.status === 'BLOQUEADO' || afiliada.status === 'BLOQUEADO') {
+        return {
+          status: 'BLOQUEADO',
+          motivo: `URL original: ${original.motivo} URL afiliada: ${afiliada.motivo}`,
+        };
       }
       return {
         status: 'FALHOU',

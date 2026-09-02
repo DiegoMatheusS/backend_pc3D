@@ -39,6 +39,11 @@ export class CriarOfertaDto {
   @MaxLength(200)
   vendedorIdentificador?: string | null;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  codigoMarketplace?: string | null;
+
   @IsUrl({
     protocols: ['http', 'https'],
     require_protocol: true,
