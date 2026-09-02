@@ -4036,7 +4036,7 @@ Ao final retorne também:
     );
     const categoriaEscolhida =
       categoriaTexto && categoriasImportacao.has(categoriaTexto)
-        ? categoriaTexto
+        ? (categoriaTexto as CategoriaImportacaoIa)
         : null;
 
     const payloadCadastroIa = this.ehRegistro(
@@ -4533,7 +4533,7 @@ finalidade, resolucaoRecomendada, componentes. Cada item de componentes deve usa
     const categoriaImportacao: CategoriaImportacaoIa | null =
       ehCategoriaHardwareImportacao(categoriaTexto) ||
       destinosEspeciais.has(categoriaTexto)
-        ? categoriaTexto
+        ? (categoriaTexto as CategoriaImportacaoIa)
         : null;
 
     const specsFiltradas = categoriaImportacao
