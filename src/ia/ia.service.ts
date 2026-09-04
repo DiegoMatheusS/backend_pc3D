@@ -16,8 +16,8 @@ import { MontarPcIaDto } from './dtos/montar-pc-ia.dto';
 import { RecomendarLojaIaDto } from './dtos/recomendar-loja-ia.dto';
 import { ImportarLinkIaDto } from './dtos/importar-link-ia.dto';
 import {
-  CATEGORIAS_IMPORTACAO_IA,
   ehCategoriaHardwareImportacao,
+  ehCategoriaImportacaoIa,
 } from './dtos/categoria-importacao-ia';
 import type { CategoriaImportacaoIa } from './dtos/categoria-importacao-ia';
 import {
@@ -4031,13 +4031,9 @@ Ao final retorne também:
 
     const categoriaTexto =
       dados.categoriaEsperada ?? resultado.categoriaDetectada ?? null;
-    const categoriasImportacao = new Set<string>(
-      CATEGORIAS_IMPORTACAO_IA as readonly string[],
-    );
-    const categoriaEscolhida =
-      categoriaTexto && categoriasImportacao.has(categoriaTexto)
-        ? (categoriaTexto as CategoriaImportacaoIa)
-        : null;
+    const categoriaEscolhida = ehCategoriaImportacaoIa(categoriaTexto)
+      ? categoriaTexto
+      : null;
 
     const payloadCadastroIa = this.ehRegistro(
       resultado.cadastroSugerido?.payload,
@@ -4129,8 +4125,11 @@ Ao final retorne também:
           IMPRESSORA_3D: 'impressoras-3d',
           ACESSORIO_IMPRESSAO_3D: 'acessorios-impressao-3d',
         };
-        const slug =
-          resultado.categoriaSlugSugerida ?? slugsProduto[categoriaEscolhida];
+        const slugSugerida =
+          typeof resultado.categoriaSlugSugerida === 'string'
+            ? resultado.categoriaSlugSugerida
+            : undefined;
+        const slug = slugSugerida ?? slugsProduto[categoriaEscolhida];
         const categoriaProduto = slug
           ? await this.prisma.categoriaProduto.findUnique({
               where: { slug },
@@ -4529,12 +4528,8 @@ finalidade, resolucaoRecomendada, componentes. Cada item de componentes deve usa
     const categoriaBruta = dados.categoriaEsperada ?? dadosExtraidos.categoria;
     const categoriaTexto =
       typeof categoriaBruta === 'string' ? categoriaBruta.toUpperCase() : '';
-    const destinosEspeciais = new Set(['NOTEBOOK', 'PC_MONTADO', 'CELULAR']);
     const categoriaImportacao: CategoriaImportacaoIa | null =
-      ehCategoriaHardwareImportacao(categoriaTexto) ||
-      destinosEspeciais.has(categoriaTexto)
-        ? (categoriaTexto as CategoriaImportacaoIa)
-        : null;
+      ehCategoriaImportacaoIa(categoriaTexto) ? categoriaTexto : null;
 
     const specsFiltradas = categoriaImportacao
       ? this.filtrarEspecificacaoImportadaPorDestino(
