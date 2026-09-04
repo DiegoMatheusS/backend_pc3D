@@ -25,51 +25,39 @@ function normalizarTiposMemoria(valor: unknown): unknown {
   if (valor === undefined || valor === null) return valor;
 
   const entrada = Array.isArray(valor) ? valor : [valor];
-  const resultado: unknown[] = [];
+  const resultado = new Set<string>();
 
   for (const item of entrada) {
-    if (typeof item !== 'string') {
-      resultado.push(item);
-      continue;
-    }
+    if (typeof item !== 'string') continue;
 
     const texto = item.trim().toUpperCase();
+    if (!texto) continue;
 
-    if (!texto) {
-      resultado.push(texto);
-      continue;
-    }
+    /*
+     * Extrai somente os enums aceitos pelo backend.
+     *
+     * Exemplos:
+     * DDR4                  -> DDR4
+     * ddr5                 -> DDR5
+     * DDR 4                -> DDR4
+     * DDR4-3200            -> DDR4
+     * DDR5/DDR4            -> DDR5 + DDR4
+     * DDR5 / LPDDR5        -> DDR5
+     * DDR4 + DDR5          -> DDR4 + DDR5
+     *
+     * LPDDR, GDDR, DDR2, DDR6 e outros valores não reconhecidos
+     * são ignorados em vez de serem enviados ao @IsEnum.
+     */
+    const encontrados =
+      texto.match(/\bDDR\s*[-_]?\s*[345](?=$|[^A-Z0-9])/g) ?? [];
 
-    // Não converte outros padrões de memória em DDR por engano.
-    if (/\b(?:LPDDR|GDDR)\s*[-_]?\s*\d/.test(texto)) {
-      resultado.push(texto);
-      continue;
-    }
-
-    const encontrados = [
-      ...texto.matchAll(/\bDDR\s*[-_]?\s*(\d+)(?=$|[^A-Z0-9])/g),
-    ];
-
-    if (encontrados.length === 0) {
-      resultado.push(texto);
-      continue;
-    }
-
-    // Se houver uma geração DDR fora do enum atual, mantém o valor inválido
-    // para que o class-validator rejeite em vez de perder informação.
-    if (
-      encontrados.some((match) => !['3', '4', '5'].includes(match[1] ?? ''))
-    ) {
-      resultado.push(texto);
-      continue;
-    }
-
-    for (const match of encontrados) {
-      resultado.push(`DDR${match[1]}`);
+    for (const encontrado of encontrados) {
+      const normalizado = encontrado.replace(/[\s_-]/g, '');
+      resultado.add(normalizado);
     }
   }
 
-  return [...new Set(resultado)];
+  return [...resultado];
 }
 
 export class CriarEspecificacaoPlacaMaeDto {
