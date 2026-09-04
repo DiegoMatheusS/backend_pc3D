@@ -17,31 +17,19 @@ function ehRegistro(valor: unknown): valor is Record<string, unknown> {
 function normalizarTextoTipoMemoria(valor: string): string[] {
   const texto = valor
     .trim()
+
     .toUpperCase()
     .replace(/DDR\s*[-_]?\s*([345])/g, 'DDR$1');
 
   if (!texto) return [texto];
 
-  if (texto === 'DDR3' || texto === 'DDR4' || texto === 'DDR5') {
-    return [texto];
-  }
-
   const encontrados = texto.match(/\bDDR[345]\b/g) ?? [];
-  if (encontrados.length === 0) {
-    return [texto];
+
+  if (encontrados.length > 0) {
+    return [...new Set(encontrados)];
   }
 
-  const resto = texto
-    .replace(/\bDDR[345]\b/g, ' ')
-    .replace(/\b(?:SDRAM|RAM|MEMORIA|MEMORY|E|OU|AND|OR)\b/g, ' ')
-    .replace(/[/,+;|&-]/g, ' ')
-    .replace(/\s+/g, '');
-
-  if (resto.length > 0) {
-    return [texto];
-  }
-
-  return encontrados;
+  return [texto];
 }
 
 function normalizarTiposMemoriaSuportados(valor: unknown): unknown {

@@ -1,3 +1,4 @@
+import { Transform, Type } from 'class-transformer';
 import {
   Max,
   ArrayMaxSize,
@@ -18,8 +19,58 @@ import {
   FormatoPlacaMae,
   TipoMemoria,
 } from '../../../generated/prisma/enums';
-import { Type } from 'class-transformer';
 import { CriarSlotM2PlacaMaeDto } from './criar-slot-m2-placa-mae.dto';
+
+function normalizarTiposMemoria(valor: unknown): unknown {
+  if (valor === undefined || valor === null) return valor;
+
+  const entrada = Array.isArray(valor) ? valor : [valor];
+  const resultado: unknown[] = [];
+
+  for (const item of entrada) {
+    if (typeof item !== 'string') {
+      resultado.push(item);
+      continue;
+    }
+
+    const texto = item.trim().toUpperCase();
+
+    if (!texto) {
+      resultado.push(texto);
+      continue;
+    }
+
+    // Não converte outros padrões de memória em DDR por engano.
+    if (/\b(?:LPDDR|GDDR)\s*[-_]?\s*\d/.test(texto)) {
+      resultado.push(texto);
+      continue;
+    }
+
+    const encontrados = [
+      ...texto.matchAll(/\bDDR\s*[-_]?\s*(\d+)(?=$|[^A-Z0-9])/g),
+    ];
+
+    if (encontrados.length === 0) {
+      resultado.push(texto);
+      continue;
+    }
+
+    // Se houver uma geração DDR fora do enum atual, mantém o valor inválido
+    // para que o class-validator rejeite em vez de perder informação.
+    if (
+      encontrados.some((match) => !['3', '4', '5'].includes(match[1] ?? ''))
+    ) {
+      resultado.push(texto);
+      continue;
+    }
+
+    for (const match of encontrados) {
+      resultado.push(`DDR${match[1]}`);
+    }
+  }
+
+  return [...new Set(resultado)];
+}
 
 export class CriarEspecificacaoPlacaMaeDto {
   @IsString()
@@ -45,6 +96,9 @@ export class CriarEspecificacaoPlacaMaeDto {
   @MaxLength(50)
   biosInicial?: string;
 
+  @Transform(({ value }) => normalizarTiposMemoria(value), {
+    toClassOnly: true,
+  })
   @IsArray()
   @ArrayNotEmpty()
   @ArrayMaxSize(16)
