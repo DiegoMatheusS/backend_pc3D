@@ -1,7 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayNotEmpty,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -17,7 +16,7 @@ import {
 import { TipoMemoria } from '../../../generated/prisma/enums';
 
 function normalizarTiposMemoria(valor: unknown): unknown {
-  if (valor === undefined || valor === null) return valor;
+  if (valor === undefined || valor === null) return [];
 
   const entrada = Array.isArray(valor) ? valor : [valor];
   const resultado = new Set<string>();
@@ -79,10 +78,9 @@ export class CriarEspecificacaoProcessadorDto {
     toClassOnly: true,
   })
   @IsArray()
-  @ArrayNotEmpty()
   @ArrayMaxSize(16)
   @IsEnum(TipoMemoria, { each: true })
-  tiposMemoriaSuportados!: TipoMemoria[];
+  tiposMemoriaSuportados: TipoMemoria[] = [];
 
   @IsOptional()
   @IsInt()

@@ -1455,6 +1455,7 @@ export class HardwaresService {
 
     if (
       compativel &&
+      especificacaoPlacaMae.tiposMemoriaSuportados.length > 0 &&
       !especificacaoPlacaMae.tiposMemoriaSuportados.includes(
         especificacaoMemoria.tipo,
       )
@@ -1646,7 +1647,11 @@ export class HardwaresService {
       );
     }
 
+    const tipoMemoriaPlacaMaeNaoInformado =
+      especificacaoPlacaMae.tiposMemoriaSuportados.length === 0;
+
     if (
+      !tipoMemoriaPlacaMaeNaoInformado &&
       !especificacaoPlacaMae.tiposMemoriaSuportados.includes(
         especificacaoMemoria.tipo,
       )
@@ -1750,11 +1755,12 @@ export class HardwaresService {
 
     if (!qvl) {
       return {
-        compativel: true,
+        compativel: tipoMemoriaPlacaMaeNaoInformado ? null : true,
         status: 'COMPATIVEL_NAO_CONFIRMADO',
         constaNaQvl: false,
-        motivo:
-          'A memória é compatível pelas especificações, mas não consta na QVL cadastrada.',
+        motivo: tipoMemoriaPlacaMaeNaoInformado
+          ? 'O tipo DDR suportado pela placa-mãe não está informado; a compatibilidade por tipo de memória não pôde ser confirmada.'
+          : 'A memória é compatível pelas especificações, mas não consta na QVL cadastrada.',
         frequenciaMemoriaMhz: especificacaoMemoria.frequenciaMhz,
         frequenciaMaximaPlacaMaeMhz: frequenciaMaximaPlacaMae,
         observacao:
@@ -1827,7 +1833,13 @@ export class HardwaresService {
       erros.push('A memória RAM não é compatível com a placa-mãe.');
     }
 
-    if (!cpu.tiposMemoriaSuportados.includes(memoria.tipo)) {
+    const tipoMemoriaCpuNaoInformado = cpu.tiposMemoriaSuportados.length === 0;
+
+    if (tipoMemoriaCpuNaoInformado) {
+      alertas.push(
+        'O tipo DDR suportado pelo processador não está informado; a compatibilidade CPU/RAM não pôde ser confirmada por esse critério.',
+      );
+    } else if (!cpu.tiposMemoriaSuportados.includes(memoria.tipo)) {
       erros.push('O processador não suporta o tipo DDR da memória.');
     }
 
@@ -1903,7 +1915,8 @@ export class HardwaresService {
 
     const compatibilidadeNaoConfirmada =
       resultadoCpu.compativel === null ||
-      resultadoMemoria.status === 'COMPATIVEL_NAO_CONFIRMADO';
+      resultadoMemoria.status === 'COMPATIVEL_NAO_CONFIRMADO' ||
+      tipoMemoriaCpuNaoInformado;
 
     return {
       compativel:

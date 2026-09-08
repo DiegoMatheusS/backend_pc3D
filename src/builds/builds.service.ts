@@ -205,6 +205,7 @@ export class BuildsService {
       }
 
       if (
+        especificacaoPlacaMae.tiposMemoriaSuportados.length > 0 &&
         !especificacaoPlacaMae.tiposMemoriaSuportados.includes(
           especificacao.tipo,
         )

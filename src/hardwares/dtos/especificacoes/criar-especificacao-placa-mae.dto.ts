@@ -22,7 +22,7 @@ import {
 import { CriarSlotM2PlacaMaeDto } from './criar-slot-m2-placa-mae.dto';
 
 function normalizarTiposMemoria(valor: unknown): unknown {
-  if (valor === undefined || valor === null) return valor;
+  if (valor === undefined || valor === null) return [];
 
   const entrada = Array.isArray(valor) ? valor : [valor];
   const resultado = new Set<string>();
@@ -88,14 +88,13 @@ export class CriarEspecificacaoPlacaMaeDto {
     toClassOnly: true,
   })
   @IsArray()
-  @ArrayNotEmpty()
   @ArrayMaxSize(16)
   @ArrayUnique()
   @IsEnum(TipoMemoria, {
     each: true,
     message: 'Informe somente tipos de memória válidos.',
   })
-  tiposMemoriaSuportados!: TipoMemoria[];
+  tiposMemoriaSuportados: TipoMemoria[] = [];
 
   @IsOptional()
   @IsArray()
