@@ -15,6 +15,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CadastrarHardwareDescobertoDto } from './dtos/cadastrar-hardware-descoberto.dto';
 import { DescobrirHardwaresDto } from './dtos/descobrir-hardwares.dto';
+import { EnriquecerMetaAiWhatsappDto } from './dtos/enriquecer-meta-ai-whatsapp.dto';
 
 const CATEGORIAS_DESCOBERTA = new Set<CategoriaHardware>([
   CategoriaHardware.PROCESSADOR,
@@ -59,6 +60,7 @@ type CandidatoNormalizado = {
   qualidade: number;
   fontes: string[];
   avisos: string[];
+  metaAiWhatsappFallback?: Record<string, unknown>;
   payload: CriarHardwareDto;
 };
 
@@ -155,6 +157,15 @@ export class HardwaresDescobertaIaService {
       ),
     ];
   }
+  private extrairMetaAiWhatsappFallback(
+    item: unknown,
+  ): Record<string, unknown> | null {
+    if (!this.ehRegistro(item)) return null;
+    if (!this.ehRegistro(item.metaAiWhatsappFallback)) return null;
+
+    return { ...item.metaAiWhatsappFallback };
+  }
+
   private especificacaoDoPayload(
     payload: Record<string, unknown>,
   ): Record<string, unknown> | null {
@@ -395,6 +406,8 @@ export class HardwaresDescobertaIaService {
       chavesNovas.add(chave);
 
       const qualidade = this.qualidadeDoItem(item, bruto);
+      const metaAiWhatsappFallback = this.extrairMetaAiWhatsappFallback(item);
+
       novos.push({
         idTemporario: this.idTemporario(normalizado.payload),
         statusFicha: this.statusFicha(
@@ -406,6 +419,7 @@ export class HardwaresDescobertaIaService {
         qualidade,
         fontes: this.extrairFontes(item),
         avisos: normalizado.avisos,
+        ...(metaAiWhatsappFallback ? { metaAiWhatsappFallback } : {}),
         payload: normalizado.payload,
       });
     }
@@ -431,6 +445,22 @@ export class HardwaresDescobertaIaService {
       servicoProdutoIa: resultadoIa.servicoProdutoIa ?? null,
       nenhumRegistroCriado: true,
     };
+  }
+
+  async enriquecerMetaAiWhatsapp(dados: EnriquecerMetaAiWhatsappDto) {
+    this.categoriaPermitida(dados.categoria);
+
+    const nome =
+      dados.nome?.trim() || this.texto(dados.payload.nome) || undefined;
+
+    return this.produtoIa.enriquecerMetaAiWhatsapp({
+      categoria: dados.categoria,
+      nome,
+      payload: dados.payload,
+      resposta: dados.resposta,
+      captura: dados.captura,
+      forcar: dados.forcar ?? false,
+    });
   }
 
   private async verificarAntesDeCadastrar(payload: CriarHardwareDto) {

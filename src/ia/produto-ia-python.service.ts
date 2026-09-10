@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -66,6 +67,17 @@ export type OpcoesProdutoIa = {
   criabytePlan?: boolean;
   noBrowser?: boolean;
 };
+
+export type RequisicaoMetaAiWhatsappProdutoIa = {
+  categoria: string;
+  nome?: string;
+  payload: Record<string, unknown>;
+  resposta?: string;
+  captura?: Record<string, unknown>;
+  forcar?: boolean;
+};
+
+export type ResultadoMetaAiWhatsappProdutoIa = Record<string, unknown>;
 
 @Injectable()
 export class ProdutoIaPythonService {
@@ -172,6 +184,158 @@ export class ProdutoIaPythonService {
       );
       throw new BadGatewayException(
         `Falha na descoberta de Hardwares da Produto IA: ${mensagem}`,
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private extrairMensagemErro(texto: string): string | null {
+    const limpo = texto.trim();
+    if (!limpo) return null;
+
+    try {
+      const parsed: unknown = JSON.parse(limpo);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const registro = parsed as Record<string, unknown>;
+        const detail = registro.detail;
+        const message = registro.message;
+
+        if (typeof detail === 'string' && detail.trim()) return detail.trim();
+        if (typeof message === 'string' && message.trim())
+          return message.trim();
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  }
+
+  async enriquecerMetaAiWhatsapp(
+    dados: RequisicaoMetaAiWhatsappProdutoIa,
+  ): Promise<ResultadoMetaAiWhatsappProdutoIa> {
+    const produtoIaUrl = process.env.PRODUTO_IA_URL?.trim();
+    const apiKey = process.env.PRODUTO_IA_API_KEY?.trim();
+
+    if (!produtoIaUrl) {
+      throw new ServiceUnavailableException(
+        'Produto IA não configurada. Defina PRODUTO_IA_URL no ambiente do backend.',
+      );
+    }
+
+    if (!apiKey) {
+      throw new ServiceUnavailableException(
+        'Produto IA não configurada. Defina PRODUTO_IA_API_KEY no ambiente do backend.',
+      );
+    }
+
+    const endpoint = `${this.normalizarProdutoIaUrl(produtoIaUrl)}/meta-ai-whatsapp/enriquecer`;
+    const controller = new AbortController();
+    const timeoutConfigurado = Number(
+      process.env.PRODUTO_IA_META_AI_WHATSAPP_TIMEOUT_MS ??
+        process.env.PRODUTO_IA_TIMEOUT_MS ??
+        90_000,
+    );
+    const timeoutMs =
+      Number.isFinite(timeoutConfigurado) && timeoutConfigurado >= 5_000
+        ? Math.min(timeoutConfigurado, 180_000)
+        : 90_000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const resposta = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
+        body: JSON.stringify({
+          categoria: dados.categoria,
+          nome: dados.nome ?? null,
+          payload: dados.payload,
+          resposta: dados.resposta ?? null,
+          captura: dados.captura ?? null,
+          forcar: dados.forcar ?? false,
+        }),
+        signal: controller.signal,
+      });
+
+      const texto = await resposta.text();
+
+      if (!resposta.ok) {
+        const mensagem = this.extrairMensagemErro(texto);
+
+        if (resposta.status === 400) {
+          throw new BadRequestException(
+            mensagem ?? 'A resposta do Meta AI não pôde ser analisada.',
+          );
+        }
+
+        if (resposta.status === 401 || resposta.status === 403) {
+          this.logger.error(
+            `Produto IA Meta AI/WhatsApp respondeu com HTTP ${resposta.status}.`,
+          );
+          throw new BadGatewayException(
+            'Falha de autenticação entre o backend e a Produto IA.',
+          );
+        }
+
+        this.logger.error(
+          `Produto IA Meta AI/WhatsApp respondeu com HTTP ${resposta.status}.`,
+        );
+        throw new BadGatewayException(
+          mensagem
+            ? `Produto IA não conseguiu enriquecer a ficha: ${mensagem}`
+            : `Produto IA respondeu com HTTP ${resposta.status} ao enriquecer a ficha.`,
+        );
+      }
+
+      let resultado: unknown;
+      try {
+        resultado = JSON.parse(texto);
+      } catch {
+        throw new BadGatewayException(
+          'A Produto IA não retornou JSON válido no enriquecimento Meta AI/WhatsApp.',
+        );
+      }
+
+      if (
+        !resultado ||
+        typeof resultado !== 'object' ||
+        Array.isArray(resultado)
+      ) {
+        throw new BadGatewayException(
+          'A Produto IA retornou formato inválido no enriquecimento Meta AI/WhatsApp.',
+        );
+      }
+
+      return resultado as ResultadoMetaAiWhatsappProdutoIa;
+    } catch (erro) {
+      if (
+        erro instanceof BadGatewayException ||
+        erro instanceof BadRequestException
+      ) {
+        throw erro;
+      }
+
+      const mensagem =
+        erro instanceof Error ? erro.message : 'erro desconhecido';
+
+      if (erro instanceof Error && erro.name === 'AbortError') {
+        this.logger.error(
+          'Timeout ao consultar enriquecimento Meta AI/WhatsApp na Produto IA.',
+        );
+        throw new BadGatewayException(
+          'Tempo limite excedido ao completar a ficha com o Meta AI.',
+        );
+      }
+
+      this.logger.error(
+        `Falha ao consultar enriquecimento Meta AI/WhatsApp na Produto IA: ${mensagem}`,
+      );
+      throw new BadGatewayException(
+        'Falha ao completar a ficha com o Meta AI.',
       );
     } finally {
       clearTimeout(timeout);
