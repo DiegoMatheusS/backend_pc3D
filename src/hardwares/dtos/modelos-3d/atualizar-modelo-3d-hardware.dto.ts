@@ -1,5 +1,6 @@
 import {
   Max,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNumber,
@@ -17,6 +18,10 @@ import {
 } from '../../../generated/prisma/enums';
 
 export class AtualizarModelo3DHardwareDto {
+  @IsOptional()
+  @IsBoolean()
+  mostrarNoHome?: boolean;
+
   @IsOptional()
   @IsString()
   @MaxLength(150)

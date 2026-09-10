@@ -4466,14 +4466,15 @@ export class HardwaresService {
     });
   }
 
-  async atualizarModeloHome3D(modeloId: number, mostrarNoHome: boolean) {
-    const modelo = await this.prisma.modelo3DHardware.findUnique({
+  private async validarModelo3DParaHome(
+    modeloId: number,
+    banco: BancoHardware = this.prisma,
+  ) {
+    const modelo = await banco.modelo3DHardware.findUnique({
       where: { id: modeloId },
       include: {
         hardware: {
           select: {
-            id: true,
-            nome: true,
             categoria: true,
             ativo: true,
             publicado: true,
@@ -4484,28 +4485,40 @@ export class HardwaresService {
 
     if (!modelo) throw new NotFoundException('Modelo 3D não encontrado.');
 
-    if (mostrarNoHome) {
-      if (modelo.hardware.categoria !== CategoriaHardware.PLACA_VIDEO) {
-        throw new BadRequestException(
-          'A Home aceita somente modelo 3D de placa de vídeo.',
-        );
-      }
-      if (
-        !modelo.ativo ||
-        !modelo.aprovado ||
-        !modelo.hardware.ativo ||
-        !modelo.hardware.publicado
-      ) {
-        throw new BadRequestException(
-          'Para aparecer na Home, o modelo deve estar ativo e aprovado e o Hardware deve estar ativo e publicado.',
-        );
-      }
+    if (modelo.hardware.categoria !== CategoriaHardware.PLACA_VIDEO) {
+      throw new BadRequestException(
+        'A Home aceita somente modelo 3D de placa de vídeo.',
+      );
+    }
 
+    if (
+      !modelo.ativo ||
+      !modelo.aprovado ||
+      !modelo.hardware.ativo ||
+      !modelo.hardware.publicado
+    ) {
+      throw new BadRequestException(
+        'Para aparecer na Home, o modelo deve estar ativo e aprovado e o Hardware deve estar ativo e publicado.',
+      );
+    }
+  }
+
+  private async desmarcarOutrosModelos3DHome(
+    modeloId: number,
+    banco: BancoHardware,
+  ) {
+    await banco.modelo3DHardware.updateMany({
+      where: { mostrarNoHome: true, id: { not: modeloId } },
+      data: { mostrarNoHome: false },
+    });
+  }
+
+  async atualizarModeloHome3D(modeloId: number, mostrarNoHome: boolean) {
+    if (mostrarNoHome) {
       return this.prisma.$transaction(async (tx) => {
-        await tx.modelo3DHardware.updateMany({
-          where: { mostrarNoHome: true, id: { not: modeloId } },
-          data: { mostrarNoHome: false },
-        });
+        await this.validarModelo3DParaHome(modeloId, tx);
+        await this.desmarcarOutrosModelos3DHome(modeloId, tx);
+
         return tx.modelo3DHardware.update({
           where: { id: modeloId },
           data: { mostrarNoHome: true },
@@ -4515,6 +4528,13 @@ export class HardwaresService {
         });
       });
     }
+
+    const modelo = await this.prisma.modelo3DHardware.findUnique({
+      where: { id: modeloId },
+      select: { id: true },
+    });
+
+    if (!modelo) throw new NotFoundException('Modelo 3D não encontrado.');
 
     return this.prisma.modelo3DHardware.update({
       where: { id: modeloId },
@@ -4567,49 +4587,68 @@ export class HardwaresService {
       where: {
         id: modeloId,
       },
+      select: { id: true },
     });
 
     if (!modelo) {
       throw new NotFoundException('Modelo 3D não encontrado.');
     }
 
-    return this.prisma.modelo3DHardware.update({
-      where: {
-        id: modeloId,
-      },
-      data: {
-        nome: dados.nome,
-        arquivoUrl: dados.arquivoUrl,
-        formato: dados.formato,
-        origem: dados.origem,
-        storageKey: dados.storageKey,
-        fonteUrl: dados.fonteUrl,
-        autor: dados.autor,
-        licenca: dados.licenca,
-        versao: dados.versao,
-        alturaRealMm: dados.alturaRealMm,
-        larguraRealMm: dados.larguraRealMm,
-        profundidadeRealMm: dados.profundidadeRealMm,
-        tamanhoBytes: dados.tamanhoBytes,
-        posicaoCorrecaoX: dados.posicaoCorrecaoX,
-        posicaoCorrecaoY: dados.posicaoCorrecaoY,
-        posicaoCorrecaoZ: dados.posicaoCorrecaoZ,
-        rotacaoCorrecaoX: dados.rotacaoCorrecaoX,
-        rotacaoCorrecaoY: dados.rotacaoCorrecaoY,
-        rotacaoCorrecaoZ: dados.rotacaoCorrecaoZ,
-        escalaCorrecaoX: dados.escalaCorrecaoX,
-        escalaCorrecaoY: dados.escalaCorrecaoY,
-        escalaCorrecaoZ: dados.escalaCorrecaoZ,
-      },
-      include: {
-        hardware: {
-          select: {
-            id: true,
-            nome: true,
-            categoria: true,
-          },
+    const data = {
+      nome: dados.nome,
+      arquivoUrl: dados.arquivoUrl,
+      formato: dados.formato,
+      origem: dados.origem,
+      storageKey: dados.storageKey,
+      fonteUrl: dados.fonteUrl,
+      autor: dados.autor,
+      licenca: dados.licenca,
+      versao: dados.versao,
+      alturaRealMm: dados.alturaRealMm,
+      larguraRealMm: dados.larguraRealMm,
+      profundidadeRealMm: dados.profundidadeRealMm,
+      tamanhoBytes: dados.tamanhoBytes,
+      posicaoCorrecaoX: dados.posicaoCorrecaoX,
+      posicaoCorrecaoY: dados.posicaoCorrecaoY,
+      posicaoCorrecaoZ: dados.posicaoCorrecaoZ,
+      rotacaoCorrecaoX: dados.rotacaoCorrecaoX,
+      rotacaoCorrecaoY: dados.rotacaoCorrecaoY,
+      rotacaoCorrecaoZ: dados.rotacaoCorrecaoZ,
+      escalaCorrecaoX: dados.escalaCorrecaoX,
+      escalaCorrecaoY: dados.escalaCorrecaoY,
+      escalaCorrecaoZ: dados.escalaCorrecaoZ,
+      ...(dados.mostrarNoHome !== undefined
+        ? { mostrarNoHome: dados.mostrarNoHome }
+        : {}),
+    };
+
+    const include = {
+      hardware: {
+        select: {
+          id: true,
+          nome: true,
+          categoria: true,
         },
       },
+    } as const;
+
+    if (dados.mostrarNoHome === true) {
+      return this.prisma.$transaction(async (tx) => {
+        await this.validarModelo3DParaHome(modeloId, tx);
+        await this.desmarcarOutrosModelos3DHome(modeloId, tx);
+
+        return tx.modelo3DHardware.update({
+          where: { id: modeloId },
+          data,
+          include,
+        });
+      });
+    }
+
+    return this.prisma.modelo3DHardware.update({
+      where: { id: modeloId },
+      data,
+      include,
     });
   }
 
