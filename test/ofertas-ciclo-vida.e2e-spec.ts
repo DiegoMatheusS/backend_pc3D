@@ -6,6 +6,7 @@ import {
   TipoProduto,
 } from '../src/generated/prisma/enums';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { OfertasService } from '../src/ofertas/ofertas.service';
 import { App, criarApp, loginAdmin } from './app-setup';
 
 describe('Ofertas — integridade e histórico (e2e)', () => {
@@ -144,6 +145,36 @@ describe('Ofertas — integridade e histórico (e2e)', () => {
     expect(limpar.body.site).toBeNull();
     expect(limpar.body.logoUrl).toBeNull();
     expect(limpar.body.observacao).toBeNull();
+  });
+
+  it('resolve POST /admin/ofertas/verificar-precos como rota estática', async () => {
+    const ofertasService = app.get(OfertasService);
+    const verificarSpy = jest
+      .spyOn(ofertasService, 'verificarPrecosOfertas')
+      .mockResolvedValue({
+        totalProcessadas: 0,
+        totalAtualizadas: 0,
+        totalSemAlteracao: 0,
+        totalRevisar: 0,
+        totalBloqueadas: 0,
+        totalErros: 0,
+        totalIndisponiveis: 0,
+        totalElegiveisAntes: 0,
+        resultados: [],
+      } as Awaited<ReturnType<OfertasService['verificarPrecosOfertas']>>);
+
+    try {
+      const res = await request(app.getHttpServer())
+        .post('/api/admin/ofertas/verificar-precos')
+        .set('Cookie', cookieAdmin)
+        .send({ limite: 50 });
+
+      expect(res.status).toBe(200);
+      expect(verificarSpy).toHaveBeenCalledWith(50);
+      expect(res.body).toMatchObject({ totalProcessadas: 0, resultados: [] });
+    } finally {
+      verificarSpy.mockRestore();
+    }
   });
 
   it('expõe status do verificador de preços para o Dashboard sem consultar links externos', async () => {

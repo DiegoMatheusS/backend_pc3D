@@ -21,6 +21,7 @@ import {
   CadastrarHardwaresDescobertosLoteDto,
 } from './dtos/cadastrar-hardware-descoberto.dto';
 import { DescobrirHardwaresDto } from './dtos/descobrir-hardwares.dto';
+import { EnriquecerIaTecnicaDto } from './dtos/enriquecer-ia-tecnica.dto';
 import { EnriquecerMetaAiWhatsappDto } from './dtos/enriquecer-meta-ai-whatsapp.dto';
 import { HardwaresDescobertaIaService } from './hardwares-descoberta-ia.service';
 
@@ -57,6 +58,39 @@ export class HardwaresDescobertaIaController {
         totalEncontrados: resultado.totalEncontrados,
         jaCadastrados: resultado.jaCadastrados,
         novos: resultado.novos,
+        nenhumRegistroCriado: true,
+      },
+      ip: req.ip,
+    });
+
+    return resultado;
+  }
+
+  @Post('ia-tecnica/enriquecer')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { limit: 12, ttl: 60_000 } })
+  async enriquecerIaTecnica(
+    @Body() dados: EnriquecerIaTecnicaDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.service.enriquecerIaTecnica(dados);
+
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.IA_ADMIN_UTILIZADA,
+      entidade: 'DescobertaHardwareIa',
+      dadosNovos: {
+        operacao: 'ENRIQUECER_HARDWARE_IA_TECNICA',
+        provedor: resultado.provedor ?? dados.provedor,
+        categoria: dados.categoria,
+        nome: dados.nome ?? dados.payload.nome ?? null,
+        utilizado: resultado.utilizado ?? null,
+        coberturaAntes: resultado.coberturaAntes ?? null,
+        coberturaDepois: resultado.coberturaDepois ?? null,
+        camposPreenchidos: Array.isArray(resultado.camposPreenchidos)
+          ? resultado.camposPreenchidos
+          : [],
         nenhumRegistroCriado: true,
       },
       ip: req.ip,

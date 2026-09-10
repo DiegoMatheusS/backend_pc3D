@@ -15,6 +15,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CadastrarHardwareDescobertoDto } from './dtos/cadastrar-hardware-descoberto.dto';
 import { DescobrirHardwaresDto } from './dtos/descobrir-hardwares.dto';
+import { EnriquecerIaTecnicaDto } from './dtos/enriquecer-ia-tecnica.dto';
 import { EnriquecerMetaAiWhatsappDto } from './dtos/enriquecer-meta-ai-whatsapp.dto';
 
 const CATEGORIAS_DESCOBERTA = new Set<CategoriaHardware>([
@@ -78,6 +79,60 @@ export class HardwaresDescobertaIaService {
 
   private texto(valor: unknown): string | null {
     return typeof valor === 'string' && valor.trim() ? valor.trim() : null;
+  }
+
+  private ehLacuna(valor: unknown): boolean {
+    if (valor === null || valor === undefined) return true;
+    if (typeof valor === 'string') return valor.trim().length === 0;
+    if (Array.isArray(valor)) return valor.length === 0;
+    if (this.ehRegistro(valor)) return Object.keys(valor).length === 0;
+    return false;
+  }
+
+  private mesclarSomenteLacunas(atual: unknown, sugerido: unknown): unknown {
+    if (this.ehRegistro(atual) && this.ehRegistro(sugerido)) {
+      const mesclado: Record<string, unknown> = { ...atual };
+
+      for (const [campo, valorSugerido] of Object.entries(sugerido)) {
+        mesclado[campo] = this.mesclarSomenteLacunas(
+          atual[campo],
+          valorSugerido,
+        );
+      }
+
+      return mesclado;
+    }
+
+    if (this.ehLacuna(atual) && !this.ehLacuna(sugerido)) {
+      return sugerido;
+    }
+
+    return atual;
+  }
+
+  private camposPreenchidosPorEnriquecimento(
+    antes: unknown,
+    depois: unknown,
+    caminho = '',
+  ): string[] {
+    if (this.ehRegistro(depois)) {
+      const antesRegistro = this.ehRegistro(antes) ? antes : {};
+      return Object.entries(depois).flatMap(([campo, valorDepois]) => {
+        const proximoCaminho = caminho ? `${caminho}.${campo}` : campo;
+        return this.camposPreenchidosPorEnriquecimento(
+          antesRegistro[campo],
+          valorDepois,
+          proximoCaminho,
+        );
+      });
+    }
+
+    if (this.ehLacuna(antes) && !this.ehLacuna(depois) && caminho) {
+      const partes = caminho.split('.');
+      return [partes[partes.length - 1] ?? caminho];
+    }
+
+    return [];
   }
 
   private normalizar(valor: unknown): string {
@@ -444,6 +499,69 @@ export class HardwaresDescobertaIaService {
       temMais: resultadoIa.temMais ?? null,
       servicoProdutoIa: resultadoIa.servicoProdutoIa ?? null,
       nenhumRegistroCriado: true,
+    };
+  }
+
+  async enriquecerIaTecnica(dados: EnriquecerIaTecnicaDto) {
+    this.categoriaPermitida(dados.categoria);
+
+    const nome =
+      dados.nome?.trim() || this.texto(dados.payload.nome) || undefined;
+    const somentePreencheLacunas = dados.somentePreencheLacunas ?? true;
+
+    const resultado = await this.produtoIa.enriquecerIaTecnica({
+      provedor: dados.provedor,
+      categoria: dados.categoria,
+      nome,
+      payload: dados.payload,
+      somentePreencheLacunas,
+    });
+
+    const payloadSugerido = this.ehRegistro(resultado.payload)
+      ? resultado.payload
+      : dados.payload;
+
+    // Mesmo que o provider devolva algum valor conflitante, este proxy nunca
+    // substitui dado já preenchido. O usuário continua revisando a prévia
+    // antes de qualquer cadastro/atualização de Hardware.
+    const payloadProtegido = this.mesclarSomenteLacunas(
+      dados.payload,
+      payloadSugerido,
+    ) as Record<string, unknown>;
+
+    const camposPreenchidos = [
+      ...new Set(
+        this.camposPreenchidosPorEnriquecimento(
+          dados.payload,
+          payloadProtegido,
+        ),
+      ),
+    ];
+
+    return {
+      ...resultado,
+      utilizado:
+        typeof resultado.utilizado === 'boolean'
+          ? resultado.utilizado
+          : camposPreenchidos.length > 0,
+      provedor: this.texto(resultado.provedor) ?? dados.provedor,
+      categoria: this.texto(resultado.categoria) ?? dados.categoria,
+      nome: this.texto(resultado.nome) ?? nome ?? null,
+      somentePreencheLacunas,
+      camposPreenchidos,
+      camposAusentes: Array.isArray(resultado.camposAusentes)
+        ? resultado.camposAusentes
+        : [],
+      coberturaAntes:
+        typeof resultado.coberturaAntes === 'number'
+          ? resultado.coberturaAntes
+          : null,
+      coberturaDepois:
+        typeof resultado.coberturaDepois === 'number'
+          ? resultado.coberturaDepois
+          : null,
+      statusFicha: this.texto(resultado.statusFicha),
+      payload: payloadProtegido,
     };
   }
 

@@ -79,6 +79,16 @@ export type RequisicaoMetaAiWhatsappProdutoIa = {
 
 export type ResultadoMetaAiWhatsappProdutoIa = Record<string, unknown>;
 
+export type RequisicaoIaTecnicaProdutoIa = {
+  provedor: string;
+  categoria: string;
+  nome?: string;
+  payload: Record<string, unknown>;
+  somentePreencheLacunas?: boolean;
+};
+
+export type ResultadoIaTecnicaProdutoIa = Record<string, unknown>;
+
 @Injectable()
 export class ProdutoIaPythonService {
   private readonly logger = new Logger(ProdutoIaPythonService.name);
@@ -210,6 +220,143 @@ export class ProdutoIaPythonService {
     }
 
     return null;
+  }
+
+  async enriquecerIaTecnica(
+    dados: RequisicaoIaTecnicaProdutoIa,
+  ): Promise<ResultadoIaTecnicaProdutoIa> {
+    const produtoIaUrl = process.env.PRODUTO_IA_URL?.trim();
+    const apiKey = process.env.PRODUTO_IA_API_KEY?.trim();
+
+    if (!produtoIaUrl) {
+      throw new ServiceUnavailableException(
+        'Produto IA não configurada. Defina PRODUTO_IA_URL no ambiente do backend.',
+      );
+    }
+
+    if (!apiKey) {
+      throw new ServiceUnavailableException(
+        'Produto IA não configurada. Defina PRODUTO_IA_API_KEY no ambiente do backend.',
+      );
+    }
+
+    const endpoint = `${this.normalizarProdutoIaUrl(produtoIaUrl)}/ia-tecnica/enriquecer`;
+    const controller = new AbortController();
+    const timeoutConfigurado = Number(
+      process.env.PRODUTO_IA_IA_TECNICA_TIMEOUT_MS ??
+        process.env.PRODUTO_IA_TIMEOUT_MS ??
+        120_000,
+    );
+    const timeoutMs =
+      Number.isFinite(timeoutConfigurado) && timeoutConfigurado >= 5_000
+        ? Math.min(timeoutConfigurado, 240_000)
+        : 120_000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const resposta = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
+        body: JSON.stringify({
+          provedor: dados.provedor,
+          categoria: dados.categoria,
+          nome: dados.nome ?? null,
+          payload: dados.payload,
+          somentePreencheLacunas: dados.somentePreencheLacunas ?? true,
+        }),
+        signal: controller.signal,
+      });
+
+      const texto = await resposta.text();
+
+      if (!resposta.ok) {
+        const mensagem = this.extrairMensagemErro(texto);
+
+        if (resposta.status === 400 || resposta.status === 422) {
+          throw new BadRequestException(
+            mensagem ??
+              'A Produto IA recusou o payload de enriquecimento técnico.',
+          );
+        }
+
+        if (resposta.status === 401 || resposta.status === 403) {
+          this.logger.error(
+            `Produto IA IA técnica respondeu com HTTP ${resposta.status}.`,
+          );
+          throw new BadGatewayException(
+            'Falha de autenticação entre o backend e a Produto IA.',
+          );
+        }
+
+        if (resposta.status === 429) {
+          throw new BadGatewayException(
+            mensagem ?? 'O provedor de IA técnica atingiu o limite temporário.',
+          );
+        }
+
+        this.logger.error(
+          `Produto IA IA técnica respondeu com HTTP ${resposta.status}.`,
+        );
+        throw new BadGatewayException(
+          mensagem
+            ? `Produto IA não conseguiu enriquecer a ficha: ${mensagem}`
+            : `Produto IA respondeu com HTTP ${resposta.status} no enriquecimento técnico.`,
+        );
+      }
+
+      let resultado: unknown;
+      try {
+        resultado = JSON.parse(texto);
+      } catch {
+        throw new BadGatewayException(
+          'A Produto IA não retornou JSON válido no enriquecimento técnico.',
+        );
+      }
+
+      if (
+        !resultado ||
+        typeof resultado !== 'object' ||
+        Array.isArray(resultado)
+      ) {
+        throw new BadGatewayException(
+          'A Produto IA retornou formato inválido no enriquecimento técnico.',
+        );
+      }
+
+      return resultado as ResultadoIaTecnicaProdutoIa;
+    } catch (erro) {
+      if (
+        erro instanceof BadGatewayException ||
+        erro instanceof BadRequestException ||
+        erro instanceof ServiceUnavailableException
+      ) {
+        throw erro;
+      }
+
+      const mensagem =
+        erro instanceof Error ? erro.message : 'erro desconhecido';
+
+      if (erro instanceof Error && erro.name === 'AbortError') {
+        this.logger.error(
+          'Timeout ao consultar enriquecimento técnico na Produto IA.',
+        );
+        throw new BadGatewayException(
+          'Tempo limite excedido ao completar a ficha com IA técnica.',
+        );
+      }
+
+      this.logger.error(
+        `Falha ao consultar enriquecimento técnico na Produto IA: ${mensagem}`,
+      );
+      throw new BadGatewayException(
+        'Falha ao completar a ficha com IA técnica.',
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async enriquecerMetaAiWhatsapp(

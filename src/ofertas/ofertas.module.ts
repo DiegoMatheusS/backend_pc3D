@@ -6,6 +6,7 @@ import { SugestoesOfertasModule } from '../sugestoes-ofertas/sugestoes-ofertas.m
 import { IaModule } from '../ia/ia.module';
 import {
   OfertasController,
+  OfertasVerificacaoPrecosController,
   OfertasAdminController,
 } from './ofertas.controller';
 import { OfertasService } from './ofertas.service';
@@ -13,7 +14,13 @@ import { VerificadorPrecosOfertasService } from './verificador-precos-ofertas.se
 
 @Module({
   imports: [AuthModule, AuditoriaModule, SugestoesOfertasModule, IaModule],
-  controllers: [OfertasController, OfertasAdminController],
+  controllers: [
+    OfertasController,
+    // A rota estática /admin/ofertas/verificar-precos precisa ser registrada
+    // antes das rotas administrativas que podem conter parâmetros dinâmicos.
+    OfertasVerificacaoPrecosController,
+    OfertasAdminController,
+  ],
   providers: [OfertasService, VerificadorPrecosOfertasService, PapelGuard],
   exports: [OfertasService],
 })

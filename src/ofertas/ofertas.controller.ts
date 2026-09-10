@@ -70,6 +70,25 @@ export class OfertasController {
   }
 }
 
+// ── Verificação de preços ─────────────────────────────────────────────────────
+
+// Controller estático separado para garantir prioridade sobre qualquer rota
+// dinâmica /admin/ofertas/:id presente agora ou adicionada futuramente.
+@ApiTags('Ofertas')
+@Controller('admin/ofertas/verificar-precos')
+@UseGuards(AuthGuard, PapelGuard)
+export class OfertasVerificacaoPrecosController {
+  constructor(private readonly ofertasService: OfertasService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { limit: 2, ttl: 60_000 } })
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  verificarPrecos(@Body() dados: VerificarPrecosOfertasDto) {
+    return this.ofertasService.verificarPrecosOfertas(dados.limite);
+  }
+}
+
 // ── Rotas administrativas ────────────────────────────────────────────────────
 
 @ApiTags('Ofertas')
@@ -196,14 +215,6 @@ export class OfertasAdminController {
   }
 
   // ── Ofertas — ADMIN e EDITOR ──────────────────────────────────────────────
-
-  @Post('verificar-precos')
-  @HttpCode(HttpStatus.OK)
-  @Throttle({ global: { limit: 2, ttl: 60_000 } })
-  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
-  verificarPrecos(@Body() dados: VerificarPrecosOfertasDto) {
-    return this.ofertasService.verificarPrecosOfertas(dados.limite);
-  }
 
   @Post()
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
