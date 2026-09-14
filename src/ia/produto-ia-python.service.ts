@@ -212,6 +212,12 @@ export class ProdutoIaPythonService {
         const message = registro.message;
 
         if (typeof detail === 'string' && detail.trim()) return detail.trim();
+        if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+          const nested = detail as Record<string, unknown>;
+          const mensagem = nested.mensagem ?? nested.message;
+          if (typeof mensagem === 'string' && mensagem.trim())
+            return mensagem.trim();
+        }
         if (typeof message === 'string' && message.trim())
           return message.trim();
       }

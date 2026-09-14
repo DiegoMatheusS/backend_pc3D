@@ -101,6 +101,14 @@ export class OfertasAdminController {
     private readonly sugestoesOfertasService: SugestoesOfertasService,
   ) {}
 
+  @Post(':id/verificar-preco')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { limit: 10, ttl: 60_000 } })
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  verificarPreco(@Param('id', ParsePositiveIntPipe) id: number) {
+    return this.ofertasService.verificarPrecoOferta(id);
+  }
+
   // ── Listar — ADMIN, EDITOR, REVISOR ──────────────────────────────────────
 
   @Get()

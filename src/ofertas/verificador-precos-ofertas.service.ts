@@ -14,7 +14,7 @@ type ResultadoConsultaPreco =
       status: 'SUCESSO';
       preco: number;
       urlFinal: string;
-      origemPreco: 'JSON_LD' | 'META';
+      origemPreco: OrigemPrecoVerificado;
     }
   | {
       status: 'INDISPONIVEL';
@@ -165,11 +165,10 @@ export class VerificadorPrecosOfertasService {
   private buscarPrecoEmJsonLd(valor: unknown, profundidade = 0): number | null {
     if (profundidade > 10 || valor === null || valor === undefined) return null;
     if (Array.isArray(valor)) {
-      for (const item of valor) {
-        const encontrado = this.buscarPrecoEmJsonLd(item, profundidade + 1);
-        if (encontrado !== null) return encontrado;
-      }
-      return null;
+      const precos = valor
+        .map((item) => this.buscarPrecoEmJsonLd(item, profundidade + 1))
+        .filter((item): item is number => item !== null);
+      return new Set(precos).size === 1 ? precos[0] : null;
     }
     if (!this.ehRegistro(valor)) return null;
 
@@ -181,7 +180,8 @@ export class VerificadorPrecosOfertasService {
       const preco = this.normalizarPreco(valor.price);
       if (preco !== null) return preco;
       const baixo = this.normalizarPreco(valor.lowPrice);
-      if (baixo !== null) return baixo;
+      if (baixo !== null && baixo === this.normalizarPreco(valor.highPrice))
+        return baixo;
       if (this.ehRegistro(valor.priceSpecification)) {
         const especificado = this.normalizarPreco(
           valor.priceSpecification.price,
@@ -199,8 +199,7 @@ export class VerificadorPrecosOfertasService {
     }
 
     for (const [chave, filho] of Object.entries(valor)) {
-      if (!['@graph', 'mainEntity', 'itemListElement'].includes(chave))
-        continue;
+      if (!['@graph', 'mainEntity'].includes(chave)) continue;
       const encontrado = this.buscarPrecoEmJsonLd(filho, profundidade + 1);
       if (encontrado !== null) return encontrado;
     }
@@ -232,7 +231,7 @@ export class VerificadorPrecosOfertasService {
     }
 
     return Object.entries(valor).some(([chave, filho]) =>
-      ['offers', '@graph', 'mainEntity', 'itemListElement'].includes(chave)
+      ['offers', '@graph', 'mainEntity'].includes(chave)
         ? this.jsonLdIndicaIndisponivel(filho, profundidade + 1)
         : false,
     );
@@ -260,11 +259,6 @@ export class VerificadorPrecosOfertasService {
       /<meta\b[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']product:price:amount["'][^>]*>/i,
       /<meta\b[^>]*(?:property|name)=["']og:price:amount["'][^>]*content=["']([^"']+)["'][^>]*>/i,
       /<meta\b[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']og:price:amount["'][^>]*>/i,
-      /<meta\b[^>]*itemprop=["']price["'][^>]*content=["']([^"']+)["'][^>]*>/i,
-      /<meta\b[^>]*content=["']([^"']+)["'][^>]*itemprop=["']price["'][^>]*>/i,
-      /<(?:span|div)\b[^>]*itemprop=["']price["'][^>]*content=["']([^"']+)["'][^>]*>/i,
-      /<(?:span|div)\b[^>]*content=["']([^"']+)["'][^>]*itemprop=["']price["'][^>]*>/i,
-      /<(?:div|span)\b[^>]*data-(?:product-)?price=["']([^"']+)["'][^>]*>/i,
     ];
 
     for (const padrao of padroes) {
@@ -284,7 +278,7 @@ export class VerificadorPrecosOfertasService {
       if (!corpo || corpo.length > 3_500_000) continue;
 
       const ehJson =
-        /type=["']application\/(?:json|ld\+json)["']/i.test(atributos) ||
+        /type=["']application\/json["']/i.test(atributos) ||
         /id=["'](?:__NEXT_DATA__|__NUXT_DATA__|__APOLLO_STATE__)["']/i.test(
           atributos,
         );
@@ -370,6 +364,13 @@ export class VerificadorPrecosOfertasService {
     if (!this.ehRegistro(valor)) return resultados;
 
     for (const [chave, filho] of Object.entries(valor)) {
+      // Related items, cart totals and variants are not the selected product.
+      if (
+        /(recommend|related|similar|carousel|suggest|upsell|crosssell|variants|installment|parcel|shipping|freight|cart)/iu.test(
+          chave,
+        )
+      )
+        continue;
       const caminhoPai = caminho.join('.');
       const pontos = this.chavePrecoPontuacao(chave, caminhoPai);
 
@@ -418,7 +419,12 @@ export class VerificadorPrecosOfertasService {
         (a, b) => b.pontos - a.pontos || a.caminho.length - b.caminho.length,
       );
 
-    return confiaveis[0]?.preco ?? null;
+    const melhores = confiaveis.filter(
+      (item) => item.pontos === confiaveis[0]?.pontos,
+    );
+    return new Set(melhores.map((item) => item.preco)).size === 1
+      ? melhores[0].preco
+      : null;
   }
 
   private decodificarEntidadesBasicas(texto: string): string {
@@ -570,19 +576,57 @@ export class VerificadorPrecosOfertasService {
   }
 
   private extrairPrecoEstruturado(html: string, url?: URL): PrecoExtraido {
-    const jsonLd = this.extrairJsonLd(html);
-    for (const item of jsonLd) {
-      const preco = this.buscarPrecoEmJsonLd(item);
-      if (preco !== null) {
-        return { preco, origem: 'JSON_LD', indisponivel: false };
+    const roots: unknown[] = [];
+    const collect = (value: unknown, depth = 0): void => {
+      if (depth > 10) return;
+      if (Array.isArray(value)) {
+        value.forEach((item) => collect(item, depth + 1));
+        return;
       }
+      if (!this.ehRegistro(value)) return;
+      const types = this.tipoJsonLd(value['@type']);
+      if (
+        types.some(
+          (type) =>
+            type === 'product' || type === 'offer' || type === 'aggregateoffer',
+        )
+      ) {
+        roots.push(value);
+        return;
+      }
+      collect(value.mainEntity, depth + 1);
+      collect(value['@graph'], depth + 1);
+    };
+    this.extrairJsonLd(html).forEach((item) => collect(item));
+    // When structured data describes several products, require a unique match
+    // to the requested page; never choose the first recommendation by position.
+    let selected = roots;
+    if (roots.length > 1 && url) {
+      const samePage = (value: unknown): boolean => {
+        if (!this.ehRegistro(value)) return false;
+        const address = value.url ?? value['@id'];
+        if (typeof address !== 'string') return false;
+        try {
+          const candidate = new URL(address, url);
+          return (
+            candidate.origin === url.origin &&
+            candidate.pathname.replace(/\/$/u, '') ===
+              url.pathname.replace(/\/$/u, '')
+          );
+        } catch {
+          return false;
+        }
+      };
+      const matching = roots.filter(samePage);
+      if (matching.length) selected = matching;
     }
-
-    const indisponivel = jsonLd.some((item) =>
-      this.jsonLdIndicaIndisponivel(item),
-    );
-    if (indisponivel) {
-      return { preco: null, origem: null, indisponivel: true };
+    if (selected.length === 1) {
+      if (this.jsonLdIndicaIndisponivel(selected[0])) {
+        return { preco: null, origem: null, indisponivel: true };
+      }
+      const preco = this.buscarPrecoEmJsonLd(selected[0]);
+      if (preco !== null)
+        return { preco, origem: 'JSON_LD', indisponivel: false };
     }
 
     const precoMeta = this.extrairPrecoMeta(html);
@@ -753,7 +797,7 @@ export class VerificadorPrecosOfertasService {
           urlFinal: atual.toString(),
           // Mantém o contrato legado da API. Métodos novos de extração são
           // reportados como META para não quebrar consumidores existentes.
-          origemPreco: extraido.origem === 'JSON_LD' ? 'JSON_LD' : 'META',
+          origemPreco: extraido.origem,
         };
       }
 

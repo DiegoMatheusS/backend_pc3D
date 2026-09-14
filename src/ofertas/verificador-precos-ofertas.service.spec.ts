@@ -171,3 +171,66 @@ describe('VerificadorPrecosOfertasService', () => {
     });
   });
 });
+
+describe('seleção conservadora de preços', () => {
+  const service = new VerificadorPrecosOfertasService(
+    {} as ProdutoIaPythonService,
+  ) as unknown as ExtratorTeste;
+  const extract = (value: unknown) =>
+    service.extrairPrecoEstruturado(
+      `<script type="application/ld+json">${JSON.stringify(value)}</script>`,
+      new URL('https://loja.com/item'),
+    );
+
+  it('ignora preços em listas de recomendação', () => {
+    expect(
+      extract({
+        '@type': 'ItemList',
+        itemListElement: [
+          { '@type': 'Product', offers: { '@type': 'Offer', price: 20 } },
+        ],
+      }).preco,
+    ).toBeNull();
+  });
+  it('seleciona produto correspondente à URL quando há vários produtos', () => {
+    expect(
+      extract([
+        {
+          '@type': 'Product',
+          url: 'https://loja.com/outro',
+          offers: { '@type': 'Offer', price: 20 },
+        },
+        {
+          '@type': 'Product',
+          url: 'https://loja.com/item',
+          offers: { '@type': 'Offer', price: 1500 },
+        },
+      ]).preco,
+    ).toBe(1500);
+  });
+  it('não usa menor preço de variantes como preço exato', () => {
+    expect(
+      extract({
+        '@type': 'Product',
+        offers: { '@type': 'AggregateOffer', lowPrice: 100, highPrice: 300 },
+      }).preco,
+    ).toBeNull();
+  });
+  it('não reativa uma oferta esgotada que ainda tem preço no JSON', () => {
+    expect(
+      extract({
+        '@type': 'Product',
+        offers: {
+          '@type': 'Offer',
+          price: 100,
+          availability: 'https://schema.org/OutOfStock',
+        },
+      }).indisponivel,
+    ).toBe(true);
+  });
+  it('ignora preço melhor de recomendação em hidratação', () => {
+    const html =
+      '<script type="application/json">{"product":{"price":1500},"recommendations":[{"pixPrice":20}]}</script>';
+    expect(service.extrairPrecoEstruturado(html).preco).toBe(1500);
+  });
+});

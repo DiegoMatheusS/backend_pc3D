@@ -709,12 +709,23 @@ export class OfertasService {
     return { confere: true };
   }
 
-  async verificarPrecosOfertas(limiteInformado?: number) {
+  async verificarPrecoOferta(ofertaId: number) {
+    const resultado = await this.verificarPrecosOfertas(1, ofertaId);
+    if (!resultado.resultados.length) {
+      throw new BadRequestException(
+        'Oferta não elegível: confira o status, validade, Produto e parceiro ativos.',
+      );
+    }
+    return resultado.resultados[0];
+  }
+
+  async verificarPrecosOfertas(limiteInformado?: number, ofertaId?: number) {
     const limite = Math.min(Math.max(limiteInformado ?? 20, 1), 50);
     const agora = new Date();
     const limiteVariacaoPercentual = 35;
 
     const baseWhere: Prisma.OfertaWhereInput = {
+      ...(ofertaId !== undefined ? { id: ofertaId } : {}),
       status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
       parceiro: { ativo: true },
       produto: { ativo: true },
@@ -780,7 +791,10 @@ export class OfertasService {
       verificadoEm: Date;
     }> = [];
 
+    const inicioLote = Date.now();
     for (const oferta of ofertas) {
+      // Return progress between offers instead of holding 50 slow requests open.
+      if (resultados.length > 0 && Date.now() - inicioLote >= 45_000) break;
       const precoSalvo = Number(oferta.preco);
       const tentativaEm = new Date();
       const verificacao = await this.verificadorPrecos.verificarOferta({
@@ -804,7 +818,11 @@ export class OfertasService {
         precoEncontrado === null
           ? null
           : this.calcularVariacaoPercentual(precoSalvo, precoEncontrado);
+      const precoHeuristico =
+        verificacao.status === 'SUCESSO' &&
+        ['JSON_EMBUTIDO', 'HTML_MARKETPLACE'].includes(verificacao.origemPreco);
       const precisaProdutoIa =
+        precoHeuristico ||
         verificacao.status !== 'SUCESSO' ||
         (variacaoDireta !== null && variacaoDireta > limiteVariacaoPercentual);
 
@@ -860,7 +878,7 @@ export class OfertasService {
           verificacao.preco,
         );
 
-        if (variacao > limiteVariacaoPercentual) {
+        if (variacao > limiteVariacaoPercentual || precoHeuristico) {
           if (confirmacaoIa?.status !== 'SUCESSO') {
             await this.prisma.oferta.update({
               where: { id: oferta.id },
@@ -884,7 +902,7 @@ export class OfertasService {
               motivo:
                 confirmacaoIa?.status === 'BLOQUEADO'
                   ? confirmacaoIa.motivo
-                  : 'Variação superior a 35% sem confirmação confiável da Produto IA.',
+                  : 'Preço extraído por heurística ou variação superior a 35% sem confirmação confiável da Produto IA.',
               produtoIaUtilizada,
               verificadoEm: tentativaEm,
             });
@@ -1017,7 +1035,15 @@ export class OfertasService {
         continue;
       }
 
-      if (verificacao.status === 'INDISPONIVEL') {
+      if (
+        (confirmacaoIa?.status === 'SUCESSO' &&
+          confirmacaoIa.disponivel === false) ||
+        (verificacao.status === 'INDISPONIVEL' &&
+          !(
+            confirmacaoIa?.status === 'SUCESSO' &&
+            confirmacaoIa.disponivel === true
+          ))
+      ) {
         await this.prisma.oferta.update({
           where: { id: oferta.id },
           data: {
@@ -1040,7 +1066,10 @@ export class OfertasService {
           urlFinal: verificacao.urlFinal,
           status: 'INDISPONIVEL',
           revisaoNecessaria: false,
-          motivo: verificacao.motivo,
+          motivo:
+            'motivo' in verificacao
+              ? verificacao.motivo
+              : 'A Produto IA confirmou indisponibilidade.',
           produtoIaUtilizada,
           verificadoEm: tentativaEm,
         });
@@ -1151,7 +1180,7 @@ export class OfertasService {
 
     const restantesElegiveis = Math.max(
       0,
-      totalElegiveisAntes - ofertas.length,
+      totalElegiveisAntes - resultados.length,
     );
 
     return {
