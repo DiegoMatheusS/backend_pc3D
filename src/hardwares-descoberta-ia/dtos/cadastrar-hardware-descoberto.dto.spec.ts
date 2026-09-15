@@ -14,4 +14,20 @@ describe('slots M.2 no cadastro descoberto', () => {
     expect(slots?.[0].interfacesSuportadas).toEqual([]);
     expect(validateSync(slots![0])).toEqual([]);
   });
+
+  it('remove frequencias do campo tiposMemoriaSuportados e preserva somente enums DDR', () => {
+    const dto = plainToInstance(CadastrarHardwareDescobertoDto, {
+      payload: {
+        categoria: 'PLACA_MAE',
+        nome: 'MSI B550-A Pro',
+        marca: 'MSI',
+        modelo: 'B550-A Pro',
+        especificacaoPlacaMae: {
+          tiposMemoriaSuportados: [3200, 3466, 'DDR4', 'DDR4-3600', 'desconhecido'],
+        },
+      },
+    });
+
+    expect(dto.payload.especificacaoPlacaMae?.tiposMemoriaSuportados).toEqual(['DDR4']);
+  });
 });
