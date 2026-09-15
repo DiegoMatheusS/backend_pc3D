@@ -1,10 +1,45 @@
 import { BadGatewayException } from '@nestjs/common';
 
+function prepararDescobertaRapida(endpoint: string, options: RequestInit): RequestInit {
+  const pathname = new URL(endpoint).pathname.replace(/\/+$/, '');
+  const ehDescoberta = pathname === '/descobrir-hardwares'
+    || pathname === '/api/admin/hardwares/descobrir';
+
+  if (!ehDescoberta || typeof options.body !== 'string') return options;
+
+  try {
+    const payload: unknown = JSON.parse(options.body);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return options;
+    }
+
+    // A descoberta inicial deve apenas listar candidatos. Detalhamento e
+    // enriquecimento ficam para o "Completar com IA" do hardware escolhido,
+    // evitando chamadas longas que podem ultrapassar o timeout do proxy.
+    return {
+      ...options,
+      body: JSON.stringify({
+        ...(payload as Record<string, unknown>),
+        detalhar: false,
+        enriquecer: false,
+      }),
+    };
+  } catch {
+    return options;
+  }
+}
+
 // Preserva POST/JSON em redirects internos sem enviar a chave a outra origem.
 export async function postProdutoIa(endpoint: string, options: RequestInit): Promise<Response> {
   let current = new URL(endpoint);
+  const requestOptions = prepararDescobertaRapida(endpoint, options);
+
   for (let redirects = 0; redirects <= 3; redirects += 1) {
-    const response = await fetch(current.href, { ...options, method: 'POST', redirect: 'manual' });
+    const response = await fetch(current.href, {
+      ...requestOptions,
+      method: 'POST',
+      redirect: 'manual',
+    });
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     const location = response.headers.get('location');
     await response.body?.cancel();
