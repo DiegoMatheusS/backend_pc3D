@@ -59,6 +59,16 @@ describe('integração de verificação individual de ofertas', () => {
     return { service, prisma, checker };
   }
 
+  it('continua sem selecionar IDs já verificados', async () => {
+    const { service, prisma } = setup();
+    const result = await service.verificarPrecosOfertas(48, undefined, [10, 11]);
+    expect(prisma.oferta.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: { notIn: [10, 11] } }), take: 48,
+    }));
+    expect(result.suportaContinuacao).toBe(true);
+    expect(result.verificadas).toBe(1);
+  });
+
   it('filtra pelo id pedido e grava preço e histórico na mesma transação', async () => {
     const { service, prisma } = setup();
     const result = await service.verificarPrecoOferta(42);
@@ -113,3 +123,4 @@ describe('integração de verificação individual de ofertas', () => {
     expect(prisma.historicoPrecoOferta.create).not.toHaveBeenCalled();
   });
 });
+

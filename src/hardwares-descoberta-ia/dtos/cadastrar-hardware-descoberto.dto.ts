@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -8,6 +8,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { CriarSlotM2PlacaMaeDto } from '../../hardwares/dtos/especificacoes/criar-slot-m2-placa-mae.dto';
 import { CriarHardwareDto } from '../../hardwares/dtos/criar-hardware.dto';
 
 function ehRegistro(valor: unknown): valor is Record<string, unknown> {
@@ -67,6 +68,22 @@ function normalizarPayloadDescoberto(valor: unknown): unknown {
     );
   }
 
+  const placaMae = valor.especificacaoPlacaMae;
+  if (ehRegistro(placaMae)) {
+    const slots = placaMae.slotsM2;
+    const contagem = typeof slots === 'number' ? slots
+      : typeof slots === 'string' && /^\s*\d{1,2}\s*$/.test(slots)
+        ? Number(slots) : null;
+    if (contagem !== null && Number.isInteger(contagem) && contagem >= 0 && contagem <= 16) {
+      placaMae.slotsM2 = Array.from({ length: contagem }, (_, indice) => plainToInstance(CriarSlotM2PlacaMaeDto, {
+        codigo: `M2_${indice + 1}`,
+        interfacesSuportadas: [],
+        chavesSuportadas: [],
+        tamanhosSuportadosMm: [],
+      }));
+    }
+  }
+
   return valor;
 }
 
@@ -92,3 +109,4 @@ export class CadastrarHardwaresDescobertosLoteDto {
   @Type(() => CadastrarHardwareDescobertoDto)
   itens!: CadastrarHardwareDescobertoDto[];
 }
+

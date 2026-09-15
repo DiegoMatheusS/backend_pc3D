@@ -1,3 +1,4 @@
+import { postProdutoIa } from './produto-ia-http';
 import {
   BadGatewayException,
   BadRequestException,
@@ -129,7 +130,7 @@ export class ProdutoIaPythonService {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const resposta = await fetch(endpoint, {
+      const resposta = await postProdutoIa(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -260,7 +261,7 @@ export class ProdutoIaPythonService {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const resposta = await fetch(endpoint, {
+      const resposta = await postProdutoIa(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -397,7 +398,7 @@ export class ProdutoIaPythonService {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const resposta = await fetch(endpoint, {
+      const resposta = await postProdutoIa(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -527,7 +528,7 @@ export class ProdutoIaPythonService {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const resposta = await fetch(endpoint, {
+      const resposta = await postProdutoIa(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -592,3 +593,4 @@ export class ProdutoIaPythonService {
     }
   }
 }
+
