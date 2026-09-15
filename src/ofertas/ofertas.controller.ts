@@ -82,10 +82,10 @@ export class OfertasVerificacaoPrecosController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  @Throttle({ global: { limit: 2, ttl: 60_000 } })
+  @Throttle({ global: { limit: 12, ttl: 60_000 } })
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
   verificarPrecos(@Body() dados: VerificarPrecosOfertasDto) {
-    return this.ofertasService.verificarPrecosOfertas(dados.limite);
+    return this.ofertasService.verificarPrecosOfertas(dados.limite, undefined, dados.excluirIds);
   }
 }
 
@@ -286,3 +286,4 @@ export class OfertasAdminController {
     return resultado;
   }
 }
+

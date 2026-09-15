@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class VerificarPrecosOfertasDto {
   /**
@@ -12,4 +12,13 @@ export class VerificarPrecosOfertasDto {
   @Min(1)
   @Max(50)
   limite?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  excluirIds?: number[];
 }
+

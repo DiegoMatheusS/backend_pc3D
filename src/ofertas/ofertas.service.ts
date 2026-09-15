@@ -719,13 +719,13 @@ export class OfertasService {
     return resultado.resultados[0];
   }
 
-  async verificarPrecosOfertas(limiteInformado?: number, ofertaId?: number) {
+  async verificarPrecosOfertas(limiteInformado?: number, ofertaId?: number, excluirIds: number[] = []) {
     const limite = Math.min(Math.max(limiteInformado ?? 20, 1), 50);
     const agora = new Date();
     const limiteVariacaoPercentual = 35;
 
     const baseWhere: Prisma.OfertaWhereInput = {
-      ...(ofertaId !== undefined ? { id: ofertaId } : {}),
+      ...(ofertaId !== undefined ? { id: ofertaId } : excluirIds.length ? { id: { notIn: excluirIds } } : {}),
       status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
       parceiro: { ativo: true },
       produto: { ativo: true },
@@ -1028,7 +1028,7 @@ export class OfertasService {
               ? 'BLOQUEADO'
               : 'ERRO',
           revisaoNecessaria: false,
-          motivo: confirmacaoIa ? confirmacaoIa.motivo : verificacao.motivo,
+          motivo: [verificacao.motivo, confirmacaoIa?.motivo].filter(Boolean).join(' | Produto IA: '),
           produtoIaUtilizada,
           verificadoEm: tentativaEm,
         });
@@ -1185,6 +1185,8 @@ export class OfertasService {
 
     return {
       ...resumo,
+      suportaContinuacao: true,
+      interrompidoPorTempo: resultados.length < ofertas.length,
       limiteDoLote: limite,
       limiteVariacaoPercentual,
       restantesElegiveis,
@@ -1428,3 +1430,4 @@ export class OfertasService {
     };
   }
 }
+
