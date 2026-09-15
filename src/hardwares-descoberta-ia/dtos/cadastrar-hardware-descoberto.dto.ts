@@ -18,33 +18,25 @@ function ehRegistro(valor: unknown): valor is Record<string, unknown> {
 function normalizarTextoTipoMemoria(valor: string): string[] {
   const texto = valor
     .trim()
-
     .toUpperCase()
     .replace(/DDR\s*[-_]?\s*([345])/g, 'DDR$1');
 
-  if (!texto) return [texto];
+  if (!texto) return [];
 
   const encontrados = texto.match(/\bDDR[345]\b/g) ?? [];
-
-  if (encontrados.length > 0) {
-    return [...new Set(encontrados)];
-  }
-
-  return [texto];
+  return [...new Set(encontrados)];
 }
 
 function normalizarTiposMemoriaSuportados(valor: unknown): unknown {
   if (valor === undefined || valor === null) return valor;
 
   const entradas = Array.isArray(valor) ? valor : [valor];
-  const resultado: unknown[] = [];
+  const resultado: string[] = [];
 
   for (const entrada of entradas) {
-    if (typeof entrada !== 'string') {
-      resultado.push(entrada);
-      continue;
-    }
-
+    // A IA pode misturar frequências (3200, 3600...) no campo de tipo de
+    // memória. O Prisma aceita aqui somente os enums DDR3/DDR4/DDR5.
+    if (typeof entrada !== 'string') continue;
     resultado.push(...normalizarTextoTipoMemoria(entrada));
   }
 
@@ -109,4 +101,3 @@ export class CadastrarHardwaresDescobertosLoteDto {
   @Type(() => CadastrarHardwareDescobertoDto)
   itens!: CadastrarHardwareDescobertoDto[];
 }
-
