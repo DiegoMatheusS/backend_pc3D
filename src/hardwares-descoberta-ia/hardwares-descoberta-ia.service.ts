@@ -517,23 +517,19 @@ export class HardwaresDescobertaIaService {
       somentePreencheLacunas,
     });
 
-    const payloadSugerido = this.ehRegistro(resultado.payload)
+    // O ProjetoIA já aplica o contrato somentePreencheLacunas, registra conflitos
+    // e normaliza o payload para o DTO do backend. Reaplicar uma mesclagem aqui
+    // reintroduzia valores antigos/corrompidos do card (ex.: 5.200.000 no lugar
+    // de 5200 MHz) e fazia a IA direta falhar no cadastro enquanto o Meta IA passava.
+    const payloadNormalizado = this.ehRegistro(resultado.payload)
       ? resultado.payload
       : dados.payload;
-
-    // Mesmo que o provider devolva algum valor conflitante, este proxy nunca
-    // substitui dado já preenchido. O usuário continua revisando a prévia
-    // antes de qualquer cadastro/atualização de Hardware.
-    const payloadProtegido = this.mesclarSomenteLacunas(
-      dados.payload,
-      payloadSugerido,
-    ) as Record<string, unknown>;
 
     const camposPreenchidos = [
       ...new Set(
         this.camposPreenchidosPorEnriquecimento(
           dados.payload,
-          payloadProtegido,
+          payloadNormalizado,
         ),
       ),
     ];
@@ -561,7 +557,7 @@ export class HardwaresDescobertaIaService {
           ? resultado.coberturaDepois
           : null,
       statusFicha: this.texto(resultado.statusFicha),
-      payload: payloadProtegido,
+      payload: payloadNormalizado,
     };
   }
 
