@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { PapelGuard } from '../auth/papel.guard';
 import { AuditoriaModule } from '../auditoria/auditoria.module';
+import { ProdutoLikesController } from './produto-likes.controller';
+import { ProdutoLikesService } from './produto-likes.service';
 import {
   CategoriasProdutosAdminController,
   CategoriasProdutosController,
@@ -14,11 +16,12 @@ import { ProdutosService } from './produtos.service';
   imports: [AuthModule, AuditoriaModule],
   controllers: [
     ProdutosController,
+    ProdutoLikesController,
     ProdutosAdminController,
     CategoriasProdutosController,
     CategoriasProdutosAdminController,
   ],
-  providers: [ProdutosService, PapelGuard],
+  providers: [ProdutosService, ProdutoLikesService, PapelGuard],
   exports: [ProdutosService],
 })
 export class ProdutosModule {}
