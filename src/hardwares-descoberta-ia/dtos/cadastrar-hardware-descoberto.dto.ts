@@ -11,6 +11,18 @@ import {
 import { CriarSlotM2PlacaMaeDto } from '../../hardwares/dtos/especificacoes/criar-slot-m2-placa-mae.dto';
 import { CriarHardwareDto } from '../../hardwares/dtos/criar-hardware.dto';
 
+const CAMPOS_ESPECIFICACAO_TECNICA = [
+  'especificacaoProcessador',
+  'especificacaoPlacaMae',
+  'especificacaoMemoriaRam',
+  'especificacaoPlacaVideo',
+  'especificacaoArmazenamento',
+  'especificacaoFonte',
+  'especificacaoGabinete',
+  'especificacaoCooler',
+  'especificacaoVentoinha',
+] as const;
+
 function ehRegistro(valor: unknown): valor is Record<string, unknown> {
   return Boolean(valor) && typeof valor === 'object' && !Array.isArray(valor);
 }
@@ -43,6 +55,37 @@ function normalizarTiposMemoriaSuportados(valor: unknown): unknown {
   return [...new Set(resultado)];
 }
 
+/**
+ * Respostas de IA usam null para representar "não confirmado". Em operações
+ * de CREATE isso não deve ser repassado literalmente ao Prisma: campos com
+ * default (booleanos, contadores e listas) e relações aninhadas não aceitam
+ * null explícito, embora a ausência do campo seja válida.
+ *
+ * Removemos null somente das especificações técnicas estruturadas. O campo
+ * livre `especificacoes` (JSON) não passa por aqui, pois null pode ser dado
+ * intencional dentro desse JSON.
+ */
+function removerNulosTecnicos(valor: unknown): unknown {
+  if (Array.isArray(valor)) {
+    return valor
+      .filter((item) => item !== null)
+      .map((item) => removerNulosTecnicos(item));
+  }
+
+  if (!ehRegistro(valor)) return valor;
+
+  for (const [chave, item] of Object.entries(valor)) {
+    if (item === null) {
+      delete valor[chave];
+      continue;
+    }
+
+    valor[chave] = removerNulosTecnicos(item);
+  }
+
+  return valor;
+}
+
 function normalizarPayloadDescoberto(valor: unknown): unknown {
   if (!ehRegistro(valor)) return valor;
 
@@ -63,16 +106,34 @@ function normalizarPayloadDescoberto(valor: unknown): unknown {
   const placaMae = valor.especificacaoPlacaMae;
   if (ehRegistro(placaMae)) {
     const slots = placaMae.slotsM2;
-    const contagem = typeof slots === 'number' ? slots
-      : typeof slots === 'string' && /^\s*\d{1,2}\s*$/.test(slots)
-        ? Number(slots) : null;
-    if (contagem !== null && Number.isInteger(contagem) && contagem >= 0 && contagem <= 16) {
-      placaMae.slotsM2 = Array.from({ length: contagem }, (_, indice) => plainToInstance(CriarSlotM2PlacaMaeDto, {
-        codigo: `M2_${indice + 1}`,
-        interfacesSuportadas: [],
-        chavesSuportadas: [],
-        tamanhosSuportadosMm: [],
-      }));
+    const contagem =
+      typeof slots === 'number'
+        ? slots
+        : typeof slots === 'string' && /^\s*\d{1,2}\s*$/.test(slots)
+          ? Number(slots)
+          : null;
+
+    if (
+      contagem !== null &&
+      Number.isInteger(contagem) &&
+      contagem >= 0 &&
+      contagem <= 16
+    ) {
+      placaMae.slotsM2 = Array.from({ length: contagem }, (_, indice) =>
+        plainToInstance(CriarSlotM2PlacaMaeDto, {
+          codigo: `M2_${indice + 1}`,
+          interfacesSuportadas: [],
+          chavesSuportadas: [],
+          tamanhosSuportadosMm: [],
+        }),
+      );
+    }
+  }
+
+  for (const chave of CAMPOS_ESPECIFICACAO_TECNICA) {
+    const especificacao = valor[chave];
+    if (ehRegistro(especificacao)) {
+      valor[chave] = removerNulosTecnicos(especificacao);
     }
   }
 

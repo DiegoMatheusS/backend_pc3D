@@ -25,6 +25,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 @Catch()
 export class FiltroHttpExcecoes implements ExceptionFilter {
   private readonly logger = new Logger(FiltroHttpExcecoes.name);
+
   private converterParaTexto(valor: unknown): string {
     if (typeof valor === 'string') {
       return valor;
@@ -61,13 +62,23 @@ export class FiltroHttpExcecoes implements ExceptionFilter {
 
   private mascararSegredos(valor: string): string {
     return valor
-      .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/giu, '$1[REDACTED]')
+      .replace(
+        /(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/giu,
+        '$1[REDACTED]',
+      )
       .replace(/(cookie\s*[:=]\s*)[^\n]+/giu, '$1[REDACTED]')
       .replace(
         /((?:token|secret|password|senha|credential)\s*[:=]\s*)[^\s,;]+/giu,
         '$1[REDACTED]',
       )
       .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/gu, '[REDACTED]');
+  }
+
+  private ehErroValidacaoPrisma(excecao: unknown): excecao is Error {
+    return (
+      excecao instanceof Error &&
+      excecao.name === 'PrismaClientValidationError'
+    );
   }
 
   catch(excecao: unknown, host: ArgumentsHost): void {
@@ -124,7 +135,7 @@ export class FiltroHttpExcecoes implements ExceptionFilter {
       return;
     }
 
-    // ── 3. Erros do Prisma ─────────────────────────────────────────────────
+    // ── 3. Erros conhecidos do Prisma ──────────────────────────────────────
     if (excecao instanceof PrismaClientKnownRequestError) {
       const { codigo, status, mensagem } = this.traduzirErroPrisma(excecao);
 
@@ -141,7 +152,25 @@ export class FiltroHttpExcecoes implements ExceptionFilter {
       return;
     }
 
-    // ── 4. Erro genérico inesperado ────────────────────────────────────────
+    // ── 4. Prisma rejeitou a estrutura do payload ──────────────────────────
+    // PrismaClientValidationError não possui código Pxxxx e antes caía no 500
+    // genérico, o que escondia erros como nested create recebendo null.
+    if (this.ehErroValidacaoPrisma(excecao)) {
+      this.logger.warn(
+        `Payload rejeitado pelo Prisma em ${requisicao.method} ${requisicao.path}: ${this.mascararSegredos(excecao.message)}`,
+      );
+
+      resposta.status(HttpStatus.BAD_REQUEST).json({
+        statusCode: HttpStatus.BAD_REQUEST,
+        codigo: 'PAYLOAD_PRISMA_INVALIDO',
+        mensagem:
+          'Os dados técnicos enviados não correspondem ao formato esperado para cadastro.',
+        detalhes: {},
+      });
+      return;
+    }
+
+    // ── 5. Erro genérico inesperado ────────────────────────────────────────
     this.logger.error(
       `Erro inesperado em ${requisicao.method} ${requisicao.url}`,
       this.mascararSegredos(
