@@ -60,6 +60,38 @@ function normalizarTiposMemoria(valor: unknown): unknown {
   return [...resultado];
 }
 
+function normalizarFrequenciasMemoria(valor: unknown): number[] {
+  if (valor === undefined || valor === null || valor === '') return [];
+
+  const entrada = Array.isArray(valor) ? valor : [valor];
+  const resultado = new Set<number>();
+
+  const adicionar = (numero: number) => {
+    if (!Number.isInteger(numero)) return;
+    // Faixa propositalmente conservadora para DDR3/DDR4/DDR5 e gerações próximas.
+    // Valores gigantes normalmente são erro de unidade/parser (ex.: 5.200.000).
+    if (numero < 400 || numero > 20_000) return;
+    resultado.add(numero);
+  };
+
+  for (const item of entrada) {
+    if (typeof item === 'number') {
+      adicionar(item);
+      continue;
+    }
+
+    if (typeof item !== 'string') continue;
+    const texto = item.trim();
+    if (!texto) continue;
+
+    // Aceita tanto "5200, 5600" quanto "DDR5-6000" ou "6000 MT/s".
+    const encontrados = texto.match(/\b\d{3,5}\b/g) ?? [];
+    for (const encontrado of encontrados) adicionar(Number(encontrado));
+  }
+
+  return [...resultado];
+}
+
 export class CriarEspecificacaoPlacaMaeDto {
   @IsString()
   @MaxLength(50)
@@ -107,20 +139,26 @@ export class CriarEspecificacaoPlacaMaeDto {
   })
   formatosMemoriaSuportados?: FormatoMemoria[];
 
+  @Transform(({ value }) => normalizarFrequenciasMemoria(value), {
+    toClassOnly: true,
+  })
   @IsArray()
   @ArrayMaxSize(64)
   @ArrayUnique()
   @IsInt({ each: true })
-  @Min(1, { each: true })
-  @Max(1_000_000, { each: true })
+  @Min(400, { each: true })
+  @Max(20_000, { each: true })
   frequenciasMemoriaJedecMhz!: number[];
 
+  @Transform(({ value }) => normalizarFrequenciasMemoria(value), {
+    toClassOnly: true,
+  })
   @IsArray()
   @ArrayMaxSize(64)
   @ArrayUnique()
   @IsInt({ each: true })
-  @Min(1, { each: true })
-  @Max(1_000_000, { each: true })
+  @Min(400, { each: true })
+  @Max(20_000, { each: true })
   frequenciasMemoriaOverclockMhz!: number[];
 
   @IsInt()
