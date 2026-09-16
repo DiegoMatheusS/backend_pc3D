@@ -130,6 +130,15 @@ function normalizarPayloadDescoberto(valor: unknown): unknown {
     }
   }
 
+  // `fluxoArCfm` existe no contrato de VENTOINHA, mas não no contrato/tabela
+  // estruturada de COOLER. Versões anteriores do ProjetoIA chegaram a incluí-lo
+  // em `especificacaoCooler`; removemos aqui antes do whitelist do class-validator
+  // para que payloads já enriquecidos possam ser cadastrados sem nova chamada de IA.
+  const cooler = valor.especificacaoCooler;
+  if (ehRegistro(cooler)) {
+    delete cooler.fluxoArCfm;
+  }
+
   for (const chave of CAMPOS_ESPECIFICACAO_TECNICA) {
     const especificacao = valor[chave];
     if (ehRegistro(especificacao)) {
