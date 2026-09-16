@@ -119,4 +119,30 @@ describe('slots M.2 no cadastro descoberto', () => {
     expect(slot.ativo).toBeUndefined();
     expect(slot.compartilhaCom).toBeUndefined();
   });
+
+  it('remove fluxoArCfm de cooler descoberto antes da validação', () => {
+    const dto = plainToInstance(CadastrarHardwareDescobertoDto, {
+      payload: {
+        categoria: 'COOLER',
+        nome: 'Cooler teste',
+        marca: 'Teste',
+        modelo: 'C1',
+        especificacaoCooler: {
+          tipo: 'AIR_COOLER',
+          socketsSuportados: ['AM5'],
+          velocidadeMaxRpm: 1850,
+          fluxoArCfm: 66.17,
+        },
+      },
+    });
+
+    const cooler = dto.payload.especificacaoCooler as unknown as Record<
+      string,
+      unknown
+    >;
+
+    expect(cooler.fluxoArCfm).toBeUndefined();
+    expect(cooler.velocidadeMaxRpm).toBe(1850);
+    expect(validateSync(dto)).toEqual([]);
+  });
 });
