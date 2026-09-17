@@ -7,6 +7,7 @@ import {
   OrdenacaoBuscaOferta,
   TagBuscaOferta,
 } from './dtos/filtrar-busca-ofertas.dto';
+import { ShopeeProjetoIaService } from './shopee-projeto-ia.service';
 
 type OfertaBuscaInterna = {
   id: number;
@@ -33,6 +34,7 @@ export class BuscaOfertasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly classificadorOfertasService: ClassificadorOfertasService,
+    private readonly shopeeProjetoIa: ShopeeProjetoIaService,
   ) {}
 
   private calcularDesconto(
@@ -239,11 +241,28 @@ export class BuscaOfertasService {
   }
 
   async atualizar(filtros: FiltrarBuscaOfertasDto) {
+    const projetoIaConfigurado = Boolean(
+      process.env.PRODUTO_IA_URL?.trim() && process.env.PRODUTO_IA_API_KEY?.trim(),
+    );
+    const sincronizacaoShopee = projetoIaConfigurado
+      ? await this.shopeeProjetoIa.sincronizarOfertas(20)
+      : null;
+
     return {
       ...(await this.listar(filtros)),
       atualizacaoExecutada: true,
-      observacao:
-        'Sem API externa: a lista é relida diretamente das Ofertas ativas do CriaByte que possuem link afiliado.',
+      integracoes: {
+        shopee: sincronizacaoShopee ?? {
+          fonte: 'SHOPEE_AFFILIATE_API',
+          apiOficial: true,
+          configurada: false,
+          totalProcessado: 0,
+          resultados: [],
+        },
+      },
+      observacao: projetoIaConfigurado
+        ? 'Ofertas Shopee foram sincronizadas pela API oficial via ProjetoIA antes de reler o banco.'
+        : 'ProjetoIA não configurado; a lista foi relida do banco sem sincronização externa.',
     };
   }
 
@@ -258,12 +277,23 @@ export class BuscaOfertasService {
         OR: [{ validoAte: null }, { validoAte: { gte: agora } }],
       },
     });
+    const projetoIaConfigurado = Boolean(
+      process.env.PRODUTO_IA_URL?.trim() && process.env.PRODUTO_IA_API_KEY?.trim(),
+    );
 
     return {
       origem: 'BANCO_CRIABYTE' as const,
-      apiExterna: false,
+      apiExterna: projetoIaConfigurado,
       modo: 'PRODUTOS_COM_LINK_AFILIADO' as const,
       totalComLinkAfiliado: total,
+      integracoes: {
+        shopee: {
+          habilitada: projetoIaConfigurado,
+          fonte: 'SHOPEE_AFFILIATE_API' as const,
+          via: 'PROJETO_IA' as const,
+          credencialShopeeNoBackend: false,
+        },
+      },
       regras: {
         criaHardwareAutomaticamente: false,
         criaProdutoAutomaticamente: false,
