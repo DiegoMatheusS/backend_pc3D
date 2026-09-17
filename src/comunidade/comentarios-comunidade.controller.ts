@@ -11,6 +11,7 @@ import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
 import { UsuarioAtual } from '../auth/usuario-atual.decorator';
+import { ComunidadeNotificacoesService } from './comunidade-notificacoes.service';
 import { ComunidadeService } from './comunidade.service';
 import type { UsuarioComunidade } from './comunidade.service';
 import { AtualizarComentarioBuildDto } from './dtos/atualizar-comentario-build.dto';
@@ -19,7 +20,10 @@ import { AtualizarComentarioBuildDto } from './dtos/atualizar-comentario-build.d
 @Controller('comunidade/comentarios')
 @UseGuards(AuthGuard)
 export class ComentariosComunidadeController {
-  constructor(private readonly comunidadeService: ComunidadeService) {}
+  constructor(
+    private readonly comunidadeService: ComunidadeService,
+    private readonly comunidadeNotificacoes: ComunidadeNotificacoesService,
+  ) {}
 
   private exigirUsuario(usuario: UsuarioComunidade) {
     if (!usuario) {
@@ -29,26 +33,40 @@ export class ComentariosComunidadeController {
   }
 
   @Patch(':id')
-  atualizar(
+  async atualizar(
     @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
     @Body() dados: AtualizarComentarioBuildDto,
   ) {
-    return this.comunidadeService.atualizarComentario(
+    const autenticado = this.exigirUsuario(usuario);
+    const resultado = await this.comunidadeService.atualizarComentario(
       id,
-      this.exigirUsuario(usuario),
+      autenticado,
       dados,
     );
+    await this.comunidadeNotificacoes.comentarioModeradoPorAdmin(
+      id,
+      autenticado,
+      'ALTERADO',
+    );
+    return resultado;
   }
 
   @Delete(':id')
-  remover(
+  async remover(
     @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
   ) {
-    return this.comunidadeService.removerComentario(
+    const autenticado = this.exigirUsuario(usuario);
+    const resultado = await this.comunidadeService.removerComentario(
       id,
-      this.exigirUsuario(usuario),
+      autenticado,
     );
+    await this.comunidadeNotificacoes.comentarioModeradoPorAdmin(
+      id,
+      autenticado,
+      'REMOVIDO',
+    );
+    return resultado;
   }
 }
