@@ -55,6 +55,39 @@ function normalizarTiposMemoriaSuportados(valor: unknown): unknown {
   return [...new Set(resultado)];
 }
 
+
+function normalizarConectorVentoinha(
+  valor: unknown,
+  pwm: unknown,
+): unknown {
+  if (typeof valor === 'string') {
+    const token = valor
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, '_');
+
+    if (['PWM_4_PINOS', 'PWM_4_PIN', 'PWM', '4_PIN', '4_PINOS'].includes(token)) {
+      return 'PWM_4_PINOS';
+    }
+    if (['DC_3_PINOS', 'DC_3_PIN', '3_PIN', '3_PINOS'].includes(token)) {
+      return 'DC_3_PINOS';
+    }
+    if (token === 'MOLEX') return 'MOLEX';
+    if (['PROPRIETARIO', 'PROPRIETÁRIO', 'PROPRIETARY'].includes(token)) {
+      return 'PROPRIETARIO';
+    }
+  }
+
+  // Ventoinha PWM padrão usa o conector de controle de 4 pinos. Algumas
+  // fontes informam "PWM Connector: Yes" sem repetir "4-pin", então o agente
+  // confirma PWM mas pode deixar o campo de conector nulo.
+  if ((valor === null || valor === undefined || valor === '') && pwm === true) {
+    return 'PWM_4_PINOS';
+  }
+
+  return valor;
+}
+
 /**
  * Respostas de IA usam null para representar "não confirmado". Em operações
  * de CREATE isso não deve ser repassado literalmente ao Prisma: campos com
@@ -137,6 +170,14 @@ function normalizarPayloadDescoberto(valor: unknown): unknown {
   const cooler = valor.especificacaoCooler;
   if (ehRegistro(cooler)) {
     delete cooler.fluxoArCfm;
+  }
+
+  const ventoinha = valor.especificacaoVentoinha;
+  if (ehRegistro(ventoinha)) {
+    ventoinha.conector = normalizarConectorVentoinha(
+      ventoinha.conector,
+      ventoinha.pwm,
+    );
   }
 
   for (const chave of CAMPOS_ESPECIFICACAO_TECNICA) {
