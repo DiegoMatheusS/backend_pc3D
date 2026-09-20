@@ -8,6 +8,7 @@ import {
   TagBuscaOferta,
 } from './dtos/filtrar-busca-ofertas.dto';
 import { ShopeeProjetoIaService } from './shopee-projeto-ia.service';
+import { MercadoLivreProjetoIaService } from './mercadolivre-projeto-ia.service';
 
 type OfertaBuscaInterna = {
   id: number;
@@ -35,6 +36,7 @@ export class BuscaOfertasService {
     private readonly prisma: PrismaService,
     private readonly classificadorOfertasService: ClassificadorOfertasService,
     private readonly shopeeProjetoIa: ShopeeProjetoIaService,
+    private readonly mercadoLivreProjetoIa: MercadoLivreProjetoIaService,
   ) {}
 
   private calcularDesconto(
@@ -244,9 +246,20 @@ export class BuscaOfertasService {
     const projetoIaConfigurado = Boolean(
       process.env.PRODUTO_IA_URL?.trim() && process.env.PRODUTO_IA_API_KEY?.trim(),
     );
-    const sincronizacaoShopee = projetoIaConfigurado
-      ? await this.shopeeProjetoIa.sincronizarOfertas(20)
-      : null;
+
+    let sincronizacaoShopee: Awaited<
+      ReturnType<ShopeeProjetoIaService['sincronizarOfertas']>
+    > | null = null;
+    let sincronizacaoMercadoLivre: Awaited<
+      ReturnType<MercadoLivreProjetoIaService['sincronizarOfertas']>
+    > | null = null;
+
+    if (projetoIaConfigurado) {
+      [sincronizacaoShopee, sincronizacaoMercadoLivre] = await Promise.all([
+        this.shopeeProjetoIa.sincronizarOfertas(20),
+        this.mercadoLivreProjetoIa.sincronizarOfertas(20),
+      ]);
+    }
 
     return {
       ...(await this.listar(filtros)),
@@ -259,9 +272,16 @@ export class BuscaOfertasService {
           totalProcessado: 0,
           resultados: [],
         },
+        mercadoLivre: sincronizacaoMercadoLivre ?? {
+          fonte: 'MERCADO_LIVRE_API',
+          apiOficial: true,
+          configurada: false,
+          totalProcessado: 0,
+          resultados: [],
+        },
       },
       observacao: projetoIaConfigurado
-        ? 'Ofertas Shopee foram sincronizadas pela API oficial via ProjetoIA antes de reler o banco.'
+        ? 'Ofertas Shopee e Mercado Livre foram sincronizadas via APIs oficiais pelo ProjetoIA antes de reler o banco.'
         : 'ProjetoIA não configurado; a lista foi relida do banco sem sincronização externa.',
     };
   }
@@ -292,6 +312,14 @@ export class BuscaOfertasService {
           fonte: 'SHOPEE_AFFILIATE_API' as const,
           via: 'PROJETO_IA' as const,
           credencialShopeeNoBackend: false,
+        },
+        mercadoLivre: {
+          habilitada: projetoIaConfigurado,
+          fonte: 'MERCADO_LIVRE_API' as const,
+          via: 'PROJETO_IA' as const,
+          credencialMercadoLivreNoBackend: false,
+          apiPrimeiro: true,
+          scrapingSomenteFallback: true,
         },
       },
       regras: {
