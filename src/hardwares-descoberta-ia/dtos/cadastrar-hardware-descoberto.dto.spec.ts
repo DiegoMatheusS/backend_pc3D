@@ -146,3 +146,56 @@ describe('slots M.2 no cadastro descoberto', () => {
     expect(validateSync(dto)).toEqual([]);
   });
 });
+
+
+describe('conector de ventoinha no cadastro descoberto', () => {
+  it('infere PWM_4_PINOS quando a fonte confirmou pwm=true e deixou conector nulo', () => {
+    const dto = plainToInstance(CadastrarHardwareDescobertoDto, {
+      idTemporario: 'fractal-design-momentum-14-rgb-white-d688080b5c83',
+      payload: {
+        categoria: 'VENTOINHA',
+        nome: 'Fractal Design Momentum 14 RGB White',
+        marca: 'fractal design',
+        modelo: 'Momentum 14 RGB White',
+        especificacaoVentoinha: {
+          tamanhoMm: 140,
+          espessuraMm: 25,
+          rpmMinima: 350,
+          rpmMaxima: 1800,
+          fluxoArCfm: 74.39,
+          pressaoEstaticaMmH2o: 2.45,
+          ruidoDb: 28,
+          conector: null,
+          tensaoVolts: 12,
+          correnteAmperes: 0.17,
+          pwm: true,
+          rgb: true,
+          argb: true,
+          fluxoReverso: false,
+        },
+      },
+    });
+
+    expect(dto.payload.especificacaoVentoinha?.conector).toBe('PWM_4_PINOS');
+    expect(validateSync(dto)).toEqual([]);
+  });
+
+  it('normaliza aliases textuais conhecidos de conector', () => {
+    const dto = plainToInstance(CadastrarHardwareDescobertoDto, {
+      payload: {
+        categoria: 'VENTOINHA',
+        nome: 'Fan teste',
+        marca: 'Teste',
+        modelo: 'F1',
+        especificacaoVentoinha: {
+          tamanhoMm: 120,
+          conector: '4-pin',
+          pwm: true,
+        },
+      },
+    });
+
+    expect(dto.payload.especificacaoVentoinha?.conector).toBe('PWM_4_PINOS');
+    expect(validateSync(dto)).toEqual([]);
+  });
+});
