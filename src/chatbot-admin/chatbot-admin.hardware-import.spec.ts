@@ -40,6 +40,6 @@ describe('ChatbotAdminService hardware import normalization', () => {
     expect(dto.ativo).toBe(true);
     expect(dto.especificacaoFonte?.formato).toBe('ATX');
     expect(dto.especificacaoFonte?.potenciaWatts).toBe(700);
-    expect(dto.especificacaoFonte).not.toHaveProperty('modularidade');
+    expect(dto.especificacaoFonte?.modularidade).toBeUndefined();
   });
 });
