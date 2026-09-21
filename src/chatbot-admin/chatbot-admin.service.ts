@@ -34,6 +34,7 @@ import {
   AjustesCadastroChatbotDto,
   ConfirmarCadastroChatbotDto,
 } from './dtos/confirmar-cadastro-chatbot.dto';
+import { hostCompativelComParceiro } from './marketplace-domains';
 
 const CATEGORIAS_HARDWARE_TECNICO = new Set<CategoriaHardware>([
   CategoriaHardware.PROCESSADOR,
@@ -287,20 +288,21 @@ export class ChatbotAdminService {
       : {};
   }
 
-  private async identificarParceiro(url: URL) {
-    const host = url.hostname.toLowerCase().replace(/^www\./u, '');
+  private async identificarParceiro(url: URL, urlAfiliada?: URL | null) {
+    const hosts = [urlAfiliada, url]
+      .filter((item): item is URL => Boolean(item))
+      .map((item) => item.hostname.toLowerCase().replace(/^www\./u, ''));
     const parceiros = await this.prisma.parceiro.findMany({
       where: { ativo: true, dominio: { not: null } },
       select: { id: true, nome: true, dominio: true },
     });
 
     return (
-      parceiros.find((parceiro) => {
-        const dominio = parceiro.dominio?.toLowerCase().replace(/^www\./u, '');
-        return Boolean(
-          dominio && (host === dominio || host.endsWith(`.${dominio}`)),
-        );
-      }) ?? null
+      parceiros.find((parceiro) =>
+        hosts.some((host) =>
+          hostCompativelComParceiro(host, parceiro.dominio),
+        ),
+      ) ?? null
     );
   }
 
@@ -598,7 +600,10 @@ export class ChatbotAdminService {
     const ofertaIa = this.ehRegistro(resultadoIa.ofertaColetada)
       ? resultadoIa.ofertaColetada
       : {};
-    const parceiro = await this.identificarParceiro(urlValidada);
+    const parceiro = await this.identificarParceiro(
+      urlValidada,
+      urlAfiliadaValidada,
+    );
     const categoriaSlug =
       this.texto(resultadoIa.categoriaSlugSugerida) ||
       (categoria ? (SLUGS_PRODUTO[categoria] ?? null) : null) ||
