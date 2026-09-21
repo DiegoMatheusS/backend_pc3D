@@ -33,6 +33,6 @@ jobs:
       - name: Gerar cliente Prisma
         run: npx prisma generate
       - name: Testar contrato do chatbot e proxy da IA
-        run: npm test -- --runInBand chatbot-admin/dtos/analisar-cadastro-chatbot.dto.spec.ts ia/produto-ia-python.service.spec.ts
+        run: npm test -- --runInBand chatbot-admin/dtos/analisar-cadastro-chatbot.dto.spec.ts chatbot-admin/marketplace-domains.spec.ts ia/produto-ia-python.service.spec.ts
       - name: Compilar backend
         run: npm run build
