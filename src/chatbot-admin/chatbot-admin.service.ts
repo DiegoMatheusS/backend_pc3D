@@ -1018,11 +1018,19 @@ export class ChatbotAdminService {
     if (!atual) throw new NotFoundException('Hardware não encontrado.');
 
     const descricao = this.texto(payload.descricao);
+    const atualizarDescricaoImportada = Boolean(
+      descricao &&
+        descricao !== atual.descricao &&
+        descricao.length <= 1_200 &&
+        (atual.descricao === null ||
+          atual.descricao.length > 1_200 ||
+          atual.descricao.length > descricao.length * 1.8),
+    );
     const mpn = this.texto(payload.mpn);
     const gtin = this.texto(payload.gtin);
     const imagemUrl = this.texto(payload.imagemUrl);
     const data: Prisma.HardwareUpdateInput = {
-      ...(atual.descricao === null && descricao ? { descricao } : {}),
+      ...(atualizarDescricaoImportada && descricao ? { descricao } : {}),
       ...(atual.mpn === null && mpn ? { mpn } : {}),
       ...(atual.gtin === null && gtin ? { gtin } : {}),
       ...(atual.imagemUrl === null && imagemUrl ? { imagemUrl } : {}),
