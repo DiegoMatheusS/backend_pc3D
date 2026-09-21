@@ -64,7 +64,48 @@ async function bootstrap(): Promise<void> {
     origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Accept'],
+    allowedHeaders: [
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'X-Requested-With',
+      'X-CSRF-Token',
+      'Cache-Control',
+    ],
+    optionsSuccessStatus: 204,
+    preflightContinue: false,
+    maxAge: 600,
+  });
+
+  // Responde preflight antes de guards, parsers e rotas administrativas.
+  // Alguns proxies/CDNs tratam OPTIONS de forma diferente de GET/POST; manter
+  // uma resposta explícita e curta evita o preflight cair na pilha da aplicação.
+  app.use((req, res, next) => {
+    if (req.method.toUpperCase() !== 'OPTIONS') {
+      next();
+      return;
+    }
+
+    const origin = req.get('origin');
+    if (!origin || !allowedOrigins.includes(origin)) {
+      next();
+      return;
+    }
+
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader(
+      'Access-Control-Allow-Methods',
+      'GET,POST,PATCH,DELETE,OPTIONS',
+    );
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      req.get('access-control-request-headers') ||
+        'Content-Type, Accept, Authorization, X-Requested-With, X-CSRF-Token, Cache-Control',
+    );
+    res.setHeader('Access-Control-Max-Age', '600');
+    res.vary('Origin');
+    res.status(204).end();
   });
 
   // Defesa adicional de navegador contra CSRF/origens cruzadas. Fica antes
