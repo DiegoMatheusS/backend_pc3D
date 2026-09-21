@@ -1,4 +1,7 @@
-import { hostCompativelComParceiro } from './marketplace-domains';
+import {
+  ehHostShopee,
+  hostCompativelComParceiro,
+} from './marketplace-domains';
 
 describe('hostCompativelComParceiro', () => {
   it('trata Magazine Luiza, Magazine Você e Magalu como o mesmo parceiro', () => {
@@ -29,6 +32,13 @@ describe('hostCompativelComParceiro', () => {
     expect(
       hostCompativelComParceiro('s.shopee.com.br', 'shopee.com.br'),
     ).toBe(true);
+  });
+
+  it('reconhece domínio e subdomínios da Shopee', () => {
+    expect(ehHostShopee('shopee.com.br')).toBe(true);
+    expect(ehHostShopee('www.shopee.com.br')).toBe(true);
+    expect(ehHostShopee('s.shopee.com.br')).toBe(true);
+    expect(ehHostShopee('mercadolivre.com.br')).toBe(false);
   });
 
   it('não mistura marketplaces diferentes', () => {
