@@ -67,6 +67,7 @@ export type OpcoesProdutoIa = {
   enrich?: boolean;
   criabytePlan?: boolean;
   noBrowser?: boolean;
+  urlAfiliada?: string;
 };
 
 export type RequisicaoMetaAiWhatsappProdutoIa = {
@@ -536,6 +537,7 @@ export class ProdutoIaPythonService {
         },
         body: JSON.stringify({
           url,
+          urlAfiliada: opcoes.urlAfiliada ?? null,
           categoria: categoria ?? null,
           enrich: opcoes.enrich ?? false,
           criabytePlan: opcoes.criabytePlan ?? false,

@@ -562,13 +562,29 @@ export class ChatbotAdminService {
       );
     }
 
+    let urlAfiliadaValidada: URL | null = null;
+    if (dados.urlAfiliada) {
+      try {
+        urlAfiliadaValidada = (await validarUrlPublica(dados.urlAfiliada)).url;
+      } catch (erro) {
+        throw new BadRequestException(
+          erro instanceof Error ? erro.message : 'URL afiliada inválida.',
+        );
+      }
+    }
+
     const categoriaEsperada = ehCategoriaImportacaoIa(dados.categoriaEsperada)
       ? dados.categoriaEsperada
       : undefined;
     const resultadoIa = await this.produtoIa.importarUrl(
       urlValidada.toString(),
       categoriaEsperada,
-      { enrich: true, criabytePlan: true, noBrowser: false },
+      {
+        enrich: true,
+        criabytePlan: true,
+        noBrowser: false,
+        urlAfiliada: urlAfiliadaValidada?.toString(),
+      },
     );
 
     const payload = this.payloadIa(resultadoIa);
@@ -693,9 +709,12 @@ export class ChatbotAdminService {
 
     const preco = this.numero(ofertaIa.preco);
     const precoAnterior = this.numero(ofertaIa.precoAnterior);
-    const urlAfiliada = this.ehMagazineVoceCriabyte(urlValidada)
-      ? urlValidada.toString()
-      : null;
+    const urlAfiliada =
+      urlAfiliadaValidada?.toString() ??
+      this.texto(ofertaIa.urlAfiliada) ??
+      (this.ehMagazineVoceCriabyte(urlValidada)
+        ? urlValidada.toString()
+        : null);
     const bloqueado =
       Boolean(resultadoIa.erro) ||
       this.texto(resultadoIa.fonte)?.includes('BLOQUEADO') === true;
@@ -738,7 +757,7 @@ export class ChatbotAdminService {
         preco,
         precoAnterior,
         disponivel: this.booleano(ofertaIa.disponivel),
-        urlOriginal: urlValidada.toString(),
+        urlOriginal,
         urlAfiliada,
         codigoMarketplace,
         fontePreco: this.texto(ofertaIa.fontePreco),
