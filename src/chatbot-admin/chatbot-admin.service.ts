@@ -555,6 +555,24 @@ export class ChatbotAdminService {
     return { ...valor };
   }
 
+  private normalizarClockPlacaVideoIa(
+    payload: Record<string, unknown>,
+  ): boolean {
+    const especificacao = this.ehRegistro(payload.especificacaoPlacaVideo)
+      ? payload.especificacaoPlacaVideo
+      : null;
+    if (!especificacao) return false;
+
+    const base = this.numero(especificacao.clockBaseMhz);
+    const boost = this.numero(especificacao.clockBoostMhz);
+    if (base === null || boost === null || base <= boost) return false;
+
+    const corrigida = { ...especificacao };
+    delete corrigida.clockBoostMhz;
+    payload.especificacaoPlacaVideo = corrigida;
+    return true;
+  }
+
   private async categoriaProdutoId(
     categoria: CategoriaImportacaoIa | null,
     slugSugerido: string | null,
@@ -616,6 +634,10 @@ export class ChatbotAdminService {
     const categoriaTecnica = this.categoriaTecnica(categoria);
     const ehHardwareTecnico = categoriaTecnica !== null;
     const payload: Record<string, unknown> = { ...payloadBase };
+    const clockGpuConflitanteRemovido =
+      categoriaTecnica === CategoriaHardware.PLACA_VIDEO
+        ? this.normalizarClockPlacaVideoIa(payload)
+        : false;
     if (!ehHardwareTecnico) {
       const especificacoes = this.ehRegistro(resultadoIa.especificacoesEncontradas)
         ? resultadoIa.especificacoesEncontradas
@@ -708,6 +730,11 @@ export class ChatbotAdminService {
       origemColeta === 'MAGALU_BLOQUEADO';
 
     const avisos: string[] = [];
+    if (clockGpuConflitanteRemovido) {
+      avisos.push(
+        'O clock boost coletado da placa de vídeo contradizia o clock base e foi removido da prévia para revisão.',
+      );
+    }
     const adicionarAviso = (aviso: string | null | undefined) => {
       if (aviso && !avisos.includes(aviso)) avisos.push(aviso);
     };
