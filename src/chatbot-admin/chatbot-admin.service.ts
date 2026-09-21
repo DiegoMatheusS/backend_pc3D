@@ -220,6 +220,22 @@ export class ChatbotAdminService {
     return typeof valor === 'boolean' ? valor : null;
   }
 
+  private removerNulos(valor: unknown): unknown {
+    if (Array.isArray(valor)) {
+      return valor
+        .map((item) => this.removerNulos(item))
+        .filter((item) => item !== null && item !== undefined);
+    }
+    if (this.ehRegistro(valor)) {
+      return Object.fromEntries(
+        Object.entries(valor)
+          .filter(([, item]) => item !== null && item !== undefined)
+          .map(([chave, item]) => [chave, this.removerNulos(item)]),
+      );
+    }
+    return valor;
+  }
+
   private normalizarComparacao(valor: unknown): string {
     if (typeof valor === 'string') {
       return valor
@@ -1009,10 +1025,11 @@ export class ChatbotAdminService {
     payload: Record<string, unknown>,
     categoria: CategoriaHardware,
   ): Promise<CriarHardwareDto> {
+    const payloadLimpo = this.removerNulos(payload) as Record<string, unknown>;
     const instancia = plainToInstance(CriarHardwareDto, {
-      ...payload,
+      ...payloadLimpo,
       categoria,
-      publicado: false,
+      publicado: true,
       ativo: true,
     });
     const erros = await validate(instancia, {
@@ -1065,6 +1082,8 @@ export class ChatbotAdminService {
         mpn: true,
         gtin: true,
         imagemUrl: true,
+        publicado: true,
+        ativo: true,
       },
     });
     if (!atual) throw new NotFoundException('Hardware não encontrado.');
@@ -1086,6 +1105,8 @@ export class ChatbotAdminService {
       ...(atual.mpn === null && mpn ? { mpn } : {}),
       ...(atual.gtin === null && gtin ? { gtin } : {}),
       ...(atual.imagemUrl === null && imagemUrl ? { imagemUrl } : {}),
+      ...(!atual.publicado ? { publicado: true } : {}),
+      ...(!atual.ativo ? { ativo: true } : {}),
     };
 
     if (Object.keys(data).length > 0) {
