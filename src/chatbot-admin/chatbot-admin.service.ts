@@ -934,6 +934,11 @@ export class ChatbotAdminService {
       },
       acoesPrevistas,
       avisos,
+      camposObrigatoriosAusentes: Array.isArray(
+        resultadoIa.camposObrigatoriosAusentes,
+      )
+        ? resultadoIa.camposObrigatoriosAusentes
+        : [],
       conflitos: [
         ...hardwareComparacao.conflitos.map((item) => ({
           entidade: 'HARDWARE',
@@ -1424,7 +1429,22 @@ export class ChatbotAdminService {
         ...snapshot.hardware,
         ...(dados.ajustes?.dadosCorrigidos ?? {}),
       };
-      const categoriaTecnica = this.categoriaTecnica(snapshot.categoria);
+      const categoriaInformada = ehCategoriaImportacaoIa(
+        dados.ajustes?.categoria,
+      )
+        ? dados.ajustes?.categoria
+        : null;
+      const categoriaFinal = categoriaInformada ?? snapshot.categoria;
+      const categoriaTecnica = this.categoriaTecnica(categoriaFinal);
+      const categoriaSlugFinal = categoriaFinal
+        ? (SLUGS_PRODUTO[categoriaFinal] ??
+          (categoriaTecnica
+            ? CATEGORIA_PRODUTO_HARDWARE[categoriaTecnica]?.slug
+            : null))
+        : snapshot.categoriaSlug;
+      if (categoriaTecnica && !this.texto(payload.categoria)) {
+        payload.categoria = categoriaTecnica;
+      }
       const acao = token.acao as AcaoChatbotCadastro;
 
       let hardware: Awaited<
@@ -1490,8 +1510,8 @@ export class ChatbotAdminService {
       if (produtoId) {
         produto = await this.produtoSelecionado(tx, produtoId);
         if (
-          snapshot.categoriaSlug &&
-          produto.categoria.slug !== snapshot.categoriaSlug
+          categoriaSlugFinal &&
+          produto.categoria.slug !== categoriaSlugFinal
         ) {
           throw new BadRequestException(
             'O Produto selecionado pertence a outra categoria comercial.',
@@ -1523,10 +1543,10 @@ export class ChatbotAdminService {
       } else {
         const categoriaId =
           dados.ajustes?.categoriaId ??
-          (snapshot.categoriaSlug
+          (categoriaSlugFinal
             ? ((
                 await tx.categoriaProduto.findUnique({
-                  where: { slug: snapshot.categoriaSlug },
+                  where: { slug: categoriaSlugFinal },
                   select: { id: true },
                 })
               )?.id ?? null)
@@ -1542,6 +1562,18 @@ export class ChatbotAdminService {
 
       if (!produto)
         throw new BadRequestException('Não foi possível resolver o Produto.');
+
+      // Confirmação pelo Assistente Admin significa aprovação editorial:
+      // o Produto deve sair do fluxo já ativo e publicado na Loja, inclusive
+      // quando um registro existente foi reutilizado.
+      if (!produto.publicado || !produto.ativo) {
+        await tx.produto.update({
+          where: { id: produto.id },
+          data: { publicado: true, ativo: true },
+        });
+        produto = await this.produtoSelecionado(tx, produto.id);
+      }
+
       const oferta = await this.criarOuAtualizarOferta(
         tx,
         {
