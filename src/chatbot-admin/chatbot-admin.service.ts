@@ -1026,7 +1026,6 @@ export class ChatbotAdminService {
       ...(atual.mpn === null && mpn ? { mpn } : {}),
       ...(atual.gtin === null && gtin ? { gtin } : {}),
       ...(atual.imagemUrl === null && imagemUrl ? { imagemUrl } : {}),
-      ...(metadados ? { metadados } : {}),
     };
 
     if (Object.keys(data).length > 0) {
@@ -1081,6 +1080,7 @@ export class ChatbotAdminService {
       ...(atual.mpn === null && mpn ? { mpn } : {}),
       ...(atual.gtin === null && gtin ? { gtin } : {}),
       ...(atual.imagemUrl === null && imagemUrl ? { imagemUrl } : {}),
+      ...(metadados ? { metadados } : {}),
     };
     if (Object.keys(data).length > 0) {
       await tx.produto.update({ where: { id: produtoId }, data });
