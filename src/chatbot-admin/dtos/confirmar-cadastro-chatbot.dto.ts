@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -13,8 +14,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
+import { CATEGORIAS_IMPORTACAO_IA } from '../../ia/dtos/categoria-importacao-ia';
 
 export class AjustesCadastroChatbotDto {
+  @IsOptional()
+  @IsIn([...CATEGORIAS_IMPORTACAO_IA])
+  categoria?: string;
+
   @IsOptional()
   @IsInt()
   @Min(1)
