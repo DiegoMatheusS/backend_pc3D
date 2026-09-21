@@ -19,6 +19,11 @@ function pertenceAoGrupo(host: string, dominios: readonly string[]): boolean {
   return dominios.some((dominio) => pertenceAoDominio(host, dominio));
 }
 
+export function ehHostShopee(hostEntrada: string): boolean {
+  const host = normalizarHost(hostEntrada);
+  return pertenceAoDominio(host, 'shopee.com.br');
+}
+
 export function hostCompativelComParceiro(
   hostEntrada: string,
   dominioParceiroEntrada: string | null | undefined,
