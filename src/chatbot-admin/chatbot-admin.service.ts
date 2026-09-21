@@ -118,6 +118,24 @@ const SLUGS_PRODUTO: Partial<Record<CategoriaImportacaoIa, string>> = {
   ARMAZENAMENTO_EXTERNO: 'armazenamento-externo',
   IMPRESSORA_3D: 'impressoras-3d',
   ACESSORIO_IMPRESSAO_3D: 'acessorios-impressao-3d',
+  ASPIRADOR_PO: 'aspiradores-de-po',
+  ROBO_ASPIRADOR: 'robos-aspiradores',
+  SMART_SPEAKER: 'smart-speakers',
+  CAMERA_SEGURANCA: 'cameras-de-seguranca',
+  LAMPADA_INTELIGENTE: 'lampadas-inteligentes',
+  TOMADA_INTELIGENTE: 'tomadas-inteligentes',
+  FECHADURA_INTELIGENTE: 'fechaduras-inteligentes',
+  E_READER: 'e-readers',
+  DRONE: 'drones',
+  CAMERA_ACAO: 'cameras-de-acao',
+  SOUNDBAR: 'soundbars',
+  HOME_THEATER: 'home-theaters',
+  TV: 'tvs',
+  AIR_FRYER: 'air-fryers',
+  CAFETEIRA: 'cafeteiras',
+  LIQUIDIFICADOR: 'liquidificadores',
+  VENTILADOR: 'ventiladores',
+  CLIMATIZADOR: 'climatizadores',
 };
 
 type CriterioDuplicidade =
@@ -589,7 +607,7 @@ export class ChatbotAdminService {
       },
     );
 
-    const payload = this.payloadIa(resultadoIa);
+    const payloadBase = this.payloadIa(resultadoIa);
     const categoriaResultado = this.categoriaEscolhida(
       resultadoIa,
       categoriaEsperada,
@@ -597,6 +615,23 @@ export class ChatbotAdminService {
     const categoria = categoriaResultado.categoria;
     const categoriaTecnica = this.categoriaTecnica(categoria);
     const ehHardwareTecnico = categoriaTecnica !== null;
+    const payload: Record<string, unknown> = { ...payloadBase };
+    if (!ehHardwareTecnico) {
+      const especificacoes = this.ehRegistro(resultadoIa.especificacoesEncontradas)
+        ? resultadoIa.especificacoesEncontradas
+        : {};
+      const informacoes = Array.isArray(resultadoIa.informacoesProdutoEncontradas)
+        ? resultadoIa.informacoesProdutoEncontradas.slice(0, 40)
+        : [];
+      if (Object.keys(especificacoes).length > 0 || informacoes.length > 0) {
+        payload.metadados = {
+          ...(Object.keys(especificacoes).length > 0
+            ? { especificacoes }
+            : {}),
+          ...(informacoes.length > 0 ? { atributosColetados: informacoes } : {}),
+        };
+      }
+    }
     const ofertaIa = this.ehRegistro(resultadoIa.ofertaColetada)
       ? resultadoIa.ofertaColetada
       : {};
@@ -862,6 +897,9 @@ export class ChatbotAdminService {
           confianca: this.confiancaCriterio(produtoBusca.criterio),
           categoriaId: categoriaProdutoId,
           dadosDetectados: payload,
+          especificacoesEncontradas: resultadoIa.especificacoesEncontradas ?? {},
+          informacoesProdutoEncontradas:
+            resultadoIa.informacoesProdutoEncontradas ?? [],
           candidatos: produtoBusca.candidatos,
           camposPreenchiveis: produtoComparacao.preenchiveis,
           conflitos: produtoComparacao.conflitos,
@@ -1020,6 +1058,7 @@ export class ChatbotAdminService {
         mpn: true,
         gtin: true,
         imagemUrl: true,
+        metadados: true,
       },
     });
     if (!atual) throw new NotFoundException('Produto não encontrado.');
@@ -1030,6 +1069,10 @@ export class ChatbotAdminService {
     const mpn = this.texto(payload.mpn);
     const gtin = this.texto(payload.gtin);
     const imagemUrl = this.texto(payload.imagemUrl);
+    const metadados =
+      this.ehRegistro(payload.metadados) && atual.metadados === null
+        ? (payload.metadados as Prisma.InputJsonValue)
+        : undefined;
     const data: Prisma.ProdutoUpdateInput = {
       ...(atual.marca === null && marca ? { marca } : {}),
       ...(atual.modelo === null && modelo ? { modelo } : {}),
@@ -1037,6 +1080,7 @@ export class ChatbotAdminService {
       ...(atual.mpn === null && mpn ? { mpn } : {}),
       ...(atual.gtin === null && gtin ? { gtin } : {}),
       ...(atual.imagemUrl === null && imagemUrl ? { imagemUrl } : {}),
+      ...(metadados ? { metadados } : {}),
     };
     if (Object.keys(data).length > 0) {
       await tx.produto.update({ where: { id: produtoId }, data });
@@ -1143,6 +1187,9 @@ export class ChatbotAdminService {
         mpn: this.texto(payload.mpn),
         gtin: this.texto(payload.gtin),
         imagemUrl: this.texto(payload.imagemUrl),
+        ...(this.ehRegistro(payload.metadados)
+          ? { metadados: payload.metadados as Prisma.InputJsonValue }
+          : {}),
         publicado: false,
         ativo: true,
       },

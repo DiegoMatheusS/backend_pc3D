@@ -6,6 +6,10 @@ on:
       - "src/chatbot-admin/**"
       - "src/ia/produto-ia-python.service.ts"
       - "src/ia/produto-ia-python.service.spec.ts"
+      - "src/ia/dtos/**"
+      - "prisma/migrations/**"
+      - "src/ia/dtos/**"
+      - "prisma/migrations/**"
       - ".github/workflows/admin-affiliate-registration.yml"
   push:
     branches: [main]
@@ -33,6 +37,6 @@ jobs:
       - name: Gerar cliente Prisma
         run: npx prisma generate
       - name: Testar contrato do chatbot e proxy da IA
-        run: npm test -- --runInBand chatbot-admin/dtos/analisar-cadastro-chatbot.dto.spec.ts chatbot-admin/marketplace-domains.spec.ts ia/produto-ia-python.service.spec.ts
+        run: npm test -- --runInBand chatbot-admin/dtos/analisar-cadastro-chatbot.dto.spec.ts chatbot-admin/marketplace-domains.spec.ts ia/produto-ia-python.service.spec.ts ia/dtos/categoria-importacao-ia.spec.ts
       - name: Compilar backend
         run: npm run build
