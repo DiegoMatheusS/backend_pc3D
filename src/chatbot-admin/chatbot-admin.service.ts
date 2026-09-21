@@ -699,11 +699,29 @@ export class ChatbotAdminService {
         )
       : { preenchiveis: [], conflitos: [] };
 
+    const erroProdutoIa = this.texto(resultadoIa.erro);
+    const origemColeta = this.ehRegistro(resultadoIa.origemColeta)
+      ? this.texto(resultadoIa.origemColeta.fonte)
+      : this.texto(resultadoIa.fonte);
+    const coletaMagaluBloqueada =
+      erroProdutoIa === 'MAGALU_COLETA_BLOQUEADA' ||
+      origemColeta === 'MAGALU_BLOQUEADO';
+
     const avisos: string[] = [];
-    if (categoriaResultado.aviso) avisos.push(categoriaResultado.aviso);
-    if (resultadoIa.erro) avisos.push(`Produto IA: ${resultadoIa.erro}`);
-    if (!categoria)
-      avisos.push('A categoria não pôde ser determinada com segurança.');
+    const adicionarAviso = (aviso: string | null | undefined) => {
+      if (aviso && !avisos.includes(aviso)) avisos.push(aviso);
+    };
+
+    if (coletaMagaluBloqueada) {
+      adicionarAviso(
+        'A Magalu bloqueou a coleta automática desta página. As rotas alternativas foram tentadas, mas nenhum dado incompleto será cadastrado.',
+      );
+    } else {
+      adicionarAviso(categoriaResultado.aviso);
+      if (erroProdutoIa) adicionarAviso(`Produto IA: ${erroProdutoIa}`);
+      if (!categoria)
+        adicionarAviso('A categoria não pôde ser determinada com segurança.');
+    }
     if (
       dados.acao === AcaoChatbotCadastro.CADASTRAR_HARDWARE &&
       !ehHardwareTecnico
@@ -718,11 +736,12 @@ export class ChatbotAdminService {
       );
     }
     if (
+      !coletaMagaluBloqueada &&
       dados.acao === AcaoChatbotCadastro.CADASTRAR_PRODUTO &&
       !ehHardwareTecnico &&
       !categoriaProdutoId
     ) {
-      avisos.push(
+      adicionarAviso(
         'Categoria comercial não encontrada no banco. Selecione a categoria antes da confirmação.',
       );
     }
@@ -756,8 +775,8 @@ export class ChatbotAdminService {
         ? urlValidada.toString()
         : null);
     const bloqueado =
-      Boolean(resultadoIa.erro) ||
-      this.texto(resultadoIa.fonte)?.includes('BLOQUEADO') === true;
+      Boolean(erroProdutoIa) ||
+      origemColeta?.includes('BLOQUEADO') === true;
     const possuiRaizHardware = Boolean(
       this.texto(payload.nome) &&
       this.texto(payload.marca) &&
@@ -806,7 +825,7 @@ export class ChatbotAdminService {
       servicoProdutoIa: this.ehRegistro(resultadoIa.servicoProdutoIa)
         ? resultadoIa.servicoProdutoIa
         : null,
-      erroProdutoIa: this.texto(resultadoIa.erro),
+      erroProdutoIa,
     };
 
     const reconciliacao: ReconciliacaoToken = {
