@@ -1,4 +1,4 @@
-import { IsEnum, IsIn, IsOptional, IsUrl } from 'class-validator';
+import { IsEnum, IsIn, IsOptional, IsUrl, MaxLength } from 'class-validator';
 import { CATEGORIAS_IMPORTACAO_IA } from '../../ia/dtos/categoria-importacao-ia';
 
 export enum AcaoChatbotCadastro {
@@ -16,6 +16,15 @@ export class AnalisarCadastroChatbotDto {
     disallow_auth: true,
   })
   url!: string;
+
+  @IsOptional()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
+  @MaxLength(500)
+  urlAfiliada?: string;
 
   @IsOptional()
   @IsIn([...CATEGORIAS_IMPORTACAO_IA])
