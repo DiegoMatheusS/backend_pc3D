@@ -1562,6 +1562,18 @@ export class ChatbotAdminService {
 
       if (!produto)
         throw new BadRequestException('Não foi possível resolver o Produto.');
+
+      // Confirmação pelo Assistente Admin significa aprovação editorial:
+      // o Produto deve sair do fluxo já ativo e publicado na Loja, inclusive
+      // quando um registro existente foi reutilizado.
+      if (!produto.publicado || !produto.ativo) {
+        await tx.produto.update({
+          where: { id: produto.id },
+          data: { publicado: true, ativo: true },
+        });
+        produto = await this.produtoSelecionado(tx, produto.id);
+      }
+
       const oferta = await this.criarOuAtualizarOferta(
         tx,
         {
