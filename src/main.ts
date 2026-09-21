@@ -5,7 +5,13 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { FiltroHttpExcecoes } from './common/filters/http-excecoes.filter';
 import cookieParser from 'cookie-parser';
-import { json, urlencoded } from 'express';
+import {
+  json,
+  urlencoded,
+  type NextFunction,
+  type Request,
+  type Response,
+} from 'express';
 import helmet from 'helmet';
 import {
   criarProtecaoCacheSensivel,
@@ -80,7 +86,7 @@ async function bootstrap(): Promise<void> {
   // Responde preflight antes de guards, parsers e rotas administrativas.
   // Alguns proxies/CDNs tratam OPTIONS de forma diferente de GET/POST; manter
   // uma resposta explícita e curta evita o preflight cair na pilha da aplicação.
-  app.use((req, res, next) => {
+  app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.method.toUpperCase() !== 'OPTIONS') {
       next();
       return;
