@@ -250,6 +250,46 @@ export class ChatbotAdminService {
     return valor === null || valor === undefined ? '' : JSON.stringify(valor);
   }
 
+  private pareceMemoriaRam(
+    url: URL,
+    payload: Record<string, unknown>,
+  ): boolean {
+    const texto = this.normalizarComparacao(
+      [
+        this.texto(payload.nome),
+        this.texto(payload.modelo),
+        decodeURIComponent(url.pathname).replace(/[-_]+/gu, ' '),
+      ]
+        .filter(Boolean)
+        .join(' '),
+    );
+
+    if (!texto) return false;
+
+    // Não transformar produto completo em RAM apenas porque a ficha cita DDR/GB.
+    if (
+      /\b(?:notebook|laptop|ultrabook|smartphone|celular|iphone|tablet|pc gamer|computador|desktop|placa mae|motherboard|placa de video|gpu|monitor)\b/u.test(
+        texto,
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      /^(?:memoria(?: ram)?|ram|kit (?:de )?(?:memoria|ram))\b/u.test(texto)
+    ) {
+      return true;
+    }
+
+    const temDdr = /\bddr[345]\b/u.test(texto);
+    const temCapacidade =
+      /\b(?:4|8|16|24|32|48|64|96|128)\s*gb\b/u.test(texto);
+    const temFrequencia = /\b\d{4,5}\s*mhz\b/u.test(texto);
+    const temFormato = /\b(?:so[- ]?dimm|sodimm|udimm|dimm)\b/u.test(texto);
+
+    return temDdr && temCapacidade && (temFrequencia || temFormato);
+  }
+
   private criarSlug(texto: string): string {
     return (
       texto
@@ -630,22 +670,43 @@ export class ChatbotAdminService {
     const categoriaEsperada = ehCategoriaImportacaoIa(dados.categoriaEsperada)
       ? dados.categoriaEsperada
       : undefined;
-    const resultadoIa = await this.produtoIa.importarUrl(
+    const opcoesImportacao = {
+      enrich: true,
+      criabytePlan: true,
+      noBrowser: false,
+      urlAfiliada: urlAfiliadaValidada?.toString(),
+    };
+    let resultadoIa = await this.produtoIa.importarUrl(
       urlValidada.toString(),
       categoriaEsperada,
-      {
-        enrich: true,
-        criabytePlan: true,
-        noBrowser: false,
-        urlAfiliada: urlAfiliadaValidada?.toString(),
-      },
+      opcoesImportacao,
     );
 
-    const payloadBase = this.payloadIa(resultadoIa);
-    const categoriaResultado = this.categoriaEscolhida(
+    let payloadBase = this.payloadIa(resultadoIa);
+    let categoriaResultado = this.categoriaEscolhida(
       resultadoIa,
       categoriaEsperada,
     );
+    let categoriaRamCorrigida = false;
+
+    if (
+      !categoriaEsperada &&
+      categoriaResultado.categoria !== CategoriaHardware.MEMORIA_RAM &&
+      this.categoriaTecnica(categoriaResultado.categoria) === null &&
+      this.pareceMemoriaRam(urlValidada, payloadBase)
+    ) {
+      resultadoIa = await this.produtoIa.importarUrl(
+        urlValidada.toString(),
+        CategoriaHardware.MEMORIA_RAM,
+        opcoesImportacao,
+      );
+      payloadBase = this.payloadIa(resultadoIa);
+      categoriaResultado = this.categoriaEscolhida(
+        resultadoIa,
+        CategoriaHardware.MEMORIA_RAM,
+      );
+      categoriaRamCorrigida = true;
+    }
     const categoria = categoriaResultado.categoria;
     const categoriaTecnica = this.categoriaTecnica(categoria);
     const ehHardwareTecnico = categoriaTecnica !== null;
@@ -749,6 +810,11 @@ export class ChatbotAdminService {
     if (clockGpuConflitanteRemovido) {
       avisos.push(
         'O clock boost coletado da placa de vídeo contradizia o clock base e foi removido da prévia para revisão.',
+      );
+    }
+    if (categoriaRamCorrigida) {
+      avisos.push(
+        'O produto foi reconhecido como Memória RAM e será tratado como Hardware técnico, não como Produto genérico.',
       );
     }
     const adicionarAviso = (aviso: string | null | undefined) => {
