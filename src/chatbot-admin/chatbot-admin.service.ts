@@ -34,7 +34,10 @@ import {
   AjustesCadastroChatbotDto,
   ConfirmarCadastroChatbotDto,
 } from './dtos/confirmar-cadastro-chatbot.dto';
-import { hostCompativelComParceiro } from './marketplace-domains';
+import {
+  ehHostShopee,
+  hostCompativelComParceiro,
+} from './marketplace-domains';
 
 const CATEGORIAS_HARDWARE_TECNICO = new Set<CategoriaHardware>([
   CategoriaHardware.PROCESSADOR,
@@ -327,17 +330,45 @@ export class ChatbotAdminService {
       .filter((item): item is URL => Boolean(item))
       .map((item) => item.hostname.toLowerCase().replace(/^www\./u, ''));
     const parceiros = await this.prisma.parceiro.findMany({
-      where: { ativo: true, dominio: { not: null } },
-      select: { id: true, nome: true, dominio: true },
+      where: { ativo: true },
+      select: { id: true, nome: true, slug: true, dominio: true },
     });
 
-    return (
-      parceiros.find((parceiro) =>
+    // Shopee é o fornecedor/parceiro comercial da Oferta. Não dependemos
+    // exclusivamente do campo dominio para reconhecê-la, porque links de
+    // afiliado podem usar subdomínios/short links e cadastros antigos podem
+    // ter domínio vazio. O vendedor real continua separado em vendedorNome.
+    if (hosts.some((host) => ehHostShopee(host))) {
+      const parceiroShopee =
+        parceiros.find((parceiro) => {
+          const slug = parceiro.slug.trim().toLowerCase();
+          const nome = parceiro.nome.trim().toLowerCase();
+          return slug === 'shopee' || nome === 'shopee';
+        }) ??
+        parceiros.find((parceiro) =>
+          hosts.some((host) =>
+            hostCompativelComParceiro(host, parceiro.dominio),
+          ),
+        );
+      if (parceiroShopee) {
+        return {
+          id: parceiroShopee.id,
+          nome: parceiroShopee.nome,
+          dominio: parceiroShopee.dominio,
+        };
+      }
+    }
+
+    const parceiro =
+      parceiros.find((item) =>
         hosts.some((host) =>
-          hostCompativelComParceiro(host, parceiro.dominio),
+          hostCompativelComParceiro(host, item.dominio),
         ),
-      ) ?? null
-    );
+      ) ?? null;
+
+    return parceiro
+      ? { id: parceiro.id, nome: parceiro.nome, dominio: parceiro.dominio }
+      : null;
   }
 
   private ehMagazineVoceCriabyte(url: URL): boolean {
