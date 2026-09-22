@@ -98,7 +98,7 @@ export class ProdutoIaIntegracaoInternaService {
     const nomeParceiro = this.normalizar(dados.parceiro.nome);
     const dominioParceiro = this.normalizar(dados.parceiro.dominio);
 
-    let parceiro = parceirosResultado.parceiros.find((item) => {
+    const parceiroEncontrado = parceirosResultado.parceiros.find((item) => {
       const mesmoNome = this.normalizar(item.nome) === nomeParceiro;
       const mesmoDominio =
         Boolean(dominioParceiro) &&
@@ -106,14 +106,20 @@ export class ProdutoIaIntegracaoInternaService {
       return mesmoNome || mesmoDominio;
     });
 
-    if (parceiro && parceiro.ativo === false) {
+    if (parceiroEncontrado?.ativo === false) {
       throw new ConflictException(
-        `O parceiro "${parceiro.nome}" existe, mas está desativado no Criabyte.`,
+        `O parceiro "${parceiroEncontrado.nome}" existe, mas está desativado no Criabyte.`,
       );
     }
 
-    if (!parceiro) {
-      parceiro = await this.ofertasService.criarParceiro({
+    let parceiro: { id: number; nome: string };
+    if (parceiroEncontrado) {
+      parceiro = {
+        id: parceiroEncontrado.id,
+        nome: parceiroEncontrado.nome,
+      };
+    } else {
+      const criado = await this.ofertasService.criarParceiro({
         nome: dados.parceiro.nome,
         dominio: dados.parceiro.dominio ?? null,
         site: dados.parceiro.site ?? null,
@@ -121,6 +127,7 @@ export class ProdutoIaIntegracaoInternaService {
         observacao:
           'Criado automaticamente pela integração interna da extensão Criabyte.',
       });
+      parceiro = { id: criado.id, nome: criado.nome };
     }
 
     const ofertasResultado = await this.ofertasService.listarOfertas();
