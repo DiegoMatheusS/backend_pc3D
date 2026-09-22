@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { StatusOferta } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClassificadorOfertasService } from './classificador-ofertas.service';
@@ -9,6 +14,7 @@ import {
 } from './dtos/filtrar-busca-ofertas.dto';
 import { ShopeeProjetoIaService } from './shopee-projeto-ia.service';
 import { MercadoLivreProjetoIaService } from './mercadolivre-projeto-ia.service';
+import { postProdutoIa } from '../ia/produto-ia-http';
 
 type OfertaBuscaInterna = {
   id: number;
@@ -283,6 +289,293 @@ export class BuscaOfertasService {
       observacao: projetoIaConfigurado
         ? 'Ofertas Shopee e Mercado Livre foram sincronizadas via APIs oficiais pelo ProjetoIA antes de reler o banco.'
         : 'ProjetoIA não configurado; a lista foi relida do banco sem sincronização externa.',
+    };
+  }
+
+  private produtoIaConfig() {
+    const baseUrl = process.env.PRODUTO_IA_URL?.trim().replace(/\/+$/, '');
+    const apiKey = process.env.PRODUTO_IA_API_KEY?.trim();
+    if (!baseUrl || !apiKey) {
+      throw new ServiceUnavailableException(
+        'ProjetoIA não configurado para buscar o mesmo Produto em outras lojas.',
+      );
+    }
+    return { baseUrl, apiKey };
+  }
+
+  private async buscarOfertasIdenticasProjetoIa(produto: {
+    nome: string;
+    marca: string | null;
+    modelo: string | null;
+    mpn: string | null;
+    gtin: string | null;
+  }) {
+    const { baseUrl, apiKey } = this.produtoIaConfig();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90_000);
+    try {
+      const response = await postProdutoIa(`${baseUrl}/ofertas/produto-identico`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
+        body: JSON.stringify({
+          nome: produto.nome,
+          marca: produto.marca,
+          modelo: produto.modelo,
+          mpn: produto.mpn,
+          gtin: produto.gtin,
+          limitePorLoja: 3,
+        }),
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        let message = 'Não foi possível procurar o Produto em outras lojas.';
+        try {
+          const parsed = JSON.parse(text) as { detail?: unknown; message?: unknown };
+          if (typeof parsed.detail === 'string') message = parsed.detail;
+          else if (typeof parsed.message === 'string') message = parsed.message;
+        } catch {
+          if (text.trim()) message = text.slice(0, 500);
+        }
+        throw new BadGatewayException(message);
+      }
+      try {
+        return JSON.parse(text) as {
+          quantidade?: number;
+          ofertas?: Array<{
+            parceiro?: string;
+            marketplace?: string;
+            criterioIdentidade?: string;
+            nomeEncontrado?: string | null;
+            preco?: number | null;
+            precoAnterior?: number | null;
+            urlOriginal?: string | null;
+            urlAfiliada?: string | null;
+            codigoMarketplace?: string | null;
+            vendedorNome?: string | null;
+            vendedorIdentificador?: string | null;
+            apiOficial?: boolean;
+            fonte?: string | null;
+          }>;
+          fontes?: Record<string, unknown>;
+        };
+      } catch {
+        throw new BadGatewayException(
+          'ProjetoIA retornou uma resposta inválida ao procurar ofertas idênticas.',
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof BadGatewayException ||
+        error instanceof ServiceUnavailableException
+      ) {
+        throw error;
+      }
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new BadGatewayException(
+          'A busca nas outras lojas excedeu o tempo limite.',
+        );
+      }
+      throw new BadGatewayException(
+        `Falha ao consultar o ProjetoIA: ${error instanceof Error ? error.message : 'erro desconhecido'}`,
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private parceiroConhecido(marketplace: string | undefined) {
+    switch (String(marketplace || '').toUpperCase()) {
+      case 'MERCADO_LIVRE':
+        return {
+          nome: 'Mercado Livre',
+          slug: 'mercado-livre',
+          dominio: 'mercadolivre.com.br',
+          site: 'https://www.mercadolivre.com.br',
+        };
+      case 'MAGALU':
+        return {
+          nome: 'Magazine Luiza',
+          slug: 'magazine-luiza',
+          dominio: 'magazineluiza.com.br',
+          site: 'https://www.magazineluiza.com.br',
+        };
+      case 'SHOPEE':
+        return {
+          nome: 'Shopee',
+          slug: 'shopee',
+          dominio: 'shopee.com.br',
+          site: 'https://shopee.com.br',
+        };
+      default:
+        return null;
+    }
+  }
+
+  private async obterOuCriarParceiro(marketplace: string | undefined) {
+    const conhecido = this.parceiroConhecido(marketplace);
+    if (!conhecido) return null;
+
+    const existente = await this.prisma.parceiro.findFirst({
+      where: {
+        OR: [
+          { slug: conhecido.slug },
+          { dominio: conhecido.dominio },
+          { nome: { equals: conhecido.nome, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, ativo: true },
+    });
+    if (existente) {
+      if (!existente.ativo) {
+        await this.prisma.parceiro.update({
+          where: { id: existente.id },
+          data: { ativo: true },
+        });
+      }
+      return existente.id;
+    }
+
+    const criado = await this.prisma.parceiro.create({
+      data: {
+        nome: conhecido.nome,
+        slug: conhecido.slug,
+        dominio: conhecido.dominio,
+        site: conhecido.site,
+        programaAfiliados: marketplace === 'SHOPEE',
+        ativo: true,
+      },
+      select: { id: true },
+    });
+    return criado.id;
+  }
+
+  async encontrarECadastrarOfertasIdenticas(produtoId: number) {
+    const produto = await this.prisma.produto.findFirst({
+      where: { id: produtoId, ativo: true },
+      select: {
+        id: true,
+        nome: true,
+        marca: true,
+        modelo: true,
+        mpn: true,
+        gtin: true,
+        hardware: { select: { id: true } },
+      },
+    });
+    if (!produto) {
+      throw new NotFoundException('Produto não encontrado ou inativo.');
+    }
+
+    const resultado = await this.buscarOfertasIdenticasProjetoIa(produto);
+    const encontradas = Array.isArray(resultado.ofertas) ? resultado.ofertas : [];
+    const cadastradas: Array<Record<string, unknown>> = [];
+    const ignoradas: Array<Record<string, unknown>> = [];
+
+    for (const candidata of encontradas) {
+      const urlOriginal = String(candidata.urlOriginal || '').trim();
+      const preco = Number(candidata.preco);
+      const parceiroId = await this.obterOuCriarParceiro(candidata.marketplace);
+
+      if (!parceiroId || !urlOriginal || !Number.isFinite(preco) || preco <= 0) {
+        ignoradas.push({
+          marketplace: candidata.marketplace ?? null,
+          urlOriginal: urlOriginal || null,
+          motivo: 'DADOS_INCOMPLETOS',
+        });
+        continue;
+      }
+
+      const existente = await this.prisma.oferta.findFirst({
+        where: {
+          produtoId: produto.id,
+          parceiroId,
+          OR: [
+            { urlOriginal },
+            ...(candidata.codigoMarketplace
+              ? [{ codigoMarketplace: String(candidata.codigoMarketplace) }]
+              : []),
+          ],
+        },
+        select: { id: true },
+      });
+      if (existente) {
+        ignoradas.push({
+          marketplace: candidata.marketplace,
+          urlOriginal,
+          ofertaId: existente.id,
+          motivo: 'JA_CADASTRADA',
+        });
+        continue;
+      }
+
+      const agora = new Date();
+      const oferta = await this.prisma.oferta.create({
+        data: {
+          produtoId: produto.id,
+          hardwareId: produto.hardware?.id ?? null,
+          parceiroId,
+          vendedorNome: String(candidata.vendedorNome || '').trim() || null,
+          vendedorIdentificador:
+            String(candidata.vendedorIdentificador || '').trim() || null,
+          codigoMarketplace:
+            String(candidata.codigoMarketplace || '').trim() || null,
+          urlOriginal,
+          urlAfiliada: String(candidata.urlAfiliada || '').trim() || null,
+          preco: Number(preco.toFixed(2)),
+          precoAnterior:
+            candidata.precoAnterior !== null &&
+            candidata.precoAnterior !== undefined &&
+            Number.isFinite(Number(candidata.precoAnterior)) &&
+            Number(candidata.precoAnterior) > 0
+              ? Number(Number(candidata.precoAnterior).toFixed(2))
+              : null,
+          status: StatusOferta.ATIVA,
+          verificadoEm: agora,
+          coletadoEm: agora,
+          historicoPrecos: {
+            create: {
+              preco: Number(preco.toFixed(2)),
+              verificadoEm: agora,
+            },
+          },
+        },
+        include: {
+          parceiro: { select: { id: true, nome: true, slug: true } },
+        },
+      });
+
+      cadastradas.push({
+        id: oferta.id,
+        parceiro: oferta.parceiro,
+        preco: Number(oferta.preco),
+        urlOriginal: oferta.urlOriginal,
+        urlAfiliada: oferta.urlAfiliada,
+        criterioIdentidade: candidata.criterioIdentidade ?? null,
+        fonte: candidata.fonte ?? null,
+      });
+    }
+
+    return {
+      produto: {
+        id: produto.id,
+        nome: produto.nome,
+        marca: produto.marca,
+        modelo: produto.modelo,
+        mpn: produto.mpn,
+        gtin: produto.gtin,
+      },
+      quantidadeEncontrada: encontradas.length,
+      quantidadeCadastrada: cadastradas.length,
+      quantidadeIgnorada: ignoradas.length,
+      cadastradas,
+      ignoradas,
+      fontes: resultado.fontes ?? {},
+      produtoAlterado: false,
+      fichaTecnicaAlterada: false,
     };
   }
 
