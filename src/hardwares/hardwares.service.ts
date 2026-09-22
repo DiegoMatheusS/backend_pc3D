@@ -23,6 +23,7 @@ import {
   OrigemModelo3D,
 } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { validarGlbAutocontido } from '../common/security/glb-security';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { normalizarEspecificacoesHardwarePublicas } from '../produtos/normalizar-especificacoes-hardware';
 import { AtualizarHardwareDto } from './dtos/atualizar-hardware.dto';
@@ -4217,17 +4218,7 @@ export class HardwaresService {
   }
 
   private bufferPareceGlbValido(buffer: Buffer): boolean {
-    if (buffer.byteLength < 12) {
-      return false;
-    }
-
-    const magic = buffer.toString('ascii', 0, 4);
-    const versao = buffer.readUInt32LE(4);
-    const tamanhoDeclarado = buffer.readUInt32LE(8);
-
-    return (
-      magic === 'glTF' && versao === 2 && tamanhoDeclarado === buffer.length
-    );
+    return validarGlbAutocontido(buffer).valido;
   }
 
   private normalizarNomeArquivoGlb(nomeOriginal: string): string {
