@@ -4164,9 +4164,10 @@ export class HardwaresService {
       throw new BadRequestException('Apenas arquivos .glb são permitidos.');
     }
 
-    if (!this.bufferPareceGlbValido(arquivo.buffer)) {
+    const validacaoGlb = validarGlbAutocontido(arquivo.buffer);
+    if (!validacaoGlb.valido) {
       throw new BadRequestException(
-        'O arquivo enviado não possui um cabeçalho GLB 2.0 válido.',
+        validacaoGlb.motivo || 'O arquivo GLB enviado é inválido.',
       );
     }
 
@@ -4217,9 +4218,6 @@ export class HardwaresService {
     }
   }
 
-  private bufferPareceGlbValido(buffer: Buffer): boolean {
-    return validarGlbAutocontido(buffer).valido;
-  }
 
   private normalizarNomeArquivoGlb(nomeOriginal: string): string {
     const nomeBase = nomeOriginal
