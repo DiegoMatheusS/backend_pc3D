@@ -11,5 +11,6 @@ import { HardwaresDescobertaIaService } from './hardwares-descoberta-ia.service'
   imports: [AuthModule, AuditoriaModule, HardwaresModule, IaModule],
   controllers: [HardwaresDescobertaIaController],
   providers: [HardwaresDescobertaIaService, PapelGuard],
+  exports: [HardwaresDescobertaIaService],
 })
 export class HardwaresDescobertaIaModule {}
