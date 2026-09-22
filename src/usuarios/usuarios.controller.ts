@@ -11,6 +11,7 @@ import {
 import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { UsuarioAtual } from '../auth/usuario-atual.decorator';
@@ -63,6 +64,7 @@ export class UsuariosController {
     );
   }
 
+  @Throttle({ global: { limit: 5, ttl: 60_000 } })
   @Patch('me/senha')
   alterarMinhaSenha(
     @Req() requisicao: RequisicaoAutenticada,
@@ -71,6 +73,7 @@ export class UsuariosController {
     return this.usuariosService.alterarMinhaSenha(requisicao.usuario.id, dados);
   }
 
+  @Throttle({ global: { limit: 5, ttl: 60_000 } })
   @Patch(':id/senha')
   @UseGuards(AdminGuard)
   async redefinirSenha(
