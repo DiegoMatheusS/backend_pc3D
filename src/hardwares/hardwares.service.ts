@@ -23,6 +23,7 @@ import {
   OrigemModelo3D,
 } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { validarGlbAutocontido } from '../common/security/glb-security';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { normalizarEspecificacoesHardwarePublicas } from '../produtos/normalizar-especificacoes-hardware';
 import { AtualizarHardwareDto } from './dtos/atualizar-hardware.dto';
@@ -4163,9 +4164,10 @@ export class HardwaresService {
       throw new BadRequestException('Apenas arquivos .glb são permitidos.');
     }
 
-    if (!this.bufferPareceGlbValido(arquivo.buffer)) {
+    const validacaoGlb = validarGlbAutocontido(arquivo.buffer);
+    if (!validacaoGlb.valido) {
       throw new BadRequestException(
-        'O arquivo enviado não possui um cabeçalho GLB 2.0 válido.',
+        validacaoGlb.motivo || 'O arquivo GLB enviado é inválido.',
       );
     }
 
@@ -4216,19 +4218,6 @@ export class HardwaresService {
     }
   }
 
-  private bufferPareceGlbValido(buffer: Buffer): boolean {
-    if (buffer.byteLength < 12) {
-      return false;
-    }
-
-    const magic = buffer.toString('ascii', 0, 4);
-    const versao = buffer.readUInt32LE(4);
-    const tamanhoDeclarado = buffer.readUInt32LE(8);
-
-    return (
-      magic === 'glTF' && versao === 2 && tamanhoDeclarado === buffer.length
-    );
-  }
 
   private normalizarNomeArquivoGlb(nomeOriginal: string): string {
     const nomeBase = nomeOriginal

@@ -55,7 +55,7 @@ export class AuthController {
     resposta.cookie(this.obterNomeCookie(), token, {
       httpOnly: true,
       secure: ambiente === 'production',
-      sameSite: 'lax',
+      sameSite: ambiente === 'production' ? 'strict' : 'lax',
       expires: expiraEm,
       path: '/',
     });
@@ -140,7 +140,7 @@ export class AuthController {
     resposta.clearCookie(this.obterNomeCookie(), {
       httpOnly: true,
       secure: ambiente === 'production',
-      sameSite: 'lax',
+      sameSite: ambiente === 'production' ? 'strict' : 'lax',
       path: '/',
     });
   }
