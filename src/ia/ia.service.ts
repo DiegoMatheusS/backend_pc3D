@@ -893,15 +893,10 @@ export class IaService {
             typeof opcao.preco === 'number' && opcao.preco <= orcamentoRestante,
         )
         .sort((a, b) => (a.preco ?? Infinity) - (b.preco ?? Infinity));
-      const comPreco = opcoes
-        .filter((opcao) => typeof opcao.preco === 'number')
-        .sort((a, b) => (a.preco ?? Infinity) - (b.preco ?? Infinity));
-
-      const candidatosOrdenados = [
-        ...comPrecoNoOrcamento,
-        ...(etapa.obrigatoria ? comPreco : []),
-        ...(etapa.obrigatoria ? opcoes : []),
-      ].filter(
+      // A montagem automática por orçamento só usa itens com oferta ativa
+      // e que ainda cabem no valor restante. Assim cada peça da prévia pode
+      // ter preço e ação "Ver na loja", sem estourar o teto escolhido.
+      const candidatosOrdenados = [...comPrecoNoOrcamento].filter(
         (opcao, indice, lista) =>
           lista.findIndex((item) => item.hardwareId === opcao.hardwareId) ===
           indice,
@@ -919,6 +914,52 @@ export class IaService {
           false,
         );
         if (compatibilidade.status === 'INCOMPATIVEL') continue;
+
+        if (etapa.categoria === CategoriaHardware.PROCESSADOR) {
+          const restanteAposCpu = Math.max(
+            0,
+            dados.orcamento - gastoConhecido - (candidato.preco ?? 0),
+          );
+          const placasMaePossiveis = await this.carregarOpcoesMontagemGuiada(
+            CategoriaHardware.PLACA_MAE,
+            estadoCandidato,
+            undefined,
+            0,
+            80,
+          );
+          if (
+            !placasMaePossiveis.opcoes.some(
+              (placaMae) =>
+                typeof placaMae.preco === 'number' &&
+                placaMae.preco <= restanteAposCpu,
+            )
+          ) {
+            continue;
+          }
+        }
+        if (etapa.categoria === CategoriaHardware.PLACA_MAE) {
+          const restanteAposPlacaMae = Math.max(
+            0,
+            dados.orcamento - gastoConhecido - (candidato.preco ?? 0),
+          );
+          const memoriasPossiveis = await this.carregarOpcoesMontagemGuiada(
+            CategoriaHardware.MEMORIA_RAM,
+            estadoCandidato,
+            undefined,
+            0,
+            80,
+          );
+          if (
+            !memoriasPossiveis.opcoes.some(
+              (memoria) =>
+                typeof memoria.preco === 'number' &&
+                memoria.preco <= restanteAposPlacaMae,
+            )
+          ) {
+            continue;
+          }
+        }
+
         escolha = candidato;
         estadoEscolhido = estadoCandidato;
         break;
@@ -1208,7 +1249,14 @@ export class IaService {
           },
           orderBy: { preco: 'asc' },
           take: 1,
-          select: { preco: true, atualizadoEm: true },
+          select: {
+            id: true,
+            preco: true,
+            atualizadoEm: true,
+            urlOriginal: true,
+            urlAfiliada: true,
+            parceiro: { select: { nome: true } },
+          },
         },
       },
       take: TAMANHO_MAXIMO_CATALOGO,
@@ -1897,6 +1945,10 @@ export class IaService {
       marca: string;
       modelo: string;
       imagemUrl?: string;
+      preco?: number;
+      ofertaId?: number;
+      loja?: string;
+      linkCompra?: string;
       modelo3dUrl?: string;
       possuiModelo3D: boolean;
       representacao3D: {
@@ -1973,6 +2025,7 @@ export class IaService {
           return [];
         }
         idsUsados.add(hardware.id);
+        const melhorOferta = hardware.ofertas[0];
         const modelo3dUrl = hardware.modelos3D[0]?.arquivoUrl ?? undefined;
         return [
           {
@@ -1982,6 +2035,11 @@ export class IaService {
             marca: hardware.marca,
             modelo: hardware.modelo,
             imagemUrl: hardware.imagemUrl ?? undefined,
+            preco: melhorOferta ? Number(melhorOferta.preco) : undefined,
+            ofertaId: melhorOferta?.id,
+            loja: melhorOferta?.parceiro.nome,
+            linkCompra:
+              melhorOferta?.urlAfiliada ?? melhorOferta?.urlOriginal,
             modelo3dUrl,
             possuiModelo3D: Boolean(modelo3dUrl),
             representacao3D: modelo3dUrl
@@ -2013,6 +2071,7 @@ export class IaService {
           continue;
         }
         idsUsados.add(hardware.id);
+        const melhorOferta = hardware.ofertas[0];
         const modelo3dUrl = hardware.modelos3D[0]?.arquivoUrl ?? undefined;
         componentesValidos.push({
           categoria: hardware.categoria,
@@ -2021,6 +2080,11 @@ export class IaService {
           marca: hardware.marca,
           modelo: hardware.modelo,
           imagemUrl: hardware.imagemUrl ?? undefined,
+          preco: melhorOferta ? Number(melhorOferta.preco) : undefined,
+          ofertaId: melhorOferta?.id,
+          loja: melhorOferta?.parceiro.nome,
+          linkCompra:
+            melhorOferta?.urlAfiliada ?? melhorOferta?.urlOriginal,
           modelo3dUrl,
           possuiModelo3D: Boolean(modelo3dUrl),
           representacao3D: modelo3dUrl
@@ -2180,6 +2244,43 @@ export class IaService {
       observacoesValidacao.push(
         `O preço real das ofertas cadastradas (R$ ${valorTotalReal.toFixed(2)}) ultrapassa o orçamento informado.`,
       );
+    }
+
+    const categoriasEssenciais = new Set<CategoriaHardware>([
+      CategoriaHardware.PROCESSADOR,
+      CategoriaHardware.PLACA_MAE,
+      CategoriaHardware.MEMORIA_RAM,
+      CategoriaHardware.ARMAZENAMENTO,
+      CategoriaHardware.FONTE,
+      CategoriaHardware.GABINETE,
+      ...(dados.uso === UsoPC.JOGOS || dados.uso === UsoPC.ESTUDIO
+        ? [CategoriaHardware.PLACA_VIDEO]
+        : []),
+    ]);
+    const categoriasPresentes = new Set(
+      componentesValidos.map((componente) => componente.categoria),
+    );
+    const configuracaoCompleta = [...categoriasEssenciais].every((categoria) =>
+      categoriasPresentes.has(categoria),
+    );
+    const orcamentoAtendido =
+      precoCompleto && valorTotalReal <= dados.orcamento;
+
+    if (!configuracaoCompleta || !orcamentoAtendido) {
+      return {
+        resposta: !configuracaoCompleta
+          ? 'O catálogo atual não permitiu fechar todas as peças essenciais com oferta ativa e compatibilidade conhecida dentro desse orçamento. Vou abrir a seleção assistida para não entregar uma montagem incompleta.'
+          : `Não encontrei uma configuração completa com ofertas ativas até R$ ${dados.orcamento.toFixed(2)}. Vou abrir a seleção assistida para você revisar as alternativas sem ultrapassar o valor silenciosamente.`,
+        processamento: { modo: 'LOCAL', geminiUtilizado: false },
+        acoes: ['MONTAGEM_GUIADA'],
+        prontoParaAbrir3D: false,
+        fluxoGuiado: await this.montagemGuiada({
+          acao: AcaoMontagemGuiadaIa.INICIAR,
+          componentes: [],
+          orcamento: dados.orcamento,
+          uso: dados.uso,
+        }),
+      };
     }
 
     const prontoParaAbrir3D = componentesValidos.length > 0;
