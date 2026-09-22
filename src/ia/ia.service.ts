@@ -919,6 +919,28 @@ export class IaService {
           false,
         );
         if (compatibilidade.status === 'INCOMPATIVEL') continue;
+
+        if (etapa.categoria === CategoriaHardware.PROCESSADOR) {
+          const placasMaePossiveis = await this.carregarOpcoesMontagemGuiada(
+            CategoriaHardware.PLACA_MAE,
+            estadoCandidato,
+            undefined,
+            0,
+            1,
+          );
+          if (placasMaePossiveis.opcoes.length === 0) continue;
+        }
+        if (etapa.categoria === CategoriaHardware.PLACA_MAE) {
+          const memoriasPossiveis = await this.carregarOpcoesMontagemGuiada(
+            CategoriaHardware.MEMORIA_RAM,
+            estadoCandidato,
+            undefined,
+            0,
+            1,
+          );
+          if (memoriasPossiveis.opcoes.length === 0) continue;
+        }
+
         escolha = candidato;
         estadoEscolhido = estadoCandidato;
         break;
@@ -1208,7 +1230,14 @@ export class IaService {
           },
           orderBy: { preco: 'asc' },
           take: 1,
-          select: { preco: true, atualizadoEm: true },
+          select: {
+            id: true,
+            preco: true,
+            atualizadoEm: true,
+            urlOriginal: true,
+            urlAfiliada: true,
+            parceiro: { select: { nome: true } },
+          },
         },
       },
       take: TAMANHO_MAXIMO_CATALOGO,
@@ -1897,6 +1926,10 @@ export class IaService {
       marca: string;
       modelo: string;
       imagemUrl?: string;
+      preco?: number;
+      ofertaId?: number;
+      loja?: string;
+      linkCompra?: string;
       modelo3dUrl?: string;
       possuiModelo3D: boolean;
       representacao3D: {
@@ -1973,6 +2006,7 @@ export class IaService {
           return [];
         }
         idsUsados.add(hardware.id);
+        const melhorOferta = hardware.ofertas[0];
         const modelo3dUrl = hardware.modelos3D[0]?.arquivoUrl ?? undefined;
         return [
           {
@@ -1982,6 +2016,11 @@ export class IaService {
             marca: hardware.marca,
             modelo: hardware.modelo,
             imagemUrl: hardware.imagemUrl ?? undefined,
+            preco: melhorOferta ? Number(melhorOferta.preco) : undefined,
+            ofertaId: melhorOferta?.id,
+            loja: melhorOferta?.parceiro.nome,
+            linkCompra:
+              melhorOferta?.urlAfiliada ?? melhorOferta?.urlOriginal,
             modelo3dUrl,
             possuiModelo3D: Boolean(modelo3dUrl),
             representacao3D: modelo3dUrl
@@ -2013,6 +2052,7 @@ export class IaService {
           continue;
         }
         idsUsados.add(hardware.id);
+        const melhorOferta = hardware.ofertas[0];
         const modelo3dUrl = hardware.modelos3D[0]?.arquivoUrl ?? undefined;
         componentesValidos.push({
           categoria: hardware.categoria,
@@ -2021,6 +2061,11 @@ export class IaService {
           marca: hardware.marca,
           modelo: hardware.modelo,
           imagemUrl: hardware.imagemUrl ?? undefined,
+          preco: melhorOferta ? Number(melhorOferta.preco) : undefined,
+          ofertaId: melhorOferta?.id,
+          loja: melhorOferta?.parceiro.nome,
+          linkCompra:
+            melhorOferta?.urlAfiliada ?? melhorOferta?.urlOriginal,
           modelo3dUrl,
           possuiModelo3D: Boolean(modelo3dUrl),
           representacao3D: modelo3dUrl
