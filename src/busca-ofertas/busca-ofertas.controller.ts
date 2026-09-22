@@ -3,6 +3,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   UseGuards,
@@ -12,6 +13,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { PapelGuard } from '../auth/papel.guard';
 import { Papeis } from '../auth/papeis.decorator';
 import { PapelUsuario } from '../generated/prisma/enums';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { BuscaOfertasService } from './busca-ofertas.service';
 import { FiltrarBuscaOfertasDto } from './dtos/filtrar-busca-ofertas.dto';
 
@@ -36,5 +38,13 @@ export class BuscaOfertasController {
   @HttpCode(HttpStatus.OK)
   atualizar(@Query() filtros: FiltrarBuscaOfertasDto) {
     return this.buscaOfertasService.atualizar(filtros);
+  }
+
+  @Post('produto/:id/encontrar-e-cadastrar')
+  @HttpCode(HttpStatus.OK)
+  encontrarECadastrarOfertasIdenticas(
+    @Param('id', ParsePositiveIntPipe) id: number,
+  ) {
+    return this.buscaOfertasService.encontrarECadastrarOfertasIdenticas(id);
   }
 }
