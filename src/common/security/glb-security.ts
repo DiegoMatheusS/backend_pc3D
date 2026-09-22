@@ -97,7 +97,7 @@ export function validarGlbAutocontido(buffer: Buffer): ResultadoValidacaoGlb {
         return {
           valido: false,
           motivo:
-            'O GLB precisa ser autocontido e não pode carregar buffers ou imagens por URL externa.',
+            'O GLB precisa ser autocontido e não pode referenciar buffers ou imagens por URI.',
         };
       }
 
