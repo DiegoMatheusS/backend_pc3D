@@ -3,7 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { CadastrarHardwareDescobertoDto } from './cadastrar-hardware-descoberto.dto';
 
-function gabineteBase() {
+function gabineteBase(): Record<string, any> {
   return {
     categoria: 'GABINETE',
     nome: 'Gabinete teste',
