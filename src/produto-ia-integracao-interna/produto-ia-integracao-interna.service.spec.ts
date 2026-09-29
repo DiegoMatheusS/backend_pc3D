@@ -179,12 +179,13 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     );
   });
 
-  it('cria Produto genérico como rascunho quando ainda não existe', async () => {
+  it('cria Produto genérico publicado quando ainda não existe', async () => {
     const { service, produtos, descoberta } = setup([], []);
 
     const result = await service.importarOfertaExtensao(produtoPayload);
 
     expect(result.status).toBe('PRODUTO_E_OFERTA_CRIADOS');
+    expect(result.publicado).toBe(true);
     expect(descoberta.cadastrar).not.toHaveBeenCalled();
     expect(produtos.criar).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -192,7 +193,7 @@ describe('ProdutoIaIntegracaoInternaService', () => {
         nome: 'Monitor LG UltraGear 24',
         marca: 'LG',
         modelo: '24GN60R-B',
-        publicado: false,
+        publicado: true,
         ativo: true,
         especificacaoMonitor: expect.objectContaining({
           taxaAtualizacaoHz: 144,
