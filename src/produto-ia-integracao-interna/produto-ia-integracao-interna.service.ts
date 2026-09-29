@@ -167,6 +167,19 @@ export class ProdutoIaIntegracaoInternaService {
     );
   }
 
+  private publicarProdutoExistente(
+    produtoId: number,
+    dados: ProdutoOfertaExtensaoDto,
+  ) {
+    const { categoriaSlug: _categoriaSlug, ...atualizacao } = dados;
+    void _categoriaSlug;
+    return this.produtosService.atualizar(produtoId, {
+      ...atualizacao,
+      publicado: true,
+      ativo: true,
+    });
+  }
+
   private async resolverParceiro(dados: ParceiroOfertaExtensaoDto) {
     const parceirosResultado = await this.ofertasService.listarParceiros();
     const nomeParceiro = this.normalizar(dados.nome);
@@ -260,15 +273,19 @@ export class ProdutoIaIntegracaoInternaService {
         anuncioExistente as unknown as Registro,
       );
       if (produtoId) {
+        const produto = await this.publicarProdutoExistente(
+          produtoId,
+          produtoPayload,
+        );
         const atualizada = await this.atualizarOferta(
           anuncioExistente.id,
           dados.oferta,
         );
-        const produto = await this.produtosService.buscarAdmin(produtoId);
         return {
           status: 'OFERTA_ATUALIZADA' as const,
           produto: { id: produto.id, nome: produto.nome },
           parceiro: { id: parceiro.id, nome: parceiro.nome },
+          publicado: true,
           oferta: atualizada,
         };
       }
@@ -296,14 +313,19 @@ export class ProdutoIaIntegracaoInternaService {
 
     const ofertaBase = this.ofertaBase(parceiro.id, dados.oferta);
     if (produtoExistente) {
+      const produtoAtualizado = await this.publicarProdutoExistente(
+        produtoExistente.id,
+        produtoPayload,
+      );
       const oferta = await this.ofertasService.criarOferta({
         ...ofertaBase,
         produtoId: produtoExistente.id,
       });
       return {
         status: 'NOVA_OFERTA_CRIADA' as const,
-        produto: { id: produtoExistente.id, nome: produtoExistente.nome },
+        produto: { id: produtoAtualizado.id, nome: produtoAtualizado.nome },
         parceiro: { id: parceiro.id, nome: parceiro.nome },
+        publicado: true,
         oferta,
       };
     }
@@ -341,6 +363,13 @@ export class ProdutoIaIntegracaoInternaService {
 
     const hardwareId = registroHardware.hardware.id;
     const hardware = await this.hardwaresService.buscarPorIdAdmin(hardwareId);
+    if (hardware.produtoId) {
+      await this.produtosService.atualizar(hardware.produtoId, {
+        publicado: true,
+        ativo: true,
+      });
+    }
+
     const parceiro = await this.resolverParceiro(dados.parceiro);
     const ofertasResultado = await this.ofertasService.listarOfertas();
     const existente = ofertasResultado.ofertas.find((item) =>
@@ -360,6 +389,7 @@ export class ProdutoIaIntegracaoInternaService {
         hardwareStatus: registroHardware.status,
         hardware: { id: hardwareId, nome: hardware.nome },
         parceiro: { id: parceiro.id, nome: parceiro.nome },
+        publicado: true,
         oferta: atualizada,
       };
     }
@@ -375,6 +405,7 @@ export class ProdutoIaIntegracaoInternaService {
         hardwareStatus: registroHardware.status,
         hardware: { id: hardwareId, nome: hardware.nome },
         parceiro: { id: parceiro.id, nome: parceiro.nome },
+        publicado: true,
         oferta,
       };
     }
