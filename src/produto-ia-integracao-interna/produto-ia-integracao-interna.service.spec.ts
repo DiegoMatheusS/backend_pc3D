@@ -1,6 +1,7 @@
 import { HardwaresDescobertaIaService } from '../hardwares-descoberta-ia/hardwares-descoberta-ia.service';
 import { HardwaresService } from '../hardwares/hardwares.service';
 import { OfertasService } from '../ofertas/ofertas.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { ProdutosService } from '../produtos/produtos.service';
 import { ImportarOfertaExtensaoProdutoIaDto } from './dtos/importar-oferta-extensao-produto-ia.dto';
 import { ProdutoIaIntegracaoInternaService } from './produto-ia-integracao-interna.service';
@@ -67,6 +68,7 @@ describe('ProdutoIaIntegracaoInternaService', () => {
         id: 42,
         nome: 'RTX 5070 Teste',
         produtoId: 7,
+        ativo: true,
       }),
     };
     const ofertas = {
@@ -103,17 +105,36 @@ describe('ProdutoIaIntegracaoInternaService', () => {
       buscarAdmin: jest.fn().mockImplementation(async (id: number) => ({
         id,
         nome: 'Monitor LG UltraGear 24',
+        ativo: true,
+        publicado: true,
+        metadados: {},
       })),
-      atualizar: jest.fn().mockImplementation(async (id: number, dados: Record<string, unknown>) => ({
-        id,
-        nome: 'Monitor LG UltraGear 24',
-        ...dados,
-      })),
+      atualizar: jest
+        .fn()
+        .mockImplementation(
+          async (id: number, dados: Record<string, unknown>) => ({
+            id,
+            nome: 'Monitor LG UltraGear 24',
+            ...dados,
+          }),
+        ),
       criar: jest.fn().mockResolvedValue({
         id: 51,
         nome: 'Monitor LG UltraGear 24',
         ofertas: [{ id: 11 }],
       }),
+    };
+    const prisma = {
+      produto: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      hardware: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      oferta: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     };
 
     const service = new ProdutoIaIntegracaoInternaService(
@@ -121,9 +142,17 @@ describe('ProdutoIaIntegracaoInternaService', () => {
       hardwares as unknown as HardwaresService,
       ofertas as unknown as OfertasService,
       produtos as unknown as ProdutosService,
+      prisma as unknown as PrismaService,
     );
 
-    return { service, descoberta, hardwares, ofertas, produtos };
+    return {
+      service,
+      descoberta,
+      hardwares,
+      ofertas,
+      produtos,
+      prisma,
+    };
   }
 
   it('atualiza o mesmo anúncio de Hardware em vez de duplicar', async () => {
@@ -250,13 +279,87 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     expect(result.publicado).toBe(true);
     expect(produtos.atualizar).toHaveBeenCalledWith(
       50,
-      expect.objectContaining({
-        publicado: true,
-        ativo: true,
-      }),
+      expect.objectContaining({ publicado: true, ativo: true }),
     );
     expect(ofertas.atualizarOferta).toHaveBeenCalledTimes(1);
     expect(ofertas.criarOferta).not.toHaveBeenCalled();
     expect(produtos.criar).not.toHaveBeenCalled();
+  });
+
+  it('localiza Produto por GTIN antes de qualquer cadastro', async () => {
+    const { service, prisma } = setup();
+    prisma.produto.findFirst.mockResolvedValueOnce({
+      id: 90,
+      nome: 'Produto existente',
+      marca: 'Marca',
+      modelo: 'Modelo',
+      gtin: '7891234567890',
+      mpn: null,
+      publicado: true,
+      categoria: { id: 20, nome: 'Celulares', slug: 'celulares' },
+      hardware: null,
+    });
+
+    const result = await service.localizarItemExtensao({
+      gtin: '7891234567890',
+    });
+
+    expect(result.encontrado).toBe(true);
+    expect(result.tipo).toBe('PRODUTO');
+    expect(result.criterio).toBe('GTIN');
+    expect(result.produto?.id).toBe(90);
+  });
+
+  it('localiza por ASIN já usado em uma oferta Amazon', async () => {
+    const { service, prisma } = setup();
+    prisma.oferta.findFirst.mockResolvedValueOnce({
+      id: 77,
+      produto: {
+        id: 91,
+        nome: 'Echo Teste',
+        marca: 'Amazon',
+        modelo: 'Echo',
+        gtin: null,
+        mpn: null,
+        publicado: true,
+        categoria: { id: 25, nome: 'Eletrônicos', slug: 'eletronicos' },
+        hardware: null,
+      },
+    });
+
+    const result = await service.localizarItemExtensao({ asin: 'B0ABC12345' });
+
+    expect(result.encontrado).toBe(true);
+    expect(result.criterio).toBe('ASIN');
+    expect(result.produto?.id).toBe(91);
+  });
+
+  it('item existente cria somente oferta sem cadastrar outro Produto', async () => {
+    const { service, ofertas, produtos, descoberta } = setup();
+    const result = await service.importarOfertaExtensao({
+      produtoExistenteId: 50,
+      parceiro: {
+        nome: 'Amazon',
+        dominio: 'amazon.com.br',
+        site: 'https://amazon.com.br',
+      },
+      oferta: {
+        urlOriginal: 'https://www.amazon.com.br/dp/B0ABC12345',
+        urlAfiliada: 'https://amzn.to/teste',
+        preco: 999.9,
+        asin: 'B0ABC12345',
+      },
+    } as ImportarOfertaExtensaoProdutoIaDto);
+
+    expect(result.status).toBe('NOVA_OFERTA_CRIADA');
+    expect(result.reutilizado).toBe(true);
+    expect(descoberta.cadastrar).not.toHaveBeenCalled();
+    expect(produtos.criar).not.toHaveBeenCalled();
+    expect(ofertas.criarOferta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        produtoId: 50,
+        codigoMarketplace: 'B0ABC12345',
+      }),
+    );
   });
 });
