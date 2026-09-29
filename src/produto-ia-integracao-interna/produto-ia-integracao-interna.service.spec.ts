@@ -55,6 +55,7 @@ describe('ProdutoIaIntegracaoInternaService', () => {
   function setup(
     ofertasExistentes: Array<Record<string, unknown>> = [],
     produtosExistentes: Array<Record<string, unknown>> = [],
+    hardwaresExistentes: Array<Record<string, unknown>> = [],
   ) {
     const descoberta = {
       cadastrar: jest.fn().mockResolvedValue({
@@ -68,15 +69,22 @@ describe('ProdutoIaIntegracaoInternaService', () => {
         nome: 'RTX 5070 Teste',
         produtoId: 7,
       }),
+      listarTodos: jest.fn().mockResolvedValue(hardwaresExistentes),
     };
     const ofertas = {
       listarParceiros: jest.fn().mockResolvedValue({
-        total: 1,
+        total: 2,
         parceiros: [
           {
             id: 2,
             nome: 'Shopee',
             dominio: 'shopee.com.br',
+            ativo: true,
+          },
+          {
+            id: 3,
+            nome: 'Amazon',
+            dominio: 'amazon.com.br',
             ativo: true,
           },
         ],
@@ -102,11 +110,12 @@ describe('ProdutoIaIntegracaoInternaService', () => {
       listarAdmin: jest.fn().mockResolvedValue(produtosExistentes),
       buscarAdmin: jest.fn().mockImplementation(async (id: number) => ({
         id,
-        nome: 'Monitor LG UltraGear 24',
+        nome: id === 70 ? 'Echo Dot 5ª geração' : 'Monitor LG UltraGear 24',
+        metadados: id === 70 ? { asin: 'B0ABC12345' } : null,
       })),
       atualizar: jest.fn().mockImplementation(async (id: number, dados: Record<string, unknown>) => ({
         id,
-        nome: 'Monitor LG UltraGear 24',
+        nome: id === 70 ? 'Echo Dot 5ª geração' : 'Monitor LG UltraGear 24',
         ...dados,
       })),
       criar: jest.fn().mockResolvedValue({
@@ -258,5 +267,76 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     expect(ofertas.atualizarOferta).toHaveBeenCalledTimes(1);
     expect(ofertas.criarOferta).not.toHaveBeenCalled();
     expect(produtos.criar).not.toHaveBeenCalled();
+  });
+
+  it('encontra Produto existente por ASIN antes de consultar Hardware', async () => {
+    const { service, hardwares } = setup([], [
+      {
+        id: 70,
+        tipo: 'GENERICO',
+        nome: 'Echo Dot 5ª geração',
+        marca: 'Amazon',
+        modelo: 'Echo Dot 5',
+        metadados: { asin: 'B0ABC12345' },
+        publicado: true,
+      },
+    ]);
+
+    const result = await service.buscarItemExtensao({ asin: 'b0abc12345' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'EXISTENTE',
+        tipo: 'PRODUTO',
+        produtoId: 70,
+        criterio: 'ASIN',
+      }),
+    );
+    expect(hardwares.listarTodos).not.toHaveBeenCalled();
+  });
+
+  it('item já existente cria somente a oferta Amazon sem cadastro por IA', async () => {
+    const { service, descoberta, ofertas, produtos } = setup([], [
+      {
+        id: 70,
+        tipo: 'GENERICO',
+        nome: 'Echo Dot 5ª geração',
+        marca: 'Amazon',
+        modelo: 'Echo Dot 5',
+        metadados: { asin: 'B0ABC12345' },
+      },
+    ]);
+
+    const result = await service.importarOfertaExtensao({
+      produtoExistenteId: 70,
+      parceiro: {
+        nome: 'Amazon',
+        dominio: 'amazon.com.br',
+        site: 'https://amazon.com.br',
+      },
+      oferta: {
+        urlOriginal: 'https://www.amazon.com.br/dp/B0ABC12345',
+        urlAfiliada: 'https://amzn.to/exemplo',
+        preco: 349.9,
+        asin: 'B0ABC12345',
+      },
+    } as ImportarOfertaExtensaoProdutoIaDto);
+
+    expect(result.status).toBe('ITEM_EXISTENTE_OFERTA_CRIADA');
+    expect(result.completouComIa).toBe(false);
+    expect(descoberta.cadastrar).not.toHaveBeenCalled();
+    expect(produtos.criar).not.toHaveBeenCalled();
+    expect(produtos.atualizar).toHaveBeenCalledWith(70, {
+      publicado: true,
+      ativo: true,
+    });
+    expect(ofertas.criarOferta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        produtoId: 70,
+        parceiroId: 3,
+        codigoMarketplace: 'B0ABC12345',
+        preco: 349.9,
+      }),
+    );
   });
 });
