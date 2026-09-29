@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
@@ -8,6 +9,7 @@ import {
   IsUrl,
   Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -67,6 +69,12 @@ export class OfertaExtensaoDto {
   @Max(100_000_000)
   precoAnterior?: number | null;
 
+  /** Identificador do anúncio na Amazon. Também é preservado como código de marketplace. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  asin?: string | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(160)
@@ -83,13 +91,7 @@ export class OfertaExtensaoDto {
   vendedorIdentificador?: string | null;
 }
 
-/**
- * Produto comercial que não pertence ao catálogo técnico de Hardware.
- *
- * A extensão informa o slug comercial em vez de categoriaId porque o banco
- * pode possuir IDs diferentes entre ambientes. O backend resolve o ID local e
- * força o novo produto como ativo, porém não publicado, para revisão.
- */
+/** Produto comercial que não pertence ao catálogo técnico de Hardware. */
 export class ProdutoOfertaExtensaoDto {
   @IsString()
   @MinLength(2)
@@ -125,6 +127,12 @@ export class ProdutoOfertaExtensaoDto {
   @IsString()
   @MaxLength(32)
   gtin?: string;
+
+  /** ASIN é persistido nos metadados do Produto para futuras integrações Amazon. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  asin?: string;
 
   @IsOptional()
   @IsUrl({
@@ -180,6 +188,18 @@ export class ImportarOfertaExtensaoProdutoIaDto {
   @ValidateNested()
   @Type(() => ProdutoOfertaExtensaoDto)
   produtoPayload?: ProdutoOfertaExtensaoDto;
+
+  /** Quando o preflight encontra Produto existente, a extensão envia apenas o ID. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  produtoExistenteId?: number;
+
+  /** Quando o preflight encontra Hardware existente, a extensão envia apenas o ID. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  hardwareExistenteId?: number;
 
   @ValidateNested()
   @Type(() => ParceiroOfertaExtensaoDto)
