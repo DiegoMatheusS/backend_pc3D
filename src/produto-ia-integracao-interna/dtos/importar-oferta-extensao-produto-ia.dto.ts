@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsNumber,
+  IsObject,
   IsOptional,
   IsPositive,
   IsString,
@@ -10,7 +11,12 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
 import { CriarHardwareDto } from '../../hardwares/dtos/criar-hardware.dto';
+import { CriarEspecificacaoHeadsetDto } from '../../produtos/dtos/especificacoes/criar-especificacao-headset.dto';
+import { CriarEspecificacaoMonitorDto } from '../../produtos/dtos/especificacoes/criar-especificacao-monitor.dto';
+import { CriarEspecificacaoMouseDto } from '../../produtos/dtos/especificacoes/criar-especificacao-mouse.dto';
+import { CriarEspecificacaoTecladoDto } from '../../produtos/dtos/especificacoes/criar-especificacao-teclado.dto';
 
 export class ParceiroOfertaExtensaoDto {
   @IsString()
@@ -77,10 +83,103 @@ export class OfertaExtensaoDto {
   vendedorIdentificador?: string | null;
 }
 
+/**
+ * Produto comercial que não pertence ao catálogo técnico de Hardware.
+ *
+ * A extensão informa o slug comercial em vez de categoriaId porque o banco
+ * pode possuir IDs diferentes entre ambientes. O backend resolve o ID local e
+ * força o novo produto como ativo, porém não publicado, para revisão.
+ */
+export class ProdutoOfertaExtensaoDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  categoriaSlug!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  nome!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  marca?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  modelo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  descricao?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  mpn?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  gtin?: string;
+
+  @IsOptional()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
+  @MaxLength(500)
+  imagemUrl?: string;
+
+  @IsOptional()
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
+  @MaxLength(500)
+  imagemHoverUrl?: string;
+
+  @IsOptional()
+  @IsObject()
+  @IsSafeJsonObject({ maxDepth: 6, maxKeys: 160, maxArrayLength: 64 })
+  metadados?: Record<string, unknown>;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoMonitorDto)
+  especificacaoMonitor?: CriarEspecificacaoMonitorDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoMouseDto)
+  especificacaoMouse?: CriarEspecificacaoMouseDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoTecladoDto)
+  especificacaoTeclado?: CriarEspecificacaoTecladoDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoHeadsetDto)
+  especificacaoHeadset?: CriarEspecificacaoHeadsetDto;
+}
+
 export class ImportarOfertaExtensaoProdutoIaDto {
+  @IsOptional()
   @ValidateNested()
   @Type(() => CriarHardwareDto)
-  hardwarePayload!: CriarHardwareDto;
+  hardwarePayload?: CriarHardwareDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProdutoOfertaExtensaoDto)
+  produtoPayload?: ProdutoOfertaExtensaoDto;
 
   @ValidateNested()
   @Type(() => ParceiroOfertaExtensaoDto)
