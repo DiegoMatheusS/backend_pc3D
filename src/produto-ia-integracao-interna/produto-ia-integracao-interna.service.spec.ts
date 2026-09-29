@@ -104,6 +104,11 @@ describe('ProdutoIaIntegracaoInternaService', () => {
         id,
         nome: 'Monitor LG UltraGear 24',
       })),
+      atualizar: jest.fn().mockImplementation(async (id: number, dados: Record<string, unknown>) => ({
+        id,
+        nome: 'Monitor LG UltraGear 24',
+        ...dados,
+      })),
       criar: jest.fn().mockResolvedValue({
         id: 51,
         nome: 'Monitor LG UltraGear 24',
@@ -122,7 +127,7 @@ describe('ProdutoIaIntegracaoInternaService', () => {
   }
 
   it('atualiza o mesmo anúncio de Hardware em vez de duplicar', async () => {
-    const { service, ofertas } = setup([
+    const { service, ofertas, produtos } = setup([
       {
         id: 9,
         hardware: { id: 42 },
@@ -135,16 +140,26 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     const result = await service.importarOfertaExtensao(hardwarePayload);
 
     expect(result.status).toBe('OFERTA_ATUALIZADA');
+    expect(result.publicado).toBe(true);
+    expect(produtos.atualizar).toHaveBeenCalledWith(7, {
+      publicado: true,
+      ativo: true,
+    });
     expect(ofertas.atualizarOferta).toHaveBeenCalledTimes(1);
     expect(ofertas.criarOferta).not.toHaveBeenCalled();
   });
 
   it('cria nova oferta de Hardware quando o anúncio ainda não existe', async () => {
-    const { service, ofertas } = setup([]);
+    const { service, ofertas, produtos } = setup([]);
 
     const result = await service.importarOfertaExtensao(hardwarePayload);
 
     expect(result.status).toBe('NOVA_OFERTA_CRIADA');
+    expect(result.publicado).toBe(true);
+    expect(produtos.atualizar).toHaveBeenCalledWith(7, {
+      publicado: true,
+      ativo: true,
+    });
     expect(ofertas.criarOferta).toHaveBeenCalledWith(
       expect.objectContaining({
         hardwareId: 42,
@@ -154,8 +169,8 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     );
   });
 
-  it('produto da extensão não passa pelo cadastro de Hardware', async () => {
-    const { service, descoberta, ofertas } = setup([], [
+  it('produto da extensão não passa pelo cadastro de Hardware e é publicado', async () => {
+    const { service, descoberta, ofertas, produtos } = setup([], [
       {
         id: 50,
         tipo: 'GENERICO',
@@ -169,7 +184,19 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     const result = await service.importarOfertaExtensao(produtoPayload);
 
     expect(result.status).toBe('NOVA_OFERTA_CRIADA');
+    expect(result.publicado).toBe(true);
     expect(descoberta.cadastrar).not.toHaveBeenCalled();
+    expect(produtos.atualizar).toHaveBeenCalledWith(
+      50,
+      expect.objectContaining({
+        publicado: true,
+        ativo: true,
+        nome: 'Monitor LG UltraGear 24',
+        especificacaoMonitor: expect.objectContaining({
+          taxaAtualizacaoHz: 144,
+        }),
+      }),
+    );
     expect(ofertas.criarOferta).toHaveBeenCalledWith(
       expect.objectContaining({
         produtoId: 50,
@@ -206,7 +233,7 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     );
   });
 
-  it('atualiza o mesmo anúncio de Produto sem criar duplicata', async () => {
+  it('atualiza e publica o mesmo anúncio de Produto sem criar duplicata', async () => {
     const { service, ofertas, produtos } = setup([
       {
         id: 9,
@@ -220,6 +247,14 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     const result = await service.importarOfertaExtensao(produtoPayload);
 
     expect(result.status).toBe('OFERTA_ATUALIZADA');
+    expect(result.publicado).toBe(true);
+    expect(produtos.atualizar).toHaveBeenCalledWith(
+      50,
+      expect.objectContaining({
+        publicado: true,
+        ativo: true,
+      }),
+    );
     expect(ofertas.atualizarOferta).toHaveBeenCalledTimes(1);
     expect(ofertas.criarOferta).not.toHaveBeenCalled();
     expect(produtos.criar).not.toHaveBeenCalled();
