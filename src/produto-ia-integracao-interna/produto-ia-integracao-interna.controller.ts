@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ImportarOfertaExtensaoProdutoIaDto } from './dtos/importar-oferta-extensao-produto-ia.dto';
+import { LocalizarItemExtensaoProdutoIaDto } from './dtos/localizar-item-extensao-produto-ia.dto';
 import { ProdutoIaIntegracaoInternaService } from './produto-ia-integracao-interna.service';
 
 @Controller('interno/produto-ia')
@@ -24,6 +25,17 @@ export class ProdutoIaIntegracaoInternaController {
     if (!esperada || !recebida || recebida !== esperada) {
       throw new UnauthorizedException('Chave interna da Produto IA inválida.');
     }
+  }
+
+  @Post('extensao/localizar-item')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { limit: 30, ttl: 60_000 } })
+  localizarItem(
+    @Headers('x-api-key') apiKey: string | undefined,
+    @Body() dados: LocalizarItemExtensaoProdutoIaDto,
+  ) {
+    this.validarChave(apiKey);
+    return this.integracao.localizarItemExtensao(dados);
   }
 
   @Post('extensao/importar-oferta')
