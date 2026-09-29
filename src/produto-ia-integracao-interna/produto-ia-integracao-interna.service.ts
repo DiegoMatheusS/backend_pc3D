@@ -317,7 +317,7 @@ export class ProdutoIaIntegracaoInternaService {
     const produto = await this.produtosService.criar({
       ...dadosProduto,
       categoriaId: categoria.id,
-      publicado: false,
+      publicado: true,
       ativo: true,
       ofertaInicial: ofertaBase,
     });
@@ -326,9 +326,9 @@ export class ProdutoIaIntegracaoInternaService {
       status: 'PRODUTO_E_OFERTA_CRIADOS' as const,
       produto: { id: produto.id, nome: produto.nome },
       parceiro: { id: parceiro.id, nome: parceiro.nome },
-      publicado: false,
+      publicado: true,
       oferta: produto.ofertas?.[0] ?? null,
-      observacao: 'Novo Produto criado como rascunho para revisão.',
+      observacao: 'Novo Produto criado e publicado automaticamente pela extensão.',
     };
   }
 
@@ -380,7 +380,7 @@ export class ProdutoIaIntegracaoInternaService {
     }
 
     const produto = await this.produtosService.criarDeHardware(hardwareId, {
-      publicado: false,
+      publicado: true,
       ativo: true,
       ofertaInicial: ofertaBase,
     });
@@ -391,8 +391,8 @@ export class ProdutoIaIntegracaoInternaService {
       hardware: { id: hardwareId, nome: hardware.nome },
       parceiro: { id: parceiro.id, nome: parceiro.nome },
       produto,
-      publicado: false,
-      observacao: 'Novo Hardware/Produto criado como rascunho para revisão.',
+      publicado: true,
+      observacao: 'Novo Hardware/Produto criado e publicado automaticamente pela extensão.',
     };
   }
 
