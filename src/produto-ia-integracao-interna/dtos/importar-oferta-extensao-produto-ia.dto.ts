@@ -88,7 +88,7 @@ export class OfertaExtensaoDto {
  *
  * A extensão informa o slug comercial em vez de categoriaId porque o banco
  * pode possuir IDs diferentes entre ambientes. O backend resolve o ID local e
- * força o novo produto como rascunho/inativo para publicação automática.
+ * força o novo produto como ativo, porém não publicado, para revisão.
  */
 export class ProdutoOfertaExtensaoDto {
   @IsString()
