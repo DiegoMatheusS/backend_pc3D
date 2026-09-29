@@ -6,7 +6,7 @@ import { ImportarOfertaExtensaoProdutoIaDto } from './dtos/importar-oferta-exten
 import { ProdutoIaIntegracaoInternaService } from './produto-ia-integracao-interna.service';
 
 describe('ProdutoIaIntegracaoInternaService', () => {
-  const payload = {
+  const hardwarePayload = {
     hardwarePayload: {
       nome: 'RTX 5070 Teste',
       categoria: 'PLACA_VIDEO',
@@ -26,7 +26,36 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     },
   } as unknown as ImportarOfertaExtensaoProdutoIaDto;
 
-  function setup(ofertasExistentes: Array<Record<string, unknown>> = []) {
+  const produtoPayload = {
+    produtoPayload: {
+      categoriaSlug: 'monitores',
+      nome: 'Monitor LG UltraGear 24',
+      marca: 'LG',
+      modelo: '24GN60R-B',
+      imagemUrl: 'https://cdn.example/monitor.jpg',
+      especificacaoMonitor: {
+        tamanhoPolegadas: 24,
+        resolucao: '1920x1080',
+        taxaAtualizacaoHz: 144,
+      },
+    },
+    parceiro: {
+      nome: 'Shopee',
+      dominio: 'shopee.com.br',
+      site: 'https://shopee.com.br',
+    },
+    oferta: {
+      urlOriginal: 'https://shopee.com.br/monitor/456',
+      urlAfiliada: 'https://s.shopee.com.br/monitor456',
+      preco: 899.9,
+      codigoMarketplace: 'SHOPEE-MONITOR-456',
+    },
+  } as unknown as ImportarOfertaExtensaoProdutoIaDto;
+
+  function setup(
+    ofertasExistentes: Array<Record<string, unknown>> = [],
+    produtosExistentes: Array<Record<string, unknown>> = [],
+  ) {
     const descoberta = {
       cadastrar: jest.fn().mockResolvedValue({
         status: 'JA_EXISTE',
@@ -62,6 +91,24 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     };
     const produtos = {
       criarDeHardware: jest.fn(),
+      listarCategoriasAdmin: jest.fn().mockResolvedValue([
+        {
+          id: 12,
+          nome: 'Monitores',
+          slug: 'monitores',
+          ativo: true,
+        },
+      ]),
+      listarAdmin: jest.fn().mockResolvedValue(produtosExistentes),
+      buscarAdmin: jest.fn().mockImplementation(async (id: number) => ({
+        id,
+        nome: 'Monitor LG UltraGear 24',
+      })),
+      criar: jest.fn().mockResolvedValue({
+        id: 51,
+        nome: 'Monitor LG UltraGear 24',
+        ofertas: [{ id: 11 }],
+      }),
     };
 
     const service = new ProdutoIaIntegracaoInternaService(
@@ -74,7 +121,7 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     return { service, descoberta, hardwares, ofertas, produtos };
   }
 
-  it('atualiza o mesmo anúncio em vez de duplicar', async () => {
+  it('atualiza o mesmo anúncio de Hardware em vez de duplicar', async () => {
     const { service, ofertas } = setup([
       {
         id: 9,
@@ -85,17 +132,17 @@ describe('ProdutoIaIntegracaoInternaService', () => {
       },
     ]);
 
-    const result = await service.importarOfertaExtensao(payload);
+    const result = await service.importarOfertaExtensao(hardwarePayload);
 
     expect(result.status).toBe('OFERTA_ATUALIZADA');
     expect(ofertas.atualizarOferta).toHaveBeenCalledTimes(1);
     expect(ofertas.criarOferta).not.toHaveBeenCalled();
   });
 
-  it('cria nova oferta quando o anúncio ainda não existe', async () => {
+  it('cria nova oferta de Hardware quando o anúncio ainda não existe', async () => {
     const { service, ofertas } = setup([]);
 
-    const result = await service.importarOfertaExtensao(payload);
+    const result = await service.importarOfertaExtensao(hardwarePayload);
 
     expect(result.status).toBe('NOVA_OFERTA_CRIADA');
     expect(ofertas.criarOferta).toHaveBeenCalledWith(
@@ -105,5 +152,75 @@ describe('ProdutoIaIntegracaoInternaService', () => {
         urlAfiliada: 'https://s.shopee.com.br/abc',
       }),
     );
+  });
+
+  it('produto da extensão não passa pelo cadastro de Hardware', async () => {
+    const { service, descoberta, ofertas } = setup([], [
+      {
+        id: 50,
+        tipo: 'GENERICO',
+        categoriaId: 12,
+        nome: 'Monitor LG UltraGear 24',
+        marca: 'LG',
+        modelo: '24GN60R-B',
+      },
+    ]);
+
+    const result = await service.importarOfertaExtensao(produtoPayload);
+
+    expect(result.status).toBe('NOVA_OFERTA_CRIADA');
+    expect(descoberta.cadastrar).not.toHaveBeenCalled();
+    expect(ofertas.criarOferta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        produtoId: 50,
+        parceiroId: 2,
+        urlAfiliada: 'https://s.shopee.com.br/monitor456',
+      }),
+    );
+  });
+
+  it('cria Produto genérico como rascunho quando ainda não existe', async () => {
+    const { service, produtos, descoberta } = setup([], []);
+
+    const result = await service.importarOfertaExtensao(produtoPayload);
+
+    expect(result.status).toBe('PRODUTO_E_OFERTA_CRIADOS');
+    expect(descoberta.cadastrar).not.toHaveBeenCalled();
+    expect(produtos.criar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categoriaId: 12,
+        nome: 'Monitor LG UltraGear 24',
+        marca: 'LG',
+        modelo: '24GN60R-B',
+        publicado: false,
+        ativo: true,
+        especificacaoMonitor: expect.objectContaining({
+          taxaAtualizacaoHz: 144,
+        }),
+        ofertaInicial: expect.objectContaining({
+          parceiroId: 2,
+          preco: 899.9,
+        }),
+      }),
+    );
+  });
+
+  it('atualiza o mesmo anúncio de Produto sem criar duplicata', async () => {
+    const { service, ofertas, produtos } = setup([
+      {
+        id: 9,
+        produtoId: 50,
+        parceiroId: 2,
+        urlOriginal: 'https://shopee.com.br/monitor/456',
+        codigoMarketplace: 'SHOPEE-MONITOR-456',
+      },
+    ]);
+
+    const result = await service.importarOfertaExtensao(produtoPayload);
+
+    expect(result.status).toBe('OFERTA_ATUALIZADA');
+    expect(ofertas.atualizarOferta).toHaveBeenCalledTimes(1);
+    expect(ofertas.criarOferta).not.toHaveBeenCalled();
+    expect(produtos.criar).not.toHaveBeenCalled();
   });
 });
