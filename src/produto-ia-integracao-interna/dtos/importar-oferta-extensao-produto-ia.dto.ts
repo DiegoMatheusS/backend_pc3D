@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
@@ -8,6 +9,7 @@ import {
   IsUrl,
   Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -30,29 +32,17 @@ export class ParceiroOfertaExtensaoDto {
   dominio?: string | null;
 
   @IsOptional()
-  @IsUrl({
-    protocols: ['http', 'https'],
-    require_protocol: true,
-    disallow_auth: true,
-  })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   site?: string | null;
 }
 
 export class OfertaExtensaoDto {
-  @IsUrl({
-    protocols: ['http', 'https'],
-    require_protocol: true,
-    disallow_auth: true,
-  })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   urlOriginal!: string;
 
-  @IsUrl({
-    protocols: ['http', 'https'],
-    require_protocol: true,
-    disallow_auth: true,
-  })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   urlAfiliada!: string;
 
@@ -67,29 +57,19 @@ export class OfertaExtensaoDto {
   @Max(100_000_000)
   precoAnterior?: number | null;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(160)
+  @IsOptional() @IsString() @MaxLength(160)
   codigoMarketplace?: string | null;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
+  @IsOptional() @IsString() @MaxLength(20)
+  asin?: string | null;
+
+  @IsOptional() @IsString() @MaxLength(200)
   vendedorNome?: string | null;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
+  @IsOptional() @IsString() @MaxLength(200)
   vendedorIdentificador?: string | null;
 }
 
-/**
- * Produto comercial que não pertence ao catálogo técnico de Hardware.
- *
- * A extensão informa o slug comercial em vez de categoriaId porque o banco
- * pode possuir IDs diferentes entre ambientes. O backend resolve o ID local e
- * força o novo produto como ativo, porém não publicado, para revisão.
- */
 export class ProdutoOfertaExtensaoDto {
   @IsString()
   @MinLength(2)
@@ -101,46 +81,20 @@ export class ProdutoOfertaExtensaoDto {
   @MaxLength(200)
   nome!: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  marca?: string;
+  @IsOptional() @IsString() @MaxLength(100) marca?: string;
+  @IsOptional() @IsString() @MaxLength(150) modelo?: string;
+  @IsOptional() @IsString() @MaxLength(4000) descricao?: string;
+  @IsOptional() @IsString() @MaxLength(150) mpn?: string;
+  @IsOptional() @IsString() @MaxLength(32) gtin?: string;
+  @IsOptional() @IsString() @MaxLength(20) asin?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(150)
-  modelo?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(4000)
-  descricao?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(150)
-  mpn?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(32)
-  gtin?: string;
-
-  @IsOptional()
-  @IsUrl({
-    protocols: ['http', 'https'],
-    require_protocol: true,
-    disallow_auth: true,
-  })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   imagemUrl?: string;
 
   @IsOptional()
-  @IsUrl({
-    protocols: ['http', 'https'],
-    require_protocol: true,
-    disallow_auth: true,
-  })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   imagemHoverUrl?: string;
 
@@ -149,43 +103,32 @@ export class ProdutoOfertaExtensaoDto {
   @IsSafeJsonObject({ maxDepth: 6, maxKeys: 160, maxArrayLength: 64 })
   metadados?: Record<string, unknown>;
 
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CriarEspecificacaoMonitorDto)
+  @IsOptional() @ValidateNested() @Type(() => CriarEspecificacaoMonitorDto)
   especificacaoMonitor?: CriarEspecificacaoMonitorDto;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CriarEspecificacaoMouseDto)
+  @IsOptional() @ValidateNested() @Type(() => CriarEspecificacaoMouseDto)
   especificacaoMouse?: CriarEspecificacaoMouseDto;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CriarEspecificacaoTecladoDto)
+  @IsOptional() @ValidateNested() @Type(() => CriarEspecificacaoTecladoDto)
   especificacaoTeclado?: CriarEspecificacaoTecladoDto;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CriarEspecificacaoHeadsetDto)
+  @IsOptional() @ValidateNested() @Type(() => CriarEspecificacaoHeadsetDto)
   especificacaoHeadset?: CriarEspecificacaoHeadsetDto;
 }
 
 export class ImportarOfertaExtensaoProdutoIaDto {
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CriarHardwareDto)
+  @IsOptional() @ValidateNested() @Type(() => CriarHardwareDto)
   hardwarePayload?: CriarHardwareDto;
 
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ProdutoOfertaExtensaoDto)
+  @IsOptional() @ValidateNested() @Type(() => ProdutoOfertaExtensaoDto)
   produtoPayload?: ProdutoOfertaExtensaoDto;
 
-  @ValidateNested()
-  @Type(() => ParceiroOfertaExtensaoDto)
+  @IsOptional() @IsInt() @Min(1) @Max(2_147_483_647)
+  hardwareExistenteId?: number;
+
+  @IsOptional() @IsInt() @Min(1) @Max(2_147_483_647)
+  produtoExistenteId?: number;
+
+  @ValidateNested() @Type(() => ParceiroOfertaExtensaoDto)
   parceiro!: ParceiroOfertaExtensaoDto;
 
-  @ValidateNested()
-  @Type(() => OfertaExtensaoDto)
+  @ValidateNested() @Type(() => OfertaExtensaoDto)
   oferta!: OfertaExtensaoDto;
 }
