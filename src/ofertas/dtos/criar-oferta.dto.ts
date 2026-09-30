@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsInt,
@@ -10,6 +11,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { normalizarUrlAmazon } from '../utils/normalizar-url-amazon';
+import { LIMITE_URL_OFERTA } from '../utils/limite-url-oferta';
 
 export class CriarOfertaDto {
   @IsOptional()
@@ -44,21 +47,23 @@ export class CriarOfertaDto {
   @MaxLength(160)
   codigoMarketplace?: string | null;
 
+  @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsUrl({
     protocols: ['http', 'https'],
     require_protocol: true,
     disallow_auth: true,
   })
-  @MaxLength(500)
+  @MaxLength(LIMITE_URL_OFERTA)
   urlOriginal!: string;
 
+  @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsOptional()
   @IsUrl({
     protocols: ['http', 'https'],
     require_protocol: true,
     disallow_auth: true,
   })
-  @MaxLength(500)
+  @MaxLength(LIMITE_URL_OFERTA)
   urlAfiliada?: string | null;
 
   @IsNumber({ maxDecimalPlaces: 2 })

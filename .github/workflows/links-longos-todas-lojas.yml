@@ -1,0 +1,75 @@
+name: Links longos todas as lojas
+
+on:
+  pull_request:
+    paths:
+      - 'src/ofertas/**'
+      - 'src/produtos/dtos/criar-oferta-inicial-produto.dto.ts'
+      - 'src/produto-ia-integracao-interna/dtos/importar-oferta-extensao-produto-ia.dto.ts'
+      - 'src/sugestoes-ofertas/dtos/**'
+      - 'prisma/migrations/**'
+      - 'prisma/schema.prisma'
+      - 'scripts/verificar-migracao-urls-longas.cjs'
+      - '.github/workflows/links-longos-todas-lojas.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/ofertas/**'
+      - 'prisma/schema.prisma'
+      - 'prisma/migrations/**'
+      - 'scripts/verificar-migracao-urls-longas.cjs'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Schema Prisma definitivo e válido
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs'
+          const schema = readFileSync('prisma/schema.prisma', 'utf8')
+          for (const [name, field] of [['Oferta', 'urlOriginal'], ['Oferta', 'urlAfiliada'], ['SugestaoOferta', 'urlOriginal'], ['ChatbotCadastroToken', 'url']]) {
+            const model = schema.split(`model ${name} {`)[1]?.split('\n}')[0]
+            if (!model || !new RegExp(`^\\s*${field}\\s+String\\??\\s+(?:@map\\("[^"]+"\\)\\s+)?@db\\.Text`, 'm').test(model)) {
+              throw new Error(`Schema não foi atualizado para ${name}.${field} @db.Text`)
+            }
+          }
+          const offer = schema.split('model Oferta {')[1]?.split('\n}')[0] ?? ''
+          if (offer.includes('@@unique([produtoId, parceiroId, urlOriginal])')) throw new Error('Índice antigo de URL ainda está no schema')
+          NODE
+          npx prisma validate
+          npx prisma generate
+      - name: Testes de URLs Amazon e todos os parceiros
+        run: npm test -- --runInBand ofertas/utils/normalizar-url-amazon.spec.ts ofertas/utils/limite-url-oferta.spec.ts
+      - name: Compilar backend com novo schema
+        run: npm run build
+      - name: Aplicar migrations reais em PostgreSQL limpo
+        run: npx prisma migrate deploy
+      - name: Validar tipos, URL longa e índice SHA-256 no banco
+        run: node scripts/verificar-migracao-urls-longas.cjs

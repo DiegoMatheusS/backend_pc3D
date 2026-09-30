@@ -320,7 +320,7 @@ model ChatbotCadastroToken {
   token                String    @unique @db.VarChar(64)
   usuarioId            Int       @map("usuario_id")
   acao                 String    @db.VarChar(40)
-  url                  String    @db.VarChar(1000)
+  url                  String    @db.Text
   categoriaEsperada    String?   @map("categoria_esperada") @db.VarChar(80)
   resultadoNormalizado Json      @map("resultado_normalizado")
   reconciliacao        Json
@@ -1001,8 +1001,8 @@ model Oferta {
   vendedorNome          String?      @map("vendedor_nome") @db.VarChar(200)
   vendedorIdentificador String?      @map("vendedor_identificador") @db.VarChar(200)
   codigoMarketplace     String?      @map("codigo_marketplace") @db.VarChar(160)
-  urlOriginal           String       @map("url_original") @db.VarChar(500)
-  urlAfiliada           String?      @map("url_afiliada") @db.VarChar(500)
+  urlOriginal           String       @map("url_original") @db.Text
+  urlAfiliada           String?      @map("url_afiliada") @db.Text
   preco                 Decimal      @db.Decimal(10, 2)
   precoAnterior         Decimal?     @map("preco_anterior") @db.Decimal(10, 2)
   frete                 Decimal?     @db.Decimal(10, 2)
@@ -1020,7 +1020,6 @@ model Oferta {
   historicoPrecos HistoricoPrecoOferta[]
   sugestaoOrigem  SugestaoOferta?
 
-  @@unique([produtoId, parceiroId, urlOriginal])
   @@index([produtoId, status])
   @@index([usuarioOrigemId])
   @@index([hardwareId, status])
@@ -1037,7 +1036,7 @@ model SugestaoOferta {
   parceiroId        Int?                 @map("parceiro_id")
   ofertaId          Int?                 @unique @map("oferta_id")
   nome              String               @db.VarChar(200)
-  urlOriginal       String               @map("url_original") @db.VarChar(500)
+  urlOriginal       String               @map("url_original") @db.Text
   categoria         String               @db.VarChar(50)
   preco             Decimal              @db.Decimal(10, 2)
   precoAnterior     Decimal?             @map("preco_anterior") @db.Decimal(10, 2)
@@ -1239,8 +1238,8 @@ model EspecificacaoNotebook {
   clockTurboMhz           Int?         @map("clock_turbo_mhz")
   tdpWatts                Int?         @map("tdp_watts")
   gpuNome                 String?      @map("gpu_nome") @db.VarChar(200)
-  gpuIntegrada            Boolean      @default(false) @map("gpu_integrada")
-  gpuDedicada             Boolean      @default(false) @map("gpu_dedicada")
+  gpuIntegrada            Boolean?      @map("gpu_integrada")
+  gpuDedicada             Boolean?      @map("gpu_dedicada")
   vramGb                  Int?         @map("vram_gb")
   tgpWatts                Int?         @map("tgp_watts")
   ramInstaladaGb          Int?         @map("ram_instalada_gb")
@@ -1250,19 +1249,19 @@ model EspecificacaoNotebook {
   slotsRamTotal           Int?         @map("slots_ram_total")
   slotsRamLivres          Int?         @map("slots_ram_livres")
   ramMaximaGb             Int?         @map("ram_maxima_gb")
-  upgradeRam              Boolean      @default(false) @map("upgrade_ram")
+  upgradeRam              Boolean?      @map("upgrade_ram")
   armazenamentoGb         Int?         @map("armazenamento_gb")
   tipoArmazenamento       String?      @map("tipo_armazenamento") @db.VarChar(80)
   slotsM2Total            Int?         @map("slots_m2_total")
   slotsM2Livres           Int?         @map("slots_m2_livres")
-  upgradeArmazenamento    Boolean      @default(false) @map("upgrade_armazenamento")
+  upgradeArmazenamento    Boolean?      @map("upgrade_armazenamento")
   tamanhoTelaPolegadas    Float?       @map("tamanho_tela_polegadas")
   resolucaoLargura        Int?         @map("resolucao_largura")
   resolucaoAltura         Int?         @map("resolucao_altura")
   taxaAtualizacaoHz       Int?         @map("taxa_atualizacao_hz")
   tipoPainel              String?      @map("tipo_painel") @db.VarChar(80)
   brilhoNits              Int?         @map("brilho_nits")
-  touch                   Boolean      @default(false)
+  touch                   Boolean?      
   bateriaWh               Float?       @map("bateria_wh")
   autonomiaInformadaHoras Float?       @map("autonomia_informada_horas")
   potenciaCarregadorWatts Int?         @map("potencia_carregador_watts")
@@ -1272,19 +1271,19 @@ model EspecificacaoNotebook {
   profundidadeMm          Float?       @map("profundidade_mm")
   wifi                    String?      @db.VarChar(100)
   bluetooth               String?      @db.VarChar(100)
-  usbA                    Int          @default(0) @map("usb_a")
-  usbC                    Int          @default(0) @map("usb_c")
-  thunderbolt             Int          @default(0)
-  hdmi                    Int          @default(0)
-  displayPort             Int          @default(0) @map("display_port")
-  ethernet                Boolean      @default(false)
-  leitorCartao            Boolean      @default(false) @map("leitor_cartao")
+  usbA                    Int?          @map("usb_a")
+  usbC                    Int?          @map("usb_c")
+  thunderbolt             Int?          
+  hdmi                    Int?          
+  displayPort             Int?          @map("display_port")
+  ethernet                Boolean?      
+  leitorCartao            Boolean?      @map("leitor_cartao")
   sistemaOperacional      String?      @map("sistema_operacional") @db.VarChar(150)
-  webcam                  Boolean      @default(false)
+  webcam                  Boolean?      
   resolucaoWebcam         String?      @map("resolucao_webcam") @db.VarChar(80)
-  tecladoIluminado        Boolean      @default(false) @map("teclado_iluminado")
-  tecladoNumerico         Boolean      @default(false) @map("teclado_numerico")
-  leitorDigital           Boolean      @default(false) @map("leitor_digital")
+  tecladoIluminado        Boolean?      @map("teclado_iluminado")
+  tecladoNumerico         Boolean?      @map("teclado_numerico")
+  leitorDigital           Boolean?      @map("leitor_digital")
 
   notebook Notebook @relation(fields: [notebookId], references: [id], onDelete: Cascade)
 
