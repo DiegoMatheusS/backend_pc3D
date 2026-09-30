@@ -10,6 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { LIMITE_URL_OFERTA } from '../../ofertas/utils/limite-url-oferta';
 
 export class AprovarSugestaoOfertaDto {
   @IsOptional()
@@ -36,7 +37,7 @@ export class AprovarSugestaoOfertaDto {
     require_protocol: true,
     disallow_auth: true,
   })
-  @MaxLength(500)
+  @MaxLength(LIMITE_URL_OFERTA)
   urlAfiliada?: string | null;
 
   @IsOptional()
