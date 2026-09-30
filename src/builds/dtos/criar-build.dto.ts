@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -52,21 +51,14 @@ export class CriarBuildDto {
   @IsOptional() @IsString() @MaxLength(150) modelo?: string;
   @IsOptional() @IsString() @MaxLength(4000) descricao?: string;
   @IsOptional()
-  @IsUrl({
-    protocols: ['http', 'https'],
-    require_protocol: true,
-    disallow_auth: true,
-  })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   imagemUrl?: string;
   @IsOptional()
-  @IsUrl({
-    protocols: ['http', 'https'],
-    require_protocol: true,
-    disallow_auth: true,
-  })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   imagemHoverUrl?: string;
+  // KIT_UPGRADE usa a mesma estrutura comercial, mas categoria própria na loja.
   @IsOptional() @IsString() @MaxLength(100) categoria?: string;
   @IsOptional() @IsString() @MaxLength(150) finalidade?: string;
   @IsOptional() @IsString() @MaxLength(80) resolucaoRecomendada?: string;
@@ -77,10 +69,12 @@ export class CriarBuildDto {
   @IsOptional() @IsBoolean() publicado?: boolean;
   @IsOptional() @IsBoolean() ativo?: boolean;
 
+  // PC comercial não é PC Builder: o anúncio pode informar apenas "16 GB RAM"
+  // ou trazer periféricos sem modelos. Vínculos são sempre opcionais.
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(64)
   @ValidateNested({ each: true })
   @Type(() => BuildComponenteDto)
-  componentes!: BuildComponenteDto[];
+  componentes?: BuildComponenteDto[];
 }
