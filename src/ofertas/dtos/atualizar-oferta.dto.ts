@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
@@ -11,12 +12,14 @@ import {
   Min,
 } from 'class-validator';
 import { StatusOferta } from '../../generated/prisma/enums';
+import { normalizarUrlAmazon } from '../utils/normalizar-url-amazon';
 
 export class AtualizarOfertaDto {
   @IsOptional() @IsString() @MaxLength(200) vendedorNome?: string | null;
   @IsOptional() @IsString() @MaxLength(200) vendedorIdentificador?:
     string | null;
   @IsOptional() @IsString() @MaxLength(160) codigoMarketplace?: string | null;
+  @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsOptional()
   @IsUrl({
     protocols: ['http', 'https'],
@@ -25,6 +28,7 @@ export class AtualizarOfertaDto {
   })
   @MaxLength(500)
   urlOriginal?: string;
+  @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsOptional()
   @IsUrl({
     protocols: ['http', 'https'],
