@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { LIMITE_URL_OFERTA } from '../../ofertas/utils/limite-url-oferta';
 import { CATEGORIAS_SUGESTAO_OFERTA } from '../campos-sugestao-oferta';
 
 export class CriarSugestaoOfertaDto {
@@ -23,7 +24,7 @@ export class CriarSugestaoOfertaDto {
     require_protocol: true,
     disallow_auth: true,
   })
-  @MaxLength(500)
+  @MaxLength(LIMITE_URL_OFERTA)
   urlOriginal!: string;
 
   @IsString()

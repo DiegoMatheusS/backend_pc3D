@@ -320,7 +320,7 @@ model ChatbotCadastroToken {
   token                String    @unique @db.VarChar(64)
   usuarioId            Int       @map("usuario_id")
   acao                 String    @db.VarChar(40)
-  url                  String    @db.VarChar(1000)
+  url                  String    @db.Text
   categoriaEsperada    String?   @map("categoria_esperada") @db.VarChar(80)
   resultadoNormalizado Json      @map("resultado_normalizado")
   reconciliacao        Json
@@ -1001,8 +1001,8 @@ model Oferta {
   vendedorNome          String?      @map("vendedor_nome") @db.VarChar(200)
   vendedorIdentificador String?      @map("vendedor_identificador") @db.VarChar(200)
   codigoMarketplace     String?      @map("codigo_marketplace") @db.VarChar(160)
-  urlOriginal           String       @map("url_original") @db.VarChar(500)
-  urlAfiliada           String?      @map("url_afiliada") @db.VarChar(500)
+  urlOriginal           String       @map("url_original") @db.Text
+  urlAfiliada           String?      @map("url_afiliada") @db.Text
   preco                 Decimal      @db.Decimal(10, 2)
   precoAnterior         Decimal?     @map("preco_anterior") @db.Decimal(10, 2)
   frete                 Decimal?     @db.Decimal(10, 2)
@@ -1020,7 +1020,6 @@ model Oferta {
   historicoPrecos HistoricoPrecoOferta[]
   sugestaoOrigem  SugestaoOferta?
 
-  @@unique([produtoId, parceiroId, urlOriginal])
   @@index([produtoId, status])
   @@index([usuarioOrigemId])
   @@index([hardwareId, status])
@@ -1037,7 +1036,7 @@ model SugestaoOferta {
   parceiroId        Int?                 @map("parceiro_id")
   ofertaId          Int?                 @unique @map("oferta_id")
   nome              String               @db.VarChar(200)
-  urlOriginal       String               @map("url_original") @db.VarChar(500)
+  urlOriginal       String               @map("url_original") @db.Text
   categoria         String               @db.VarChar(50)
   preco             Decimal              @db.Decimal(10, 2)
   precoAnterior     Decimal?             @map("preco_anterior") @db.Decimal(10, 2)
