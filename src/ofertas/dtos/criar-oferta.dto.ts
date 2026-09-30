@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsInt,
@@ -10,6 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { normalizarUrlAmazon } from '../utils/normalizar-url-amazon';
 
 export class CriarOfertaDto {
   @IsOptional()
@@ -44,6 +46,7 @@ export class CriarOfertaDto {
   @MaxLength(160)
   codigoMarketplace?: string | null;
 
+  @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsUrl({
     protocols: ['http', 'https'],
     require_protocol: true,
@@ -52,6 +55,7 @@ export class CriarOfertaDto {
   @MaxLength(500)
   urlOriginal!: string;
 
+  @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsOptional()
   @IsUrl({
     protocols: ['http', 'https'],
