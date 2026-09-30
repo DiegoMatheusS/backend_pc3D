@@ -3404,7 +3404,7 @@ Ao final retorne também:
   }
 
   private async montarPayloadPcMontadoImportado(
-    normalizacao: Awaited<ReturnType<IaService['normalizarProduto']>>,
+    normalizacao: { camposRaiz: Record<string, unknown>; especificacoesNormalizadas: Record<string, unknown> },
   ) {
     const raiz = normalizacao.camposRaiz;
     const specs = normalizacao.especificacoesNormalizadas;
@@ -3436,10 +3436,11 @@ Ao final retorne também:
       const modelo =
         typeof componente.modelo === 'string' ? componente.modelo.trim() : '';
 
-      const hardware = await this.prisma.hardware.findFirst({
+      const matches = await this.prisma.hardware.findMany({
         where: {
           categoria: categoriaTexto,
           ativo: true,
+          publicado: true,
           OR: [
             ...(modelo
               ? [{ modelo: { equals: modelo, mode: 'insensitive' as const } }]
@@ -3452,8 +3453,11 @@ Ao final retorne também:
             ? { marca: { equals: marca, mode: 'insensitive' as const } }
             : {}),
         },
+        take: 2,
         select: { id: true, nome: true, categoria: true },
       });
+
+      const hardware = matches.length === 1 ? matches[0] : null;
 
       const detectado = {
         ...componente,
@@ -4159,6 +4163,7 @@ Ao final retorne também:
       payload: Record<string, unknown>;
       prontoParaCadastrar: boolean;
       camposObrigatoriosAusentes: string[];
+      componentesDetectados?: Array<Record<string, unknown>>;
     } | null = null;
     if (categoriaEscolhida && Object.keys(payloadParcial).length > 0) {
       if (ehCategoriaHardwareImportacao(categoriaEscolhida)) {
@@ -4169,6 +4174,12 @@ Ao final retorne também:
           camposObrigatoriosAusentes:
             resultado.camposObrigatoriosAusentes ?? [],
         };
+      } else if (categoriaEscolhida === 'PC_MONTADO') {
+        cadastroSugerido = await this.montarPayloadPcMontadoImportado({
+          camposRaiz: payloadParcial,
+          especificacoesNormalizadas: this.ehRegistro(resultado.especificacoesEncontradas)
+            ? resultado.especificacoesEncontradas : {},
+        });
       } else {
         const slugsProduto: Partial<Record<CategoriaImportacaoIa, string>> = {
           NOTEBOOK: 'notebooks',
