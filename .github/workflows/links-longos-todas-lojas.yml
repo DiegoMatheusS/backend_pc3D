@@ -9,6 +9,7 @@ on:
       - 'src/sugestoes-ofertas/dtos/**'
       - 'prisma/migrations/**'
       - 'prisma/schema.prisma'
+      - 'scripts/verificar-migracao-urls-longas.cjs'
       - '.github/workflows/links-longos-todas-lojas.yml'
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'src/ofertas/**'
       - 'prisma/schema.prisma'
       - 'prisma/migrations/**'
+      - 'scripts/verificar-migracao-urls-longas.cjs'
 
 permissions:
   contents: read
@@ -47,7 +49,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Exigir schema Prisma definitivo commitado
+      - name: Schema Prisma definitivo e válido
         run: |
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs'
@@ -69,31 +71,5 @@ jobs:
         run: npm run build
       - name: Aplicar migrations reais em PostgreSQL limpo
         run: npx prisma migrate deploy
-      - name: Validar colunas TEXT e índice único indexável
-        run: |
-          node <<'NODE'
-          const { Client } = require('pg')
-          ;(async () => {
-            const client = new Client({ connectionString: process.env.DATABASE_URL })
-            await client.connect()
-            try {
-              const { rows } = await client.query(`SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND ((table_name = 'ofertas' AND column_name IN ('url_original','url_afiliada')) OR (table_name = 'sugestoes_ofertas' AND column_name = 'url_original') OR (table_name = 'chatbot_cadastro_tokens' AND column_name = 'url'))`)
-              if (rows.length !== 4 || rows.some(row => row.data_type !== 'text')) throw new Error(`Colunas precisam ser TEXT: ${JSON.stringify(rows)}`)
-              const { rows: indexes } = await client.query(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'ofertas'`)
-              if (!indexes.some(row => row.indexdef.includes('UNIQUE INDEX') && row.indexdef.includes('sha256(') && row.indexdef.includes('url_original'))) throw new Error(`Índice SHA-256 das ofertas ausente: ${JSON.stringify(indexes)}`)
-              if (indexes.some(row => row.indexdef.includes('url_original') && !row.indexdef.includes('sha256(') && row.indexdef.includes('UNIQUE INDEX'))) throw new Error('Índice único antigo sobre URL completa ainda existe')
-              await client.query('BEGIN')
-              await client.query('CREATE TEMP TABLE url_index_probe (produto_id int, parceiro_id int, url_original text)')
-              await client.query("CREATE UNIQUE INDEX ON url_index_probe (produto_id, parceiro_id, sha256(convert_to(url_original, 'UTF8')))")
-              const url = `https://shopee.com.br/p?affiliate=${'a'.repeat(10000)}`
-              await client.query('INSERT INTO url_index_probe VALUES ($1,$2,$3)', [1,1,url])
-              try {
-                await client.query('INSERT INTO url_index_probe VALUES ($1,$2,$3)', [1,1,url])
-                throw new Error('URL duplicada não foi rejeitada')
-              } catch (err) {
-                if (err.code !== '23505') throw err
-              }
-              await client.query('ROLLBACK')
-            } finally { await client.end() }
-          })().catch(error => { console.error(error); process.exitCode = 1 })
-          NODE
+      - name: Validar tipos, URL longa e índice SHA-256 no banco
+        run: node scripts/verificar-migracao-urls-longas.cjs
