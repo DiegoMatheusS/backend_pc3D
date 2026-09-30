@@ -19,7 +19,7 @@ function updateModel(name, update) {
 }
 
 function urlToText(model, field, expectedType) {
-  const expression = new RegExp(`(^\\s*${field}\\s+${expectedType}\\s+@map\\("[^"]+"\\)\\s+)@db\\.VarChar\\((?:500|1000)\\)`, 'm')
+  const expression = new RegExp(`(^\\s*${field}\\s+${expectedType}\\s+(?:@map\\("[^"]+"\\)\\s+)?)@db\\.VarChar\\((?:500|1000)\\)`, 'm')
   if (!expression.test(model)) throw new Error(`Campo ainda não compatível com o ajuste: ${field}`)
   return model.replace(expression, '$1@db.Text')
 }
