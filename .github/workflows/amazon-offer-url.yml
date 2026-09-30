@@ -1,0 +1,38 @@
+name: Ofertas Amazon URLs
+
+on:
+  pull_request:
+    paths:
+      - "src/ofertas/dtos/criar-oferta.dto.ts"
+      - "src/ofertas/dtos/atualizar-oferta.dto.ts"
+      - "src/ofertas/utils/**"
+      - ".github/workflows/amazon-offer-url.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/ofertas/dtos/criar-oferta.dto.ts"
+      - "src/ofertas/dtos/atualizar-oferta.dto.ts"
+      - "src/ofertas/utils/**"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Gerar Prisma
+        run: npx prisma generate
+      - name: Testar URLs originais e afiliadas da Amazon
+        run: npm test -- --runInBand ofertas/utils/normalizar-url-amazon.spec.ts
+      - name: Compilar backend
+        run: npm run build
