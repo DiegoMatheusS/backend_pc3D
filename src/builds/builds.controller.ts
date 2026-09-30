@@ -26,13 +26,17 @@ import { AtualizarBuildDto } from './dtos/atualizar-build.dto';
 import { CriarBuildDto } from './dtos/criar-build.dto';
 import { FiltrarBuildsDto } from './dtos/filtrar-builds.dto';
 import { BuildsService } from './builds.service';
+import { BuildsCatalogoService } from './builds-catalogo.service';
 
 type UsuarioReq = { id: number; papel: string } | null;
 
-@ApiTags('PCs Montados')
+@ApiTags('PCs Montados e Kits de Upgrade')
 @Controller('builds')
 export class BuildsController {
-  constructor(private readonly buildsService: BuildsService) {}
+  constructor(
+    private readonly buildsService: BuildsService,
+    private readonly catalogo: BuildsCatalogoService,
+  ) {}
 
   @Get()
   listar(@Query() filtros: FiltrarBuildsDto) {
@@ -47,22 +51,28 @@ export class BuildsController {
 
   @Get(':id/resumo-compra')
   @Throttle({ global: { limit: 60, ttl: 60_000 } })
-  resumoCompra(@Param('id', ParsePositiveIntPipe) id: number) {
-    return this.buildsService.resumoCompra(id);
+  async resumoCompra(@Param('id', ParsePositiveIntPipe) id: number) {
+    const resumo = await this.buildsService.resumoCompra(id);
+    return this.catalogo.ajustarResumoSemComponentes(resumo);
   }
 
   @Get(':id')
-  buscar(@Param('id', ParsePositiveIntPipe) id: number) {
-    return this.buildsService.buscarPublico(id);
+  async buscar(@Param('id', ParsePositiveIntPipe) id: number) {
+    const build = await this.buildsService.buscarPublico(id);
+    return {
+      ...build,
+      resumoCompra: this.catalogo.ajustarResumoSemComponentes(build.resumoCompra),
+    };
   }
 }
 
-@ApiTags('PCs Montados Admin')
+@ApiTags('PCs Montados e Kits de Upgrade Admin')
 @Controller('admin/builds')
 @UseGuards(AuthGuard, PapelGuard)
 export class BuildsAdminController {
   constructor(
     private readonly buildsService: BuildsService,
+    private readonly catalogo: BuildsCatalogoService,
     private readonly auditoriaService: AuditoriaService,
   ) {}
 
@@ -85,7 +95,7 @@ export class BuildsAdminController {
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {
-    const resultado = await this.buildsService.criar(dados);
+    const resultado = await this.catalogo.criar(dados);
     void this.auditoriaService.registrar({
       usuarioId: usuario?.id,
       acao: AcaoAuditoria.BUILD_CRIADA,
@@ -104,7 +114,7 @@ export class BuildsAdminController {
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {
-    const resultado = await this.buildsService.atualizar(id, dados);
+    const resultado = await this.catalogo.atualizar(id, dados);
     void this.auditoriaService.registrar({
       usuarioId: usuario?.id,
       acao: AcaoAuditoria.BUILD_ATUALIZADA,
@@ -114,6 +124,7 @@ export class BuildsAdminController {
     });
     return resultado;
   }
+
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @Papeis(PapelUsuario.ADMIN)
