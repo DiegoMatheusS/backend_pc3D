@@ -75,7 +75,7 @@ export class CriarProdutoDto {
 
   @IsOptional()
   @IsObject()
-  @IsSafeJsonObject({ maxDepth: 6, maxKeys: 160, maxArrayLength: 64 })
+  @IsSafeJsonObject({ maxDepth: 6, maxKeys: 1500, maxArrayLength: 300 })
   metadados?: Record<string, unknown>;
 
   @IsOptional()

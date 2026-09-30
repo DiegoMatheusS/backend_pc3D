@@ -1,0 +1,35 @@
+name: Catalog quality
+on:
+  pull_request:
+    paths:
+      - 'src/notebooks/**'
+      - 'src/builds/**'
+      - 'src/ia/**'
+      - 'src/chatbot-admin/**'
+      - 'src/produtos/**'
+      - 'prisma/**'
+      - '.github/workflows/catalog-quality.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/notebooks/**'
+      - 'prisma/**'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx prisma validate
+      - run: npx prisma generate
+      - run: npm run build
+      - run: npm test -- --runInBand

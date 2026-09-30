@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client';
-import { GrupoCategoriaProduto, TipoProduto } from '../generated/prisma/enums';
+import { GrupoCategoriaProduto, StatusOferta, TipoProduto } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { BuildsService } from './builds.service';
 import { AtualizarBuildDto } from './dtos/atualizar-build.dto';
@@ -83,6 +83,13 @@ export class BuildsCatalogoService {
   }
 
   async criar(dados: CriarBuildDto) {
+    if (dados.oferta) {
+      const parceiro = await this.prisma.parceiro.findFirst({
+        where: { id: dados.oferta.parceiroId, ativo: true }, select: { id: true },
+      });
+      if (!parceiro) throw new BadRequestException('Selecione uma loja ativa para a oferta do PC.');
+    }
+
     const componentes = dados.componentes ?? [];
     await this.validarVinculos(componentes);
     this.validarDescricaoParaPublicar(dados.publicado === true, dados.descricao, componentes.length);
@@ -102,6 +109,13 @@ export class BuildsCatalogoService {
             imagemHoverUrl: dados.imagemHoverUrl?.trim() || null,
             publicado: dados.publicado ?? false,
             ativo: dados.ativo ?? true,
+            ...(dados.oferta ? { ofertas: { create: {
+              parceiroId: dados.oferta.parceiroId,
+              preco: dados.oferta.preco,
+              urlOriginal: dados.oferta.urlOriginal,
+              urlAfiliada: dados.oferta.urlAfiliada ?? null,
+              status: StatusOferta.ATIVA,
+            } } } : {}),
           },
         },
         categoria: dados.categoria?.trim() || null,

@@ -348,6 +348,18 @@ export class NotebooksService {
     };
   }
 
+  async buscarPublicoPorSlug(slug: string) {
+    if (!slug || slug.length > 500) {
+      throw new NotFoundException('Notebook não encontrado.');
+    }
+    const notebook = await this.prisma.notebook.findFirst({
+      where: { produto: { slug, ativo: true, publicado: true } },
+      select: { id: true },
+    });
+    if (!notebook) throw new NotFoundException('Notebook não encontrado.');
+    return this.buscarPublico(notebook.id);
+  }
+
   async buscarPublico(id: number) {
     const notebook = await this.prisma.notebook.findUnique({
       where: { id },

@@ -38,6 +38,11 @@ export class NotebooksController {
     return this.notebooksService.listarPublicos(filtros);
   }
 
+  @Get('slug/:slug')
+  buscarPorSlug(@Param('slug') slug: string) {
+    return this.notebooksService.buscarPublicoPorSlug(slug);
+  }
+
   @Get(':id')
   buscar(@Param('id', ParsePositiveIntPipe) id: number) {
     return this.notebooksService.buscarPublico(id);

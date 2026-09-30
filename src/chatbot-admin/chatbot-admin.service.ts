@@ -748,7 +748,7 @@ export class ChatbotAdminService {
         ? resultadoIa.especificacoesEncontradas
         : {};
       const informacoes = Array.isArray(resultadoIa.informacoesProdutoEncontradas)
-        ? resultadoIa.informacoesProdutoEncontradas.slice(0, 40)
+        ? resultadoIa.informacoesProdutoEncontradas.slice(0, 300)
         : [];
       if (Object.keys(especificacoes).length > 0 || informacoes.length > 0) {
         payload.metadados = {

@@ -1,3 +1,4 @@
+import { LIMITE_URL_OFERTA } from '../../ofertas/utils/limite-url-oferta';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -5,6 +6,8 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
+  IsPositive,
   IsObject,
   IsOptional,
   IsString,
@@ -45,7 +48,19 @@ export class BuildComponenteDto {
   ordem?: number;
 }
 
+export class BuildOfertaDto {
+  @IsInt() @Min(1) parceiroId!: number;
+  @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() @Max(99_999_999.99) preco!: number;
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
+  @MaxLength(LIMITE_URL_OFERTA) urlOriginal!: string;
+  @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
+  @MaxLength(LIMITE_URL_OFERTA) urlAfiliada?: string;
+}
+
 export class CriarBuildDto {
+  @IsOptional() @ValidateNested() @Type(() => BuildOfertaDto)
+  oferta?: BuildOfertaDto;
   @IsString() @MinLength(2) @MaxLength(200) nome!: string;
   @IsOptional() @IsString() @MaxLength(100) marca?: string;
   @IsOptional() @IsString() @MaxLength(150) modelo?: string;

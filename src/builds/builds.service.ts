@@ -890,12 +890,13 @@ export class BuildsService {
   }
 
   async criar(dados: CriarBuildDto) {
+    const componentes = dados.componentes ?? [];
     if (dados.publicado === true) {
-      await this.validarPublicacaoBuild(dados.componentes);
+      await this.validarPublicacaoBuild(componentes);
     } else {
-      await this.validarComponentes(dados.componentes, false);
+      await this.validarComponentes(componentes, false);
     }
-    const consumo = await this.calcularConsumo(dados.componentes);
+    const consumo = await this.calcularConsumo(componentes);
     const categoria = await this.garantirCategoria();
     const slug = await this.criarSlugUnico(dados.nome);
 
@@ -914,6 +915,7 @@ export class BuildsService {
             imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
             publicado: dados.publicado ?? false,
             ativo: dados.ativo ?? true,
+
           },
         },
         categoria: dados.categoria?.trim() ?? null,
@@ -923,7 +925,7 @@ export class BuildsService {
           Prisma.InputJsonValue | undefined,
         ...consumo,
         componentes: {
-          create: dados.componentes.map((item, indice) => ({
+          create: componentes.map((item, indice) => ({
             hardwareId: item.hardwareId,
             categoria: item.categoria,
             quantidade: item.quantidade ?? 1,
