@@ -9,7 +9,6 @@ on:
       - 'src/sugestoes-ofertas/dtos/**'
       - 'prisma/migrations/**'
       - 'prisma/schema.prisma'
-      - 'scripts/aplicar-schema-urls-longas.mjs'
       - '.github/workflows/links-longos-todas-lojas.yml'
   push:
     branches: [main]
@@ -24,7 +23,21 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd 'pg_isready -U ci -d ci'
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
     steps:
@@ -34,14 +47,53 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      # Temporário enquanto o schema de 65 KB ainda precisa ser commitado.
-      - name: Verificar transformação requerida no modelo Prisma
+      - name: Exigir schema Prisma definitivo commitado
         run: |
-          node scripts/aplicar-schema-urls-longas.mjs
-          git diff --check -- prisma/schema.prisma
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs'
+          const schema = readFileSync('prisma/schema.prisma', 'utf8')
+          for (const [name, field] of [['Oferta', 'urlOriginal'], ['Oferta', 'urlAfiliada'], ['SugestaoOferta', 'urlOriginal'], ['ChatbotCadastroToken', 'url']]) {
+            const model = schema.split(`model ${name} {`)[1]?.split('\n}')[0]
+            if (!model || !new RegExp(`^\\s*${field}\\s+String\\??\\s+(?:@map\\("[^"]+"\\)\\s+)?@db\\.Text`, 'm').test(model)) {
+              throw new Error(`Schema não foi atualizado para ${name}.${field} @db.Text`)
+            }
+          }
+          const offer = schema.split('model Oferta {')[1]?.split('\n}')[0] ?? ''
+          if (offer.includes('@@unique([produtoId, parceiroId, urlOriginal])')) throw new Error('Índice antigo de URL ainda está no schema')
+          NODE
           npx prisma validate
           npx prisma generate
       - name: Testes de URLs Amazon e todos os parceiros
         run: npm test -- --runInBand ofertas/utils/normalizar-url-amazon.spec.ts ofertas/utils/limite-url-oferta.spec.ts
       - name: Compilar backend com novo schema
         run: npm run build
+      - name: Aplicar migrations reais em PostgreSQL limpo
+        run: npx prisma migrate deploy
+      - name: Validar colunas TEXT e índice único indexável
+        run: |
+          node <<'NODE'
+          const { Client } = require('pg')
+          ;(async () => {
+            const client = new Client({ connectionString: process.env.DATABASE_URL })
+            await client.connect()
+            try {
+              const { rows } = await client.query(`SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND ((table_name = 'ofertas' AND column_name IN ('url_original','url_afiliada')) OR (table_name = 'sugestoes_ofertas' AND column_name = 'url_original') OR (table_name = 'chatbot_cadastro_tokens' AND column_name = 'url'))`)
+              if (rows.length !== 4 || rows.some(row => row.data_type !== 'text')) throw new Error(`Colunas precisam ser TEXT: ${JSON.stringify(rows)}`)
+              const { rows: indexes } = await client.query(`SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'ofertas'`)
+              if (!indexes.some(row => row.indexdef.includes('UNIQUE INDEX') && row.indexdef.includes('sha256(') && row.indexdef.includes('url_original'))) throw new Error(`Índice SHA-256 das ofertas ausente: ${JSON.stringify(indexes)}`)
+              if (indexes.some(row => row.indexdef.includes('url_original') && !row.indexdef.includes('sha256(') && row.indexdef.includes('UNIQUE INDEX'))) throw new Error('Índice único antigo sobre URL completa ainda existe')
+              await client.query('BEGIN')
+              await client.query('CREATE TEMP TABLE url_index_probe (produto_id int, parceiro_id int, url_original text)')
+              await client.query("CREATE UNIQUE INDEX ON url_index_probe (produto_id, parceiro_id, sha256(convert_to(url_original, 'UTF8')))")
+              const url = `https://shopee.com.br/p?affiliate=${'a'.repeat(10000)}`
+              await client.query('INSERT INTO url_index_probe VALUES ($1,$2,$3)', [1,1,url])
+              try {
+                await client.query('INSERT INTO url_index_probe VALUES ($1,$2,$3)', [1,1,url])
+                throw new Error('URL duplicada não foi rejeitada')
+              } catch (err) {
+                if (err.code !== '23505') throw err
+              }
+              await client.query('ROLLBACK')
+            } finally { await client.end() }
+          })().catch(error => { console.error(error); process.exitCode = 1 })
+          NODE
