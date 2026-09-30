@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsInt,
   IsNumber,
@@ -15,6 +15,7 @@ import {
 } from 'class-validator';
 import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
 import { CriarHardwareDto } from '../../hardwares/dtos/criar-hardware.dto';
+import { normalizarUrlAmazon } from '../../ofertas/utils/normalizar-url-amazon';
 import { CriarEspecificacaoHeadsetDto } from '../../produtos/dtos/especificacoes/criar-especificacao-headset.dto';
 import { CriarEspecificacaoMonitorDto } from '../../produtos/dtos/especificacoes/criar-especificacao-monitor.dto';
 import { CriarEspecificacaoMouseDto } from '../../produtos/dtos/especificacoes/criar-especificacao-mouse.dto';
@@ -38,10 +39,12 @@ export class ParceiroOfertaExtensaoDto {
 }
 
 export class OfertaExtensaoDto {
+  @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   urlOriginal!: string;
 
+  @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)
   urlAfiliada!: string;
