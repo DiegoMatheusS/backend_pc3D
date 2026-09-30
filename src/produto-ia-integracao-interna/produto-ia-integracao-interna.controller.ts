@@ -55,18 +55,18 @@ export class ProdutoIaIntegracaoInternaController {
     this.validarChave(apiKey);
     const encontrado = await this.integracao.buscarItemExtensao(dados);
 
-    // Uma marca/modelo da CPU divulgada pelo anúncio não identifica o PC completo.
-    // Para desktops, só vinculamos automaticamente uma correspondência cujo
-    // nome integral também descreva exatamente o mesmo computador anunciado.
+    // A marca/modelo da CPU mencionada no anúncio não identifica o PC completo.
+    // PC montado só pode se vincular a um Produto existente do mesmo equipamento.
     if (this.tituloComputadorCompleto(dados.nome) && encontrado.status === 'EXISTENTE') {
       const nomeEncontrado = encontrado.item?.nome;
       if (
+        encontrado.tipo !== 'PRODUTO' ||
         !this.tituloComputadorCompleto(nomeEncontrado) ||
         this.normalizarTitulo(nomeEncontrado) !== this.normalizarTitulo(dados.nome)
       ) {
         return {
           status: 'AMBIGUO' as const,
-          motivo: 'O anúncio é de um computador completo. Não vincule a oferta automaticamente a um processador ou a uma configuração diferente; revise como PC montado.',
+          motivo: 'O anúncio é de um computador completo. Não vincule a oferta automaticamente a uma peça ou a uma configuração diferente; revise como PC montado.',
           candidatos: [],
         };
       }
