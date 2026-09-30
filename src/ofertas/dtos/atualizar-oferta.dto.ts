@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 import { StatusOferta } from '../../generated/prisma/enums';
 import { normalizarUrlAmazon } from '../utils/normalizar-url-amazon';
+import { LIMITE_URL_OFERTA } from '../utils/limite-url-oferta';
 
 export class AtualizarOfertaDto {
   @IsOptional() @IsString() @MaxLength(200) vendedorNome?: string | null;
@@ -26,7 +27,7 @@ export class AtualizarOfertaDto {
     require_protocol: true,
     disallow_auth: true,
   })
-  @MaxLength(500)
+  @MaxLength(LIMITE_URL_OFERTA)
   urlOriginal?: string;
   @Transform(({ value }) => normalizarUrlAmazon(value))
   @IsOptional()
@@ -35,7 +36,7 @@ export class AtualizarOfertaDto {
     require_protocol: true,
     disallow_auth: true,
   })
-  @MaxLength(500)
+  @MaxLength(LIMITE_URL_OFERTA)
   urlAfiliada?: string | null;
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
