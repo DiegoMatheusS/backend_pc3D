@@ -1,0 +1,47 @@
+name: Links longos todas as lojas
+
+on:
+  pull_request:
+    paths:
+      - 'src/ofertas/**'
+      - 'src/produtos/dtos/criar-oferta-inicial-produto.dto.ts'
+      - 'src/produto-ia-integracao-interna/dtos/importar-oferta-extensao-produto-ia.dto.ts'
+      - 'src/sugestoes-ofertas/dtos/**'
+      - 'prisma/migrations/**'
+      - 'prisma/schema.prisma'
+      - 'scripts/aplicar-schema-urls-longas.mjs'
+      - '.github/workflows/links-longos-todas-lojas.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/ofertas/**'
+      - 'prisma/schema.prisma'
+      - 'prisma/migrations/**'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Temporário enquanto o schema de 65 KB ainda precisa ser commitado.
+      - name: Verificar transformação requerida no modelo Prisma
+        run: |
+          node scripts/aplicar-schema-urls-longas.mjs
+          git diff --check -- prisma/schema.prisma
+          npx prisma validate
+          npx prisma generate
+      - name: Testes de URLs Amazon e todos os parceiros
+        run: npm test -- --runInBand ofertas/utils/normalizar-url-amazon.spec.ts ofertas/utils/limite-url-oferta.spec.ts
+      - name: Compilar backend com novo schema
+        run: npm run build
