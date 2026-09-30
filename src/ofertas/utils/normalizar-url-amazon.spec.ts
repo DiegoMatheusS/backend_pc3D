@@ -2,6 +2,8 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CriarOfertaDto } from '../dtos/criar-oferta.dto';
 import { AtualizarOfertaDto } from '../dtos/atualizar-oferta.dto';
+import { CriarOfertaInicialProdutoDto } from '../../produtos/dtos/criar-oferta-inicial-produto.dto';
+import { ImportarOfertaExtensaoProdutoIaDto } from '../../produto-ia-integracao-interna/dtos/importar-oferta-extensao-produto-ia.dto';
 import { normalizarUrlAmazon } from './normalizar-url-amazon';
 
 describe('normalizarUrlAmazon', () => {
@@ -49,5 +51,32 @@ describe('normalizarUrlAmazon', () => {
     });
     expect(update.urlOriginal).toHaveLength(create.urlOriginal.length);
     expect(await validate(update)).toEqual([]);
+  });
+
+  it('aceita oferta inicial com links Amazon longos no cadastro de produto', async () => {
+    const initial = plainToInstance(CriarOfertaInicialProdutoDto, {
+      parceiroId: 1,
+      preco: 899.99,
+      urlOriginal: noisyLink,
+      urlAfiliada: `${noisyLink}&tag=criabyte-20`,
+    });
+    expect(initial.urlOriginal).toBe('https://www.amazon.com.br/dp/B09VCHQHZ6');
+    expect(initial.urlAfiliada).toContain('tag=criabyte-20');
+    expect(await validate(initial)).toEqual([]);
+  });
+
+  it('aceita links Amazon longos enviados pelo endpoint aninhado da extensão', async () => {
+    const request = plainToInstance(ImportarOfertaExtensaoProdutoIaDto, {
+      hardwareExistenteId: 10,
+      parceiro: { nome: 'Amazon', dominio: 'amazon.com.br' },
+      oferta: {
+        urlOriginal: noisyLink,
+        urlAfiliada: `${noisyLink}&tag=criabyte-20`,
+        preco: 899.99,
+      },
+    });
+    expect(request.oferta.urlOriginal).toBe('https://www.amazon.com.br/dp/B09VCHQHZ6');
+    expect(request.oferta.urlAfiliada).toContain('tag=criabyte-20');
+    expect(await validate(request)).toEqual([]);
   });
 });
