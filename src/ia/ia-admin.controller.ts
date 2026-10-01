@@ -80,7 +80,11 @@ export class IaAdminController {
     @UsuarioAtual() usuario: UsuarioReq,
     @Req() req: Request,
   ) {
-    const resultado = await this.iaService.importarLinkAdmin(dados);
+    const normalizado: ImportarLinkIaDto = {
+      ...dados,
+      categoriaEsperada: dados.categoriaEsperada ?? dados.categoria,
+    };
+    const resultado = await this.iaService.importarLinkAdmin(normalizado);
     this.registrarUso(usuario?.id, 'IMPORTAR_LINK', req);
     return resultado;
   }
