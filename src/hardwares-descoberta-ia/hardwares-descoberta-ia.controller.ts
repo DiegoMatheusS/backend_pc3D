@@ -3,6 +3,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
   UseGuards,
@@ -15,6 +16,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { PapelGuard } from '../auth/papel.guard';
 import { Papeis } from '../auth/papeis.decorator';
 import { UsuarioAtual } from '../auth/usuario-atual.decorator';
+import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { AcaoAuditoria, PapelUsuario } from '../generated/prisma/enums';
 import {
   CadastrarHardwareDescobertoDto,
@@ -23,6 +25,7 @@ import {
 import { DescobrirHardwaresDto } from './dtos/descobrir-hardwares.dto';
 import { EnriquecerIaTecnicaDto } from './dtos/enriquecer-ia-tecnica.dto';
 import { EnriquecerMetaAiWhatsappDto } from './dtos/enriquecer-meta-ai-whatsapp.dto';
+import { HardwareImageSearchService } from './hardware-image-search.service';
 import { HardwaresDescobertaIaService } from './hardwares-descoberta-ia.service';
 
 type UsuarioReq = { id: number; papel: PapelUsuario } | null;
@@ -34,6 +37,7 @@ type UsuarioReq = { id: number; papel: PapelUsuario } | null;
 export class HardwaresDescobertaIaController {
   constructor(
     private readonly service: HardwaresDescobertaIaService,
+    private readonly imageSearchService: HardwareImageSearchService,
     private readonly auditoriaService: AuditoriaService,
   ) {}
 
@@ -59,6 +63,33 @@ export class HardwaresDescobertaIaController {
         jaCadastrados: resultado.jaCadastrados,
         novos: resultado.novos,
         nenhumRegistroCriado: true,
+      },
+      ip: req.ip,
+    });
+
+    return resultado;
+  }
+
+  @Post(':hardwareId/imagem')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { limit: 8, ttl: 60_000 } })
+  async buscarImagem(
+    @Param('hardwareId', ParsePositiveIntPipe) hardwareId: number,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.imageSearchService.buscarESalvar(hardwareId);
+
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.HARDWARE_ATUALIZADO,
+      entidade: 'Hardware',
+      entidadeId: hardwareId,
+      dadosNovos: {
+        origem: 'BUSCA_IMAGEM_IA',
+        imagemUrl: resultado.imagemUrl,
+        fonte: resultado.fonte ?? null,
+        urlFonte: resultado.urlFonte ?? null,
       },
       ip: req.ip,
     });
