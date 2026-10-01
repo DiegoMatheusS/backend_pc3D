@@ -39,6 +39,8 @@ export class BuildListingAnalysisService {
 
     // Restrição por tokens de modelo (B550M, 5600G, RTX 4060 etc.) para
     // procurar no catálogo sem transferir todos os hardwares à ProdutoIA.
+    // Alguns cadastros antigos possuem o modelo completo somente em `nome`,
+    // então consultamos os dois campos antes de enviar os candidatos à IA.
     const tokens = [...new Set(
       (titulo + ' ' + descricao).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase().match(/\b[a-z0-9]{3,}\b/g) ?? [],
@@ -48,7 +50,10 @@ export class BuildListingAnalysisService {
           where: {
             ativo: true,
             categoria: { in: CATEGORIAS_VINCULAVEIS },
-            OR: tokens.map((token) => ({ modelo: { contains: token, mode: 'insensitive' as const } })),
+            OR: tokens.flatMap((token) => [
+              { modelo: { contains: token, mode: 'insensitive' as const } },
+              { nome: { contains: token, mode: 'insensitive' as const } },
+            ]),
           },
           select: { id: true, nome: true, marca: true, modelo: true, categoria: true },
           orderBy: { id: 'desc' },
