@@ -1,10 +1,13 @@
 import {
+  BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -17,12 +20,18 @@ import { ParseSlugPipe } from '../common/pipes/parse-slug.pipe';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
-import { AcaoAuditoria, PapelUsuario } from '../generated/prisma/enums';
+import { Prisma } from '../generated/prisma/client';
+import {
+  AcaoAuditoria,
+  PapelUsuario,
+  TipoProduto,
+} from '../generated/prisma/enums';
 import { AuthGuard } from '../auth/auth.guard';
 import { PapelGuard } from '../auth/papel.guard';
 import { Papeis } from '../auth/papeis.decorator';
 import { UsuarioAtual } from '../auth/usuario-atual.decorator';
 import { AuditoriaService } from '../auditoria/auditoria.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { AtualizarCategoriaProdutoDto } from './dtos/atualizar-categoria-produto.dto';
 import { AtualizarProdutoDto } from './dtos/atualizar-produto.dto';
 import { CriarCategoriaProdutoDto } from './dtos/criar-categoria-produto.dto';
@@ -75,6 +84,7 @@ export class ProdutosAdminController {
   constructor(
     private readonly produtosService: ProdutosService,
     private readonly auditoriaService: AuditoriaService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get()
@@ -245,6 +255,60 @@ export class ProdutosAdminController {
       ip: req.ip,
     });
     return resultado;
+  }
+
+  @Delete(':id/permanente')
+  @HttpCode(HttpStatus.OK)
+  @Papeis(PapelUsuario.ADMIN)
+  async excluirPermanentemente(
+    @Param('id', ParsePositiveIntPipe) id: number,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const produto = await this.prisma.produto.findUnique({
+      where: { id },
+      select: { id: true, nome: true, tipo: true, ativo: true },
+    });
+
+    if (!produto) throw new NotFoundException('Produto não encontrado.');
+    if (produto.ativo) {
+      throw new BadRequestException(
+        'Arquive o Produto antes de excluí-lo definitivamente.',
+      );
+    }
+    if (
+      produto.tipo !== TipoProduto.GENERICO &&
+      produto.tipo !== TipoProduto.HARDWARE
+    ) {
+      throw new BadRequestException(
+        'Este Produto possui cadastro especializado de Notebook ou PC Montado e não pode ser excluído por esta rota.',
+      );
+    }
+
+    try {
+      await this.prisma.produto.delete({ where: { id } });
+    } catch (erro: unknown) {
+      if (
+        erro instanceof Prisma.PrismaClientKnownRequestError &&
+        erro.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'O Produto possui vínculos que impedem a exclusão definitiva. Remova ou ajuste esses vínculos antes de tentar novamente.',
+        );
+      }
+      throw erro;
+    }
+
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.PRODUTO_REMOVIDO,
+      entidade: 'Produto',
+      entidadeId: id,
+      dadosNovos: { remocaoPermanente: true, nome: produto.nome },
+      ip: req.ip,
+    });
+
+    return { mensagem: 'Produto excluído definitivamente.' };
   }
 
   @Delete(':id')
