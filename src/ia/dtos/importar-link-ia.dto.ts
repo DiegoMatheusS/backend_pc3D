@@ -18,4 +18,12 @@ export class ImportarLinkIaDto {
   @IsOptional()
   @IsIn(CATEGORIAS_IMPORTACAO_IA)
   categoriaEsperada?: CategoriaImportacaoIa;
+
+  /**
+   * Compatibilidade com clientes administrativos que enviaram historicamente
+   * o mesmo valor como `categoria`. O controller normaliza para categoriaEsperada.
+   */
+  @IsOptional()
+  @IsIn(CATEGORIAS_IMPORTACAO_IA)
+  categoria?: CategoriaImportacaoIa;
 }
