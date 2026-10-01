@@ -34,6 +34,17 @@ type CandidatoImagem = {
   bruto: Registro;
 };
 
+type ImagemEncontrada = {
+  imagemUrl: string;
+  fonte: string | null;
+  urlOrigem: string | null;
+  nome: string;
+  marca: string;
+  modelo: string;
+  score: number;
+  criterio?: string | null;
+};
+
 @Injectable()
 export class HardwareImageSearchService {
   constructor(private readonly hardwaresService: HardwaresService) {}
@@ -240,6 +251,89 @@ export class HardwareImageSearchService {
     };
   }
 
+  private async buscarImagemEmOfertasIdenticas(hardware: {
+    nome: string;
+    marca: string;
+    modelo: string;
+    mpn?: string | null;
+    gtin?: string | null;
+  }): Promise<ImagemEncontrada | null> {
+    const modelo = this.texto(hardware.modelo);
+    const mpn = this.texto(hardware.mpn);
+    const gtin = this.texto(hardware.gtin);
+    if (!modelo && !mpn && !gtin) return null;
+
+    let resposta: Registro;
+    try {
+      resposta = await this.chamarProdutoIa(
+        '/ofertas/produto-identico',
+        {
+          nome: hardware.nome,
+          marca: this.texto(hardware.marca) || null,
+          modelo: modelo || null,
+          mpn: mpn || null,
+          gtin: gtin || null,
+          limitePorLoja: 3,
+        },
+        55_000,
+      );
+    } catch (erro) {
+      if (erro instanceof BadGatewayException) return null;
+      throw erro;
+    }
+
+    const ofertas = Array.isArray(resposta.ofertas) ? resposta.ofertas : [];
+    for (const bruto of ofertas) {
+      if (!this.ehRegistro(bruto)) continue;
+      const imagemOriginal = this.texto(bruto.imagemUrl);
+      if (!imagemOriginal) continue;
+      try {
+        const imagemUrl = await this.validarImagemPublica(imagemOriginal);
+        return {
+          imagemUrl,
+          fonte:
+            this.texto(bruto.fonte) ||
+            this.texto(bruto.marketplace) ||
+            'OFERTA_PRODUTO_IDENTICO',
+          urlOrigem: this.texto(bruto.urlOriginal) || null,
+          nome: this.texto(bruto.nomeEncontrado) || hardware.nome,
+          marca: hardware.marca,
+          modelo: hardware.modelo,
+          score: 200,
+          criterio: this.texto(bruto.criterioIdentidade) || null,
+        };
+      } catch (erro) {
+        if (erro instanceof BadGatewayException) continue;
+        throw erro;
+      }
+    }
+    return null;
+  }
+
+  private async salvarImagem(
+    hardwareId: number,
+    encontrada: ImagemEncontrada,
+  ) {
+    const atualizado = await this.hardwaresService.atualizar(hardwareId, {
+      imagemUrl: encontrada.imagemUrl,
+    });
+    return {
+      status: 'IMAGEM_ATUALIZADA' as const,
+      hardwareId,
+      imagemUrl: encontrada.imagemUrl,
+      fonte: encontrada.fonte,
+      urlFonte: encontrada.urlOrigem,
+      correspondencia: {
+        nome: encontrada.nome,
+        marca: encontrada.marca,
+        modelo: encontrada.modelo,
+        score: encontrada.score,
+        criterio: encontrada.criterio ?? null,
+      },
+      hardware: atualizado,
+    };
+  }
+
   async buscarESalvar(hardwareId: number) {
     const hardware = await this.hardwaresService.buscarPorIdAdmin(hardwareId);
     if (!CATEGORIAS_COM_BUSCA_TECNICA.has(hardware.categoria)) {
@@ -273,12 +367,6 @@ export class HardwareImageSearchService {
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
 
-    if (!candidatos.length) {
-      throw new BadGatewayException(
-        'Não encontrei uma correspondência forte de marca/modelo para buscar a imagem.',
-      );
-    }
-
     for (const candidato of candidatos) {
       try {
         const detalhado = candidato.imagemUrl
@@ -291,31 +379,30 @@ export class HardwareImageSearchService {
         if (!detalhado.imagemUrl) continue;
 
         const imagemUrl = await this.validarImagemPublica(detalhado.imagemUrl);
-        const atualizado = await this.hardwaresService.atualizar(hardwareId, {
-          imagemUrl,
-        });
-        return {
-          status: 'IMAGEM_ATUALIZADA' as const,
-          hardwareId,
+        return this.salvarImagem(hardwareId, {
           imagemUrl,
           fonte: detalhado.fonte,
-          urlFonte: detalhado.urlOrigem,
-          correspondencia: {
-            nome: candidato.nome,
-            marca: candidato.marca,
-            modelo: candidato.modelo,
-            score: candidato.score,
-          },
-          hardware: atualizado,
-        };
+          urlOrigem: detalhado.urlOrigem,
+          nome: candidato.nome,
+          marca: candidato.marca,
+          modelo: candidato.modelo,
+          score: candidato.score,
+        });
       } catch (erro) {
         if (erro instanceof BadGatewayException) continue;
         throw erro;
       }
     }
 
+    const imagemOferta = await this.buscarImagemEmOfertasIdenticas(hardware);
+    if (imagemOferta) {
+      return this.salvarImagem(hardwareId, imagemOferta);
+    }
+
     throw new BadGatewayException(
-      'Encontrei o hardware, mas nenhuma imagem válida pôde ser cadastrada.',
+      candidatos.length
+        ? 'Encontrei o hardware, mas as fontes técnicas e as ofertas idênticas não retornaram uma imagem válida.'
+        : 'Não encontrei uma correspondência forte com imagem para este hardware.',
     );
   }
 }
