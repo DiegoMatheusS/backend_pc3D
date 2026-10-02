@@ -82,6 +82,14 @@ export class IaAdminController {
     resultado: unknown,
   ): Promise<unknown> {
     if (!this.ehShopee(url) || !ehRegistro(resultado)) return resultado;
+    const produtoIa = resultado.resultadoProdutoIa;
+    if (
+      ehRegistro(produtoIa) &&
+      ehRegistro(produtoIa.politicaColeta) &&
+      produtoIa.politicaColeta.scrapingComplementarExecutado === true
+    ) {
+      return resultado;
+    }
 
     const baseUrl = process.env.PRODUTO_IA_URL?.trim();
     const key = process.env.PRODUTO_IA_API_KEY?.trim();
@@ -99,7 +107,8 @@ export class IaAdminController {
       if (!resposta.ok) return resultado;
 
       const bruto: unknown = await resposta.json();
-      if (!ehRegistro(bruto) || !ehRegistro(bruto.detalhesPagina)) return resultado;
+      if (!ehRegistro(bruto) || !ehRegistro(bruto.detalhesPagina))
+        return resultado;
       const detalhes = bruto.detalhesPagina;
       if (detalhes.ok !== true) return resultado;
 

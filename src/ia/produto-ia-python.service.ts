@@ -67,6 +67,7 @@ export type OpcoesProdutoIa = {
   enrich?: boolean;
   criabytePlan?: boolean;
   noBrowser?: boolean;
+  detalharPagina?: boolean;
   urlAfiliada?: string;
 };
 
@@ -542,6 +543,9 @@ export class ProdutoIaPythonService {
           enrich: opcoes.enrich ?? false,
           criabytePlan: opcoes.criabytePlan ?? false,
           noBrowser: opcoes.noBrowser ?? false,
+          ...(opcoes.detalharPagina !== undefined
+            ? { detalharPagina: opcoes.detalharPagina }
+            : {}),
         }),
         signal: controller.signal,
       });
@@ -595,4 +599,3 @@ export class ProdutoIaPythonService {
     }
   }
 }
-
