@@ -2038,8 +2038,7 @@ export class IaService {
             preco: melhorOferta ? Number(melhorOferta.preco) : undefined,
             ofertaId: melhorOferta?.id,
             loja: melhorOferta?.parceiro.nome,
-            linkCompra:
-              melhorOferta?.urlAfiliada ?? melhorOferta?.urlOriginal,
+            linkCompra: melhorOferta?.urlAfiliada ?? melhorOferta?.urlOriginal,
             modelo3dUrl,
             possuiModelo3D: Boolean(modelo3dUrl),
             representacao3D: modelo3dUrl
@@ -2083,8 +2082,7 @@ export class IaService {
           preco: melhorOferta ? Number(melhorOferta.preco) : undefined,
           ofertaId: melhorOferta?.id,
           loja: melhorOferta?.parceiro.nome,
-          linkCompra:
-            melhorOferta?.urlAfiliada ?? melhorOferta?.urlOriginal,
+          linkCompra: melhorOferta?.urlAfiliada ?? melhorOferta?.urlOriginal,
           modelo3dUrl,
           possuiModelo3D: Boolean(modelo3dUrl),
           representacao3D: modelo3dUrl
@@ -3403,9 +3401,10 @@ Ao final retorne também:
     };
   }
 
-  private async montarPayloadPcMontadoImportado(
-    normalizacao: { camposRaiz: Record<string, unknown>; especificacoesNormalizadas: Record<string, unknown> },
-  ) {
+  private async montarPayloadPcMontadoImportado(normalizacao: {
+    camposRaiz: Record<string, unknown>;
+    especificacoesNormalizadas: Record<string, unknown>;
+  }) {
     const raiz = normalizacao.camposRaiz;
     const specs = normalizacao.especificacoesNormalizadas;
     const componentesBrutos = Array.isArray(specs.componentes)
@@ -4132,6 +4131,7 @@ Ao final retorne também:
     const resultado = await this.produtoIaPython.importarUrl(
       dados.url,
       dados.categoriaEsperada,
+      { detalharPagina: true },
     );
 
     const categoriaTexto =
@@ -4177,8 +4177,11 @@ Ao final retorne também:
       } else if (categoriaEscolhida === 'PC_MONTADO') {
         cadastroSugerido = await this.montarPayloadPcMontadoImportado({
           camposRaiz: payloadParcial,
-          especificacoesNormalizadas: this.ehRegistro(resultado.especificacoesEncontradas)
-            ? resultado.especificacoesEncontradas : {},
+          especificacoesNormalizadas: this.ehRegistro(
+            resultado.especificacoesEncontradas,
+          )
+            ? resultado.especificacoesEncontradas
+            : {},
         });
       } else {
         const slugsProduto: Partial<Record<CategoriaImportacaoIa, string>> = {

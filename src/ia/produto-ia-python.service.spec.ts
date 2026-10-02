@@ -29,15 +29,38 @@ describe('proxy de enriquecimento técnico', () => {
       undefined,
       {
         enrich: true,
+        detalharPagina: true,
         urlAfiliada: 'https://www.mercadolivre.com.br/sec/afiliado',
       },
     );
 
     const request = fetchMock.mock.calls[0]?.[1];
-    const body = JSON.parse(String(request?.body ?? '{}')) as Record<string, unknown>;
+    const body = JSON.parse(
+      typeof request?.body === 'string' ? request.body : '{}',
+    ) as Record<string, unknown>;
     expect(body.urlAfiliada).toBe(
       'https://www.mercadolivre.com.br/sec/afiliado',
     );
+    expect(body.detalharPagina).toBe(true);
+  });
+
+  it('mantém a consulta comercial sem coleta complementar por padrão', async () => {
+    process.env.PRODUTO_IA_URL = 'https://ia.example.test';
+    process.env.PRODUTO_IA_API_KEY = 'test';
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ payloadParcialBackend: { nome: 'PC' } }),
+          { status: 200 },
+        ),
+      );
+    await new ProdutoIaPythonService().importarUrl('https://loja.example/pc');
+    const rawBody = fetchMock.mock.calls[0]?.[1]?.body;
+    const body = JSON.parse(
+      typeof rawBody === 'string' ? rawBody : '{}',
+    ) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('detalharPagina');
   });
 
   it('preserva a mensagem estruturada da API Python', async () => {
