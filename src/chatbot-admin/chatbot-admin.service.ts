@@ -702,6 +702,7 @@ export class ChatbotAdminService {
       enrich: true,
       criabytePlan: true,
       noBrowser: false,
+      detalharPagina: true,
       urlAfiliada: urlAfiliadaValidada?.toString(),
     };
     let resultadoIa = await this.produtoIa.importarUrl(
