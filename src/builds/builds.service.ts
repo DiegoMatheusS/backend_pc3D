@@ -1,3 +1,4 @@
+import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import {
   BadRequestException,
   Injectable,
@@ -900,41 +901,43 @@ export class BuildsService {
     const categoria = await this.garantirCategoria();
     const slug = await this.criarSlugUnico(dados.nome);
 
-    return this.prisma.build.create({
-      data: {
-        produto: {
-          create: {
-            categoriaId: categoria.id,
-            tipo: TipoProduto.BUILD,
-            nome: dados.nome.trim(),
-            slug,
-            marca: dados.marca?.trim() ?? null,
-            modelo: dados.modelo?.trim() ?? null,
-            descricao: dados.descricao?.trim() ?? null,
-            imagemUrl: dados.imagemUrl?.trim() ?? null,
-            imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
-            publicado: dados.publicado ?? false,
-            ativo: dados.ativo ?? true,
-
+    return this.prisma.$transaction(async (tx) => {
+      await assertCatalogIdentityAvailable(tx, dados);
+      return tx.build.create({
+        data: {
+          produto: {
+            create: {
+              categoriaId: categoria.id,
+              tipo: TipoProduto.BUILD,
+              nome: dados.nome.trim(),
+              slug,
+              marca: dados.marca?.trim() ?? null,
+              modelo: dados.modelo?.trim() ?? null,
+              descricao: dados.descricao?.trim() ?? null,
+              imagemUrl: dados.imagemUrl?.trim() ?? null,
+              imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
+              publicado: dados.publicado ?? false,
+              ativo: dados.ativo ?? true,
+            },
+          },
+          categoria: dados.categoria?.trim() ?? null,
+          finalidade: dados.finalidade?.trim() ?? null,
+          resolucaoRecomendada: dados.resolucaoRecomendada?.trim() ?? null,
+          configuracao3D: dados.configuracao3D as
+            Prisma.InputJsonValue | undefined,
+          ...consumo,
+          componentes: {
+            create: componentes.map((item, indice) => ({
+              hardwareId: item.hardwareId,
+              categoria: item.categoria,
+              quantidade: item.quantidade ?? 1,
+              posicao: item.posicao ?? null,
+              ordem: item.ordem ?? indice,
+            })),
           },
         },
-        categoria: dados.categoria?.trim() ?? null,
-        finalidade: dados.finalidade?.trim() ?? null,
-        resolucaoRecomendada: dados.resolucaoRecomendada?.trim() ?? null,
-        configuracao3D: dados.configuracao3D as
-          Prisma.InputJsonValue | undefined,
-        ...consumo,
-        componentes: {
-          create: componentes.map((item, indice) => ({
-            hardwareId: item.hardwareId,
-            categoria: item.categoria,
-            quantidade: item.quantidade ?? 1,
-            posicao: item.posicao ?? null,
-            ordem: item.ordem ?? indice,
-          })),
-        },
-      },
-      include: this.includeDetalhado(),
+        include: this.includeDetalhado(),
+      });
     });
   }
 

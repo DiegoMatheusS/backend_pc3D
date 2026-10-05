@@ -1,3 +1,4 @@
+import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import { createHash } from 'node:crypto';
 import {
   obterCabecalhoHttp,
@@ -839,26 +840,6 @@ export class ProdutosService {
       );
     }
 
-    const duplicado = await this.prisma.produto.findFirst({
-      where: {
-        OR: [
-          ...(hardware.mpn ? [{ mpn: hardware.mpn }] : []),
-          ...(hardware.gtin ? [{ gtin: hardware.gtin }] : []),
-          {
-            marca: { equals: hardware.marca, mode: 'insensitive' },
-            modelo: { equals: hardware.modelo, mode: 'insensitive' },
-          },
-        ],
-      },
-      select: { id: true, nome: true },
-    });
-
-    if (duplicado) {
-      throw new ConflictException(
-        `Já existe o Produto ${duplicado.id} — ${duplicado.nome}. Revise o cadastro antes de criar outro Produto comercial.`,
-      );
-    }
-
     const categoriaProduto = this.dadosCategoriaProdutoHardware(
       hardware.categoria,
     );
@@ -869,6 +850,13 @@ export class ProdutosService {
 
     try {
       const produtoId = await this.prisma.$transaction(async (tx) => {
+        await assertCatalogIdentityAvailable(
+          tx,
+          { ...hardware, nome },
+          {
+            hardwareOriginId: hardware.id,
+          },
+        );
         const categoria = await tx.categoriaProduto.upsert({
           where: { slug: categoriaProduto.slug },
           update: {},
@@ -964,42 +952,13 @@ export class ProdutosService {
       }
     }
 
-    const duplicado = await this.prisma.produto.findFirst({
-      where: {
-        OR: [
-          ...(dados.mpn?.trim() ? [{ mpn: dados.mpn.trim() }] : []),
-          ...(dados.gtin?.trim() ? [{ gtin: dados.gtin.trim() }] : []),
-          ...(dados.marca?.trim() && dados.modelo?.trim()
-            ? [
-                {
-                  marca: {
-                    equals: dados.marca.trim(),
-                    mode: 'insensitive' as const,
-                  },
-                  modelo: {
-                    equals: dados.modelo.trim(),
-                    mode: 'insensitive' as const,
-                  },
-                },
-              ]
-            : []),
-        ],
-      },
-      select: { id: true, nome: true, slug: true },
-    });
-
-    if (duplicado) {
-      throw new ConflictException(
-        `Possível produto duplicado: ID ${duplicado.id} — ${duplicado.nome}. Cadastre uma nova oferta no produto existente ou revise MPN/GTIN/modelo.`,
-      );
-    }
-
     const slug = await this.criarSlugUnico(
       `${dados.marca ?? ''} ${dados.modelo ?? ''} ${dados.nome}`,
     );
 
     try {
       const produtoId = await this.prisma.$transaction(async (tx) => {
+        await assertCatalogIdentityAvailable(tx, dados);
         const produto = await tx.produto.create({
           data: {
             categoriaId: dados.categoriaId,
