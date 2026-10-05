@@ -58,7 +58,7 @@ export class ProdutoImagemService {
     } catch (erro) {
       if (erro instanceof BadGatewayException) throw erro;
       throw new BadGatewayException(
-        erro instanceof Error && erro.name === 'AbortError'
+        controller.signal.aborted || (registro(erro) && erro.name === 'AbortError')
           ? 'Tempo esgotado ao buscar imagem. Tente novamente.'
           : 'Não foi possível obter as imagens das lojas. Tente novamente.',
       );
