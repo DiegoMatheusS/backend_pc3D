@@ -398,20 +398,7 @@ export class HardwaresDescobertaIaService {
     const limite = Math.min(Math.max(dados.limite ?? 50, 1), 100);
     const pagina = Math.max(dados.pagina ?? 1, 1);
     const marca = dados.marca?.trim() || undefined;
-
-    const resultadoIa = await this.produtoIa.descobrirHardwares({
-      categoria: dados.categoria,
-      marca,
-      limite,
-      pagina,
-    });
-
-    const itensBrutos = this.extrairItens(resultadoIa);
-    if (itensBrutos.length === 0 && resultadoIa.erro) {
-      throw new BadGatewayException(
-        `A Produto IA não conseguiu descobrir Hardwares: ${resultadoIa.erro}`,
-      );
-    }
+    const consulta = dados.consulta?.trim() || undefined;
 
     const existentes = await this.prisma.hardware.findMany({
       select: {
@@ -425,9 +412,32 @@ export class HardwaresDescobertaIaService {
       },
     });
 
+    const resultadoIa = await this.produtoIa.descobrirHardwares({
+      categoria: dados.categoria,
+      marca,
+      consulta,
+      limite,
+      pagina,
+      hardwaresCadastrados: existentes
+        .filter((hardware) => hardware.categoria === dados.categoria)
+        .map(({ nome, marca, modelo }) => ({ nome, marca, modelo })),
+    });
+
+    const itensBrutos = this.extrairItens(resultadoIa);
+    if (itensBrutos.length === 0 && resultadoIa.erro) {
+      throw new BadGatewayException(
+        `A Produto IA não conseguiu descobrir Hardwares: ${resultadoIa.erro}`,
+      );
+    }
+
     const novos: CandidatoNormalizado[] = [];
     const chavesNovas = new Set<string>();
-    let jaCadastrados = 0;
+    const ignoradosAntesDaPagina = Number.isFinite(
+      resultadoIa.jaCadastradosIgnorados,
+    )
+      ? Math.max(0, Math.floor(resultadoIa.jaCadastradosIgnorados!))
+      : 0;
+    let jaCadastrados = ignoradosAntesDaPagina;
     let duplicadosNaBusca = 0;
     let descartadosInvalidos = 0;
 
@@ -482,9 +492,10 @@ export class HardwaresDescobertaIaService {
     return {
       categoria: dados.categoria,
       marca: marca ?? null,
+      consulta: consulta ?? null,
       pagina,
       limite,
-      totalEncontrados: itensBrutos.length,
+      totalEncontrados: itensBrutos.length + ignoradosAntesDaPagina,
       jaCadastrados,
       duplicadosNaBusca,
       descartadosInvalidos,
@@ -497,6 +508,11 @@ export class HardwaresDescobertaIaService {
             ? pagina + 1
             : null,
       temMais: resultadoIa.temMais ?? null,
+      exclusaoAntesDaPaginacao: resultadoIa.exclusaoAntesDaPaginacao === true,
+      limiteCandidatos: resultadoIa.limiteCandidatos ?? null,
+      limiteBuscaAtingido: resultadoIa.limiteBuscaAtingido === true,
+      buscaParcial: resultadoIa.buscaParcial === true,
+      fontesConsultadas: resultadoIa.fontesConsultadas ?? [],
       servicoProdutoIa: resultadoIa.servicoProdutoIa ?? null,
       nenhumRegistroCriado: true,
     };

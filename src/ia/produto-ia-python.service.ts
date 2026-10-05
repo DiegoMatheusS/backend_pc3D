@@ -47,6 +47,16 @@ export type ResultadoDescobertaHardwareProdutoIa = {
   pagina?: number | null;
   proximaPagina?: number | null;
   temMais?: boolean | null;
+  jaCadastradosIgnorados?: number;
+  exclusaoAntesDaPaginacao?: boolean;
+  limiteCandidatos?: number;
+  limiteBuscaAtingido?: boolean;
+  buscaParcial?: boolean;
+  fontesConsultadas?: Array<{
+    fonte: string;
+    encontrados?: number;
+    erro?: string | null;
+  }>;
   erro?: string | null;
   servicoProdutoIa?: {
     versao?: string | null;
@@ -59,6 +69,8 @@ export type ResultadoDescobertaHardwareProdutoIa = {
 export type OpcoesDescobertaHardwareProdutoIa = {
   categoria: string;
   marca?: string;
+  consulta?: string;
+  hardwaresCadastrados?: Array<{ nome: string; marca: string; modelo: string }>;
   limite?: number;
   pagina?: number;
 };
@@ -141,6 +153,8 @@ export class ProdutoIaPythonService {
         body: JSON.stringify({
           categoria: opcoes.categoria,
           marca: opcoes.marca ?? null,
+          consulta: opcoes.consulta ?? null,
+          hardwaresCadastrados: opcoes.hardwaresCadastrados ?? [],
           limite: opcoes.limite ?? 50,
           pagina: opcoes.pagina ?? 1,
         }),
