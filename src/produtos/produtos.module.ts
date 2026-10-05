@@ -11,6 +11,8 @@ import {
   ProdutosController,
 } from './produtos.controller';
 import { ProdutosService } from './produtos.service';
+import { ProdutoImagemAdminController } from './produto-imagem.controller';
+import { ProdutoImagemService } from './produto-imagem.service';
 
 @Module({
   imports: [AuthModule, AuditoriaModule],
@@ -18,10 +20,16 @@ import { ProdutosService } from './produtos.service';
     ProdutosController,
     ProdutoLikesController,
     ProdutosAdminController,
+    ProdutoImagemAdminController,
     CategoriasProdutosController,
     CategoriasProdutosAdminController,
   ],
-  providers: [ProdutosService, ProdutoLikesService, PapelGuard],
+  providers: [
+    ProdutosService,
+    ProdutoLikesService,
+    ProdutoImagemService,
+    PapelGuard,
+  ],
   exports: [ProdutosService],
 })
 export class ProdutosModule {}
