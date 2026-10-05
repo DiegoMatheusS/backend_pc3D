@@ -15,6 +15,7 @@ import { Papeis } from '../auth/papeis.decorator';
 import { PapelUsuario } from '../generated/prisma/enums';
 import { ParsePositiveIntPipe } from '../common/pipes/parse-positive-int.pipe';
 import { BuscaOfertasService } from './busca-ofertas.service';
+import { FichaTecnicaOfertasService } from './ficha-tecnica-ofertas.service';
 import { FiltrarBuscaOfertasDto } from './dtos/filtrar-busca-ofertas.dto';
 
 @ApiTags('Busca de Ofertas')
@@ -22,7 +23,10 @@ import { FiltrarBuscaOfertasDto } from './dtos/filtrar-busca-ofertas.dto';
 @UseGuards(AuthGuard, PapelGuard)
 @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
 export class BuscaOfertasController {
-  constructor(private readonly buscaOfertasService: BuscaOfertasService) {}
+  constructor(
+    private readonly buscaOfertasService: BuscaOfertasService,
+    private readonly fichaTecnicaOfertasService: FichaTecnicaOfertasService,
+  ) {}
 
   @Get()
   listar(@Query() filtros: FiltrarBuscaOfertasDto) {
@@ -42,9 +46,19 @@ export class BuscaOfertasController {
 
   @Post('produto/:id/encontrar-e-cadastrar')
   @HttpCode(HttpStatus.OK)
-  encontrarECadastrarOfertasIdenticas(
+  async encontrarECadastrarOfertasIdenticas(
     @Param('id', ParsePositiveIntPipe) id: number,
   ) {
-    return this.buscaOfertasService.encontrarECadastrarOfertasIdenticas(id);
+    const resultado =
+      await this.buscaOfertasService.encontrarECadastrarOfertasIdenticas(id);
+    const fichaTecnica = await this.fichaTecnicaOfertasService.enriquecer(
+      id,
+      resultado,
+    );
+
+    return {
+      ...resultado,
+      ...fichaTecnica,
+    };
   }
 }
