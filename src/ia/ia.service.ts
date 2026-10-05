@@ -4289,14 +4289,68 @@ Ao final retorne também:
     const gtin =
       typeof payloadParcial.gtin === 'string' ? payloadParcial.gtin.trim() : '';
 
-    let produtoExistente = gtin
-      ? await this.prisma.produto.findFirst({
-          where: { gtin },
+    // Hardware técnico pode existir sem Produto comercial. Consultar só
+    // Produtos perde essas peças e direciona a descoberta para um novo cadastro.
+    let hardwareExistente: { id: number; produtoId: number | null } | null =
+      null;
+    let criterioHardware: 'GTIN' | 'MPN_MARCA' | 'MARCA_MODELO' | null = null;
+    let hardwaresAmbiguos: Array<{ id: number; produtoId: number | null }> = [];
+    if (
+      categoriaEscolhida &&
+      ehCategoriaHardwareImportacao(categoriaEscolhida)
+    ) {
+      const categoria = categoriaEscolhida;
+      const select = { id: true, produtoId: true } as const;
+      if (gtin) {
+        hardwareExistente = await this.prisma.hardware.findFirst({
+          where: { categoria, gtin },
+          select,
+        });
+        if (hardwareExistente) criterioHardware = 'GTIN';
+      }
+      if (!hardwareExistente && mpn && marca) {
+        hardwareExistente = await this.prisma.hardware.findFirst({
+          where: {
+            categoria,
+            mpn,
+            marca: { equals: marca, mode: 'insensitive' },
+          },
+          select,
+        });
+        if (hardwareExistente) criterioHardware = 'MPN_MARCA';
+      }
+      if (!hardwareExistente && marca && modelo) {
+        const candidatos = await this.prisma.hardware.findMany({
+          where: {
+            categoria,
+            marca: { equals: marca, mode: 'insensitive' },
+            modelo: { equals: modelo, mode: 'insensitive' },
+          },
+          select,
+          take: 2,
+        });
+        if (candidatos.length === 1) {
+          hardwareExistente = candidatos[0];
+          criterioHardware = 'MARCA_MODELO';
+        } else if (candidatos.length > 1) {
+          hardwaresAmbiguos = candidatos;
+        }
+      }
+    }
+
+    let produtoExistente = hardwareExistente?.produtoId
+      ? await this.prisma.produto.findUnique({
+          where: { id: hardwareExistente.produtoId },
           include: { hardware: true },
         })
-      : null;
+      : gtin
+        ? await this.prisma.produto.findFirst({
+            where: { gtin },
+            include: { hardware: true },
+          })
+        : null;
     let criterioProduto: 'GTIN' | 'MPN_MARCA' | 'MARCA_MODELO' | null =
-      produtoExistente ? 'GTIN' : null;
+      produtoExistente ? (criterioHardware ?? 'GTIN') : null;
     if (!produtoExistente && mpn && marca) {
       produtoExistente = await this.prisma.produto.findFirst({
         where: { mpn, marca: { equals: marca, mode: 'insensitive' } },
@@ -4380,6 +4434,9 @@ Ao final retorne também:
     }
 
     const reconciliacao = {
+      hardwareExistente,
+      criterioHardware,
+      hardwaresAmbiguos,
       produtoExistente: produtoExistente
         ? {
             id: produtoExistente.id,
