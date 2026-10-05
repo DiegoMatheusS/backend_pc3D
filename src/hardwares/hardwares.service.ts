@@ -1,3 +1,4 @@
+import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import {
   obterCabecalhoHttp,
   requisitarUrlPublicaUmaVez,
@@ -581,7 +582,7 @@ export class HardwaresService {
   }
 
   async criar(dados: CriarHardwareDto) {
-    return this.criarComBanco(dados, this.prisma);
+    return this.prisma.$transaction((tx) => this.criarComBanco(dados, tx));
   }
 
   async criarEmTransacao(
@@ -605,25 +606,7 @@ export class HardwaresService {
     const marca = dados.marca.trim();
     const modelo = dados.modelo.trim();
 
-    const duplicadoHardware = await banco.hardware.findFirst({
-      where: {
-        OR: [
-          ...(dados.mpn?.trim() ? [{ mpn: dados.mpn.trim() }] : []),
-          ...(dados.gtin?.trim() ? [{ gtin: dados.gtin.trim() }] : []),
-          {
-            marca: { equals: marca, mode: 'insensitive' },
-            modelo: { equals: modelo, mode: 'insensitive' },
-          },
-        ],
-      },
-      select: { id: true, nome: true },
-    });
-
-    if (duplicadoHardware) {
-      throw new ConflictException(
-        `Possível hardware duplicado: ID ${duplicadoHardware.id} — ${duplicadoHardware.nome}. Revise MPN/GTIN/marca/modelo antes de cadastrar outro registro técnico.`,
-      );
-    }
+    await assertCatalogIdentityAvailable(banco, dados);
 
     const slug = await this.criarSlugUnico(
       `${marca} ${modelo} ${nome}`,
@@ -4217,7 +4200,6 @@ export class HardwaresService {
       throw erro;
     }
   }
-
 
   private normalizarNomeArquivoGlb(nomeOriginal: string): string {
     const nomeBase = nomeOriginal

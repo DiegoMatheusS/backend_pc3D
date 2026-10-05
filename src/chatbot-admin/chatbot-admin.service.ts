@@ -1,3 +1,4 @@
+import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
@@ -34,10 +35,7 @@ import {
   AjustesCadastroChatbotDto,
   ConfirmarCadastroChatbotDto,
 } from './dtos/confirmar-cadastro-chatbot.dto';
-import {
-  ehHostShopee,
-  hostCompativelComParceiro,
-} from './marketplace-domains';
+import { ehHostShopee, hostCompativelComParceiro } from './marketplace-domains';
 
 const CATEGORIAS_HARDWARE_TECNICO = new Set<CategoriaHardware>([
   CategoriaHardware.PROCESSADOR,
@@ -285,8 +283,7 @@ export class ChatbotAdminService {
     }
 
     const temDdr = /\bddr[345]\b/u.test(texto);
-    const temCapacidade =
-      /\b(?:4|8|16|24|32|48|64|96|128)\s*gb\b/u.test(texto);
+    const temCapacidade = /\b(?:4|8|16|24|32|48|64|96|128)\s*gb\b/u.test(texto);
     const temFrequencia = /\b\d{4,5}\s*mhz\b/u.test(texto);
     const temFormato = /\b(?:so[- ]?dimm|sodimm|udimm|dimm)\b/u.test(texto);
 
@@ -398,9 +395,7 @@ export class ChatbotAdminService {
 
     const parceiro =
       parceiros.find((item) =>
-        hosts.some((host) =>
-          hostCompativelComParceiro(host, item.dominio),
-        ),
+        hosts.some((host) => hostCompativelComParceiro(host, item.dominio)),
       ) ?? null;
 
     return parceiro
@@ -745,18 +740,22 @@ export class ChatbotAdminService {
         ? this.normalizarClockPlacaVideoIa(payload)
         : false;
     if (!ehHardwareTecnico) {
-      const especificacoes = this.ehRegistro(resultadoIa.especificacoesEncontradas)
+      const especificacoes = this.ehRegistro(
+        resultadoIa.especificacoesEncontradas,
+      )
         ? resultadoIa.especificacoesEncontradas
         : {};
-      const informacoes = Array.isArray(resultadoIa.informacoesProdutoEncontradas)
+      const informacoes = Array.isArray(
+        resultadoIa.informacoesProdutoEncontradas,
+      )
         ? resultadoIa.informacoesProdutoEncontradas.slice(0, 300)
         : [];
       if (Object.keys(especificacoes).length > 0 || informacoes.length > 0) {
         payload.metadados = {
-          ...(Object.keys(especificacoes).length > 0
-            ? { especificacoes }
+          ...(Object.keys(especificacoes).length > 0 ? { especificacoes } : {}),
+          ...(informacoes.length > 0
+            ? { atributosColetados: informacoes }
             : {}),
-          ...(informacoes.length > 0 ? { atributosColetados: informacoes } : {}),
         };
       }
     }
@@ -913,8 +912,7 @@ export class ChatbotAdminService {
         ? urlValidada.toString()
         : null);
     const bloqueado =
-      Boolean(erroProdutoIa) ||
-      origemColeta?.includes('BLOQUEADO') === true;
+      Boolean(erroProdutoIa) || origemColeta?.includes('BLOQUEADO') === true;
     const possuiRaizHardware = Boolean(
       this.texto(payload.nome) &&
       this.texto(payload.marca) &&
@@ -1055,7 +1053,8 @@ export class ChatbotAdminService {
           confianca: this.confiancaCriterio(produtoBusca.criterio),
           categoriaId: categoriaProdutoId,
           dadosDetectados: payload,
-          especificacoesEncontradas: resultadoIa.especificacoesEncontradas ?? {},
+          especificacoesEncontradas:
+            resultadoIa.especificacoesEncontradas ?? {},
           informacoesProdutoEncontradas:
             resultadoIa.informacoesProdutoEncontradas ?? [],
           candidatos: produtoBusca.candidatos,
@@ -1186,11 +1185,11 @@ export class ChatbotAdminService {
     const descricao = this.texto(payload.descricao);
     const atualizarDescricaoImportada = Boolean(
       descricao &&
-        descricao !== atual.descricao &&
-        descricao.length <= 1_200 &&
-        (atual.descricao === null ||
-          atual.descricao.length > 1_200 ||
-          atual.descricao.length > descricao.length * 1.8),
+      descricao !== atual.descricao &&
+      descricao.length <= 1_200 &&
+      (atual.descricao === null ||
+        atual.descricao.length > 1_200 ||
+        atual.descricao.length > descricao.length * 1.8),
     );
     const mpn = this.texto(payload.mpn);
     const gtin = this.texto(payload.gtin);
@@ -1246,11 +1245,11 @@ export class ChatbotAdminService {
     const descricao = this.texto(payload.descricao);
     const atualizarDescricaoImportada = Boolean(
       descricao &&
-        descricao !== atual.descricao &&
-        descricao.length <= 1_200 &&
-        (atual.descricao === null ||
-          atual.descricao.length > 1_200 ||
-          atual.descricao.length > descricao.length * 1.8),
+      descricao !== atual.descricao &&
+      descricao.length <= 1_200 &&
+      (atual.descricao === null ||
+        atual.descricao.length > 1_200 ||
+        atual.descricao.length > descricao.length * 1.8),
     );
     const mpn = this.texto(payload.mpn);
     const gtin = this.texto(payload.gtin);
@@ -1313,6 +1312,17 @@ export class ChatbotAdminService {
     const nome = this.texto(payload.nome) ?? hardware.nome;
     const marca = this.texto(payload.marca) ?? hardware.marca;
     const modelo = this.texto(payload.modelo) ?? hardware.modelo;
+    await assertCatalogIdentityAvailable(
+      tx,
+      {
+        nome,
+        marca,
+        modelo,
+        mpn: this.texto(payload.mpn) ?? hardware.mpn,
+        gtin: this.texto(payload.gtin) ?? hardware.gtin,
+      },
+      { hardwareOriginId: hardware.id },
+    );
     const slug = await this.criarSlugProdutoUnico(
       tx,
       `${marca} ${modelo} ${nome}`,
@@ -1359,6 +1369,13 @@ export class ChatbotAdminService {
       throw new BadRequestException('O nome do Produto é obrigatório.');
     const marca = this.texto(payload.marca);
     const modelo = this.texto(payload.modelo);
+    await assertCatalogIdentityAvailable(tx, {
+      nome,
+      marca,
+      modelo,
+      mpn: this.texto(payload.mpn),
+      gtin: this.texto(payload.gtin),
+    });
     const slug = await this.criarSlugProdutoUnico(
       tx,
       `${marca ?? ''} ${modelo ?? ''} ${nome}`,

@@ -1,3 +1,4 @@
+import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import {
   BadRequestException,
   ConflictException,
@@ -152,55 +153,38 @@ export class NotebooksService {
     }
     const categoria = await this.garantirCategoriaNotebooks();
 
-    const duplicado = await this.prisma.produto.findFirst({
-      where: {
-        OR: [
-          ...(dados.mpn?.trim() ? [{ mpn: dados.mpn.trim() }] : []),
-          ...(dados.gtin?.trim() ? [{ gtin: dados.gtin.trim() }] : []),
-          {
-            marca: { equals: dados.marca.trim(), mode: 'insensitive' },
-            modelo: { equals: dados.modelo.trim(), mode: 'insensitive' },
-          },
-        ],
-      },
-      select: { id: true, nome: true },
-    });
-
-    if (duplicado) {
-      throw new ConflictException(
-        `Possível notebook duplicado: produto ID ${duplicado.id} — ${duplicado.nome}.`,
-      );
-    }
-
     const slug = await this.criarSlugUnico(
       `${dados.marca} ${dados.modelo} ${dados.nome}`,
     );
 
     try {
-      return await this.prisma.notebook.create({
-        data: {
-          produto: {
-            create: {
-              categoriaId: categoria.id,
-              tipo: TipoProduto.NOTEBOOK,
-              nome: dados.nome.trim(),
-              slug,
-              marca: dados.marca.trim(),
-              modelo: dados.modelo.trim(),
-              descricao: dados.descricao?.trim() ?? null,
-              mpn: dados.mpn?.trim() || null,
-              gtin: dados.gtin?.trim() || null,
-              imagemUrl: dados.imagemUrl?.trim() ?? null,
-              imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
-              publicado: dados.publicado ?? false,
-              ativo: dados.ativo ?? true,
+      return await this.prisma.$transaction(async (tx) => {
+        await assertCatalogIdentityAvailable(tx, dados);
+        return tx.notebook.create({
+          data: {
+            produto: {
+              create: {
+                categoriaId: categoria.id,
+                tipo: TipoProduto.NOTEBOOK,
+                nome: dados.nome.trim(),
+                slug,
+                marca: dados.marca.trim(),
+                modelo: dados.modelo.trim(),
+                descricao: dados.descricao?.trim() ?? null,
+                mpn: dados.mpn?.trim() || null,
+                gtin: dados.gtin?.trim() || null,
+                imagemUrl: dados.imagemUrl?.trim() ?? null,
+                imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
+                publicado: dados.publicado ?? false,
+                ativo: dados.ativo ?? true,
+              },
             },
+            ...(dados.especificacao
+              ? { especificacao: { create: dados.especificacao } }
+              : {}),
           },
-          ...(dados.especificacao
-            ? { especificacao: { create: dados.especificacao } }
-            : {}),
-        },
-        include: this.includeDetalhado(),
+          include: this.includeDetalhado(),
+        });
       });
     } catch (erro: unknown) {
       if (
