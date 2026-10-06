@@ -1,6 +1,10 @@
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class AnalisarAnuncioBuildDto {
+  @IsOptional()
+  @IsBoolean()
+  pesquisarEspecificacoes?: boolean;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)

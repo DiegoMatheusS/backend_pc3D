@@ -22,6 +22,9 @@ export type ResultadoProdutoIaPython = {
   informacoesProdutoEncontradas?: unknown[];
   especificacoesEncontradas?: Record<string, unknown>;
   analiseProduto?: Record<string, unknown>;
+  analiseComputador?: Record<string, unknown>;
+  iaTecnicaAutomatica?: Record<string, unknown>;
+  origemPorCampo?: Record<string, unknown>;
   camposEspecificacaoEsperados?: string[];
   camposObrigatoriosAusentes?: string[];
   origemColeta?: Record<string, unknown>;
@@ -521,7 +524,8 @@ export class ProdutoIaPythonService {
     const endpoint = `${this.normalizarProdutoIaUrl(produtoIaUrl)}/analisar`;
     const controller = new AbortController();
     const timeoutConfigurado = Number(
-      process.env.PRODUTO_IA_TIMEOUT_MS ?? 90_000,
+      process.env.PRODUTO_IA_TIMEOUT_MS ??
+        (opcoes.detalharPagina ? 180_000 : 90_000),
     );
     const timeoutMs =
       Number.isFinite(timeoutConfigurado) && timeoutConfigurado >= 5_000
