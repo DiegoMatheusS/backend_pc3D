@@ -608,6 +608,44 @@ export class VerificadorPrecosOfertasService {
     return null;
   }
 
+  private extrairPrecoAfiliadoGenerico(html: string): number | null {
+    const candidatos: number[] = [];
+    const ancoras =
+      /(?:id|class|data-testid)=["'][^"']*(?:price|preco|preço|pix|avista|a-vista|sale|final)[^"']*["']/gi;
+
+    for (const match of Array.from(html.matchAll(ancoras)).slice(0, 80)) {
+      const atributo = (match[0] ?? '').toLowerCase();
+      if (
+        /old|previous|original|regular|list|before|strike|installment|parcel|frete|shipping|coupon|cupom/u.test(
+          atributo,
+        )
+      ) {
+        continue;
+      }
+      const inicio = match.index ?? -1;
+      if (inicio < 0) continue;
+      const trecho = this.textoVisivel(html.slice(inicio, inicio + 1_500));
+      if (
+        /(?:frete|shipping|cupom|coupon|cashback)/iu.test(trecho.slice(0, 180))
+      ) {
+        continue;
+      }
+      const valores = Array.from(
+        trecho.slice(0, 500).matchAll(
+          /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{1,2})|[0-9]+(?:[.,][0-9]{1,2})?)/gi,
+        ),
+      )
+        .map((item) => this.normalizarPreco(item[1]))
+        .filter((item): item is number => item !== null);
+
+      const unicos = [...new Set(valores)];
+      if (unicos.length === 1) candidatos.push(unicos[0]);
+    }
+
+    const unicos = [...new Set(candidatos)];
+    return unicos.length === 1 ? unicos[0] : null;
+  }
+
   private extrairPrecoMarketplace(
     html: string,
     hostname: string,
@@ -617,7 +655,12 @@ export class VerificadorPrecosOfertasService {
     if (host.includes('mercadolivre.') || host.includes('mercadolibre.')) {
       return this.extrairPrecoMercadoLivre(html);
     }
-    if (host.includes('magazineluiza.')) {
+    if (
+      host.includes('magazineluiza.') ||
+      host.includes('magazinevoce.') ||
+      host === 'magalu.com' ||
+      host.endsWith('.magalu.com')
+    ) {
       return this.extrairPrecoMagalu(html);
     }
     if (host.includes('amazon.')) {
@@ -625,6 +668,14 @@ export class VerificadorPrecosOfertasService {
     }
     if (host.includes('shopee.')) {
       return this.extrairPrecoShopee(html);
+    }
+    if (
+      host.includes('kabum.') ||
+      host.includes('pichau.') ||
+      host.includes('terabyteshop.') ||
+      host.includes('aliexpress.')
+    ) {
+      return this.extrairPrecoAfiliadoGenerico(html);
     }
 
     return null;
