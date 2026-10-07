@@ -10,6 +10,7 @@ import {
 import { CategoriaHardware } from '../../generated/prisma/enums';
 
 export const PROVEDORES_IA_TECNICA = [
+  'PROJETO_IA',
   'GEMINI',
   'META_AI',
   'OPENAI',

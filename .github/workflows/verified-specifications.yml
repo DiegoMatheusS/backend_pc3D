@@ -1,0 +1,25 @@
+name: Verified specifications integration
+on:
+  pull_request:
+    paths: ['src/builds/build-listing-analysis*', 'src/builds/dtos/analisar-anuncio-build.dto.ts', 'src/hardwares-descoberta-ia/**', 'src/ia/**', '.github/workflows/verified-specifications.yml']
+  push:
+    branches: [main]
+    paths: ['src/builds/build-listing-analysis*', 'src/builds/dtos/analisar-anuncio-build.dto.ts', 'src/hardwares-descoberta-ia/**', 'src/ia/**']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm test -- --runInBand builds/build-listing-analysis.service.spec.ts ia/ia.pc-import.spec.ts ia/produto-ia-python.service.spec.ts hardwares-descoberta-ia/hardwares-descoberta-ia.service.spec.ts
+      - run: npm run build
