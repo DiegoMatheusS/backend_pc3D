@@ -410,6 +410,41 @@ export class BuscaOfertasService {
           dominio: 'shopee.com.br',
           site: 'https://shopee.com.br',
         };
+      case 'AMAZON':
+        return {
+          nome: 'Amazon',
+          slug: 'amazon',
+          dominio: 'amazon.com.br',
+          site: 'https://www.amazon.com.br',
+        };
+      case 'KABUM':
+        return {
+          nome: 'KaBuM!',
+          slug: 'kabum',
+          dominio: 'kabum.com.br',
+          site: 'https://www.kabum.com.br',
+        };
+      case 'PICHAU':
+        return {
+          nome: 'Pichau',
+          slug: 'pichau',
+          dominio: 'pichau.com.br',
+          site: 'https://www.pichau.com.br',
+        };
+      case 'TERABYTE':
+        return {
+          nome: 'Terabyte',
+          slug: 'terabyte',
+          dominio: 'terabyteshop.com.br',
+          site: 'https://www.terabyteshop.com.br',
+        };
+      case 'ALIEXPRESS':
+        return {
+          nome: 'AliExpress',
+          slug: 'aliexpress',
+          dominio: 'aliexpress.com',
+          site: 'https://www.aliexpress.com',
+        };
       default:
         return null;
     }
@@ -445,7 +480,7 @@ export class BuscaOfertasService {
         slug: conhecido.slug,
         dominio: conhecido.dominio,
         site: conhecido.site,
-        programaAfiliados: marketplace === 'SHOPEE',
+        programaAfiliados: true,
         ativo: true,
       },
       select: { id: true },
