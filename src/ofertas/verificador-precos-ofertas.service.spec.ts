@@ -176,6 +176,41 @@ describe('VerificadorPrecosOfertasService', () => {
     });
   });
 
+  it.each([
+    ['KaBuM', 'https://www.kabum.com.br/produto/123/teste', '<div data-testid="price">R$ 1.899,90</div>'],
+    ['Pichau', 'https://www.pichau.com.br/produto-teste-x1', '<span id="valor-promocional">R$ 2.499,00</span>'],
+    ['Terabyte', 'https://www.terabyteshop.com.br/produto/123/teste', '<div id="valVista">R$ 3.199,90</div>'],
+    ['AliExpress', 'https://pt.aliexpress.com/item/1005001234567890.html', '<div class="product-price-value">R$ 799,50</div>'],
+  ])('extrai preço principal de %s por marcador semântico', (_loja, url, html) => {
+    expect(
+      extrator.extrairPrecoEstruturado(html, new URL(url)),
+    ).toEqual({
+      preco: url.includes('kabum') ? 1899.9
+        : url.includes('pichau') ? 2499
+        : url.includes('terabyte') ? 3199.9
+        : 799.5,
+      origem: 'HTML_MARKETPLACE',
+      indisponivel: false,
+    });
+  });
+
+  it('ignora preço antigo quando a loja também expõe um preço final', () => {
+    const html = `
+      <div class="oldPrice">R$ 2.999,90</div>
+      <div class="finalPrice">R$ 2.499,90</div>
+    `;
+    expect(
+      extrator.extrairPrecoEstruturado(
+        html,
+        new URL('https://www.kabum.com.br/produto/123/teste'),
+      ),
+    ).toEqual({
+      preco: 2499.9,
+      origem: 'HTML_MARKETPLACE',
+      indisponivel: false,
+    });
+  });
+
   it('converte preço escalado da Shopee em JSON embutido', () => {
     const html = `
       <script type="application/json" id="__NEXT_DATA__">
