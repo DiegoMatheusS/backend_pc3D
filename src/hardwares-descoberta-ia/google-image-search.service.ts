@@ -18,6 +18,7 @@ export type HardwareBuscaImagemGoogle = {
 export type ImagemGoogleEncontrada = {
   imagemUrl: string;
   fonte: 'GOOGLE_IMAGENS';
+  provedor: 'SERPAPI' | 'GOOGLE_CUSTOM_SEARCH';
   urlOrigem: string | null;
   nome: string;
   marca: string;
@@ -61,10 +62,10 @@ export class GoogleImageSearchService {
   }
 
   configurado(): boolean {
-    return Boolean(
-      process.env.GOOGLE_IMAGE_SEARCH_API_KEY?.trim() &&
-        process.env.GOOGLE_IMAGE_SEARCH_CX?.trim(),
-    );
+    const serpApi = process.env.SERPAPI_API_KEY?.trim();
+    const googleApi = process.env.GOOGLE_IMAGE_SEARCH_API_KEY?.trim();
+    const googleCx = process.env.GOOGLE_IMAGE_SEARCH_CX?.trim();
+    return Boolean(serpApi || (googleApi && googleCx));
   }
 
   private timeoutMs(): number {
@@ -211,7 +212,7 @@ export class GoogleImageSearchService {
     return [...new Set(partes)].join(' ').slice(0, 220);
   }
 
-  private async requisitarGoogle(url: URL) {
+  private async requisitarComRetry(url: URL) {
     const tentativas = 2;
     for (let tentativa = 1; tentativa <= tentativas; tentativa += 1) {
       try {
@@ -247,63 +248,153 @@ export class GoogleImageSearchService {
     return null;
   }
 
+  private candidatosDoGoogleCustomSearch(payload: Registro): CandidatoGoogle[] {
+    if (!Array.isArray(payload.items)) return [];
+    return payload.items
+      .filter((item): item is Registro => this.ehRegistro(item))
+      .map((item) => this.pontuar({ nome: '', marca: '', modelo: '' }, item))
+      .filter((item): item is CandidatoGoogle => Boolean(item));
+  }
+
+  private normalizarItemSerpApi(item: Registro): Registro {
+    return {
+      title: this.texto(item.title),
+      snippet: [
+        this.texto(item.source),
+        this.texto(item.title),
+        this.texto(item.snippet),
+      ]
+        .filter(Boolean)
+        .join(' '),
+      displayLink: this.texto(item.source),
+      link: this.texto(item.original),
+      image: {
+        contextLink: this.texto(item.link),
+      },
+    };
+  }
+
+  private async buscarViaSerpApi(
+    hardware: HardwareBuscaImagemGoogle,
+  ): Promise<CandidatoGoogle[]> {
+    const apiKey = process.env.SERPAPI_API_KEY?.trim();
+    if (!apiKey) return [];
+
+    const url = new URL('https://serpapi.com/search.json');
+    url.searchParams.set('api_key', apiKey);
+    url.searchParams.set('engine', 'google_images');
+    url.searchParams.set('q', this.consulta(hardware));
+    url.searchParams.set('hl', 'pt-BR');
+    url.searchParams.set('gl', 'br');
+    url.searchParams.set('safe', 'active');
+    url.searchParams.set('ijn', '0');
+
+    const resposta = await this.requisitarComRetry(url);
+    if (!resposta?.ok) return [];
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(resposta.corpo.toString('utf8'));
+    } catch {
+      return [];
+    }
+    if (!this.ehRegistro(payload) || !Array.isArray(payload.images_results)) {
+      return [];
+    }
+
+    return payload.images_results
+      .slice(0, 10)
+      .filter((item): item is Registro => this.ehRegistro(item))
+      .map((item) => this.normalizarItemSerpApi(item))
+      .map((item) => this.pontuar(hardware, item))
+      .filter((item): item is CandidatoGoogle => Boolean(item))
+      .sort((a, b) => b.score - a.score);
+  }
+
+  private async buscarViaGoogleCustomSearch(
+    hardware: HardwareBuscaImagemGoogle,
+  ): Promise<CandidatoGoogle[]> {
+    const apiKey = process.env.GOOGLE_IMAGE_SEARCH_API_KEY?.trim();
+    const cx = process.env.GOOGLE_IMAGE_SEARCH_CX?.trim();
+    if (!apiKey || !cx) return [];
+
+    const url = new URL('https://customsearch.googleapis.com/customsearch/v1');
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('cx', cx);
+    url.searchParams.set('q', this.consulta(hardware));
+    url.searchParams.set('searchType', 'image');
+    url.searchParams.set('num', '10');
+    url.searchParams.set('safe', 'active');
+    url.searchParams.set('filter', '1');
+    url.searchParams.set('imgType', 'photo');
+    url.searchParams.set('gl', 'br');
+    url.searchParams.set('hl', 'pt-BR');
+
+    const resposta = await this.requisitarComRetry(url);
+    if (!resposta?.ok) return [];
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(resposta.corpo.toString('utf8'));
+    } catch {
+      return [];
+    }
+    if (!this.ehRegistro(payload) || !Array.isArray(payload.items)) return [];
+
+    return payload.items
+      .filter((item): item is Registro => this.ehRegistro(item))
+      .map((item) => this.pontuar(hardware, item))
+      .filter((item): item is CandidatoGoogle => Boolean(item))
+      .sort((a, b) => b.score - a.score);
+  }
+
+  private async validarCandidatos(
+    hardware: HardwareBuscaImagemGoogle,
+    provedor: ImagemGoogleEncontrada['provedor'],
+    candidatos: CandidatoGoogle[],
+  ): Promise<ImagemGoogleEncontrada | null> {
+    for (const candidato of candidatos) {
+      try {
+        const validada = await validarUrlPublica(candidato.imagemUrl);
+        return {
+          imagemUrl: validada.url.toString(),
+          fonte: 'GOOGLE_IMAGENS',
+          provedor,
+          urlOrigem: candidato.urlOrigem,
+          nome: candidato.titulo || hardware.nome,
+          marca: hardware.marca,
+          modelo: hardware.modelo,
+          score: candidato.score,
+          criterio: candidato.criterio,
+        };
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+
   async buscar(
     hardware: HardwareBuscaImagemGoogle,
   ): Promise<ImagemGoogleEncontrada | null> {
-    const apiKey = process.env.GOOGLE_IMAGE_SEARCH_API_KEY?.trim();
-    const cx = process.env.GOOGLE_IMAGE_SEARCH_CX?.trim();
-    if (!apiKey || !cx) return null;
+    if (!this.configurado()) return null;
 
     await this.adquirirVaga();
     try {
-      const url = new URL('https://customsearch.googleapis.com/customsearch/v1');
-      url.searchParams.set('key', apiKey);
-      url.searchParams.set('cx', cx);
-      url.searchParams.set('q', this.consulta(hardware));
-      url.searchParams.set('searchType', 'image');
-      url.searchParams.set('num', '10');
-      url.searchParams.set('safe', 'active');
-      url.searchParams.set('filter', '1');
-      url.searchParams.set('imgType', 'photo');
-      url.searchParams.set('gl', 'br');
-      url.searchParams.set('hl', 'pt-BR');
+      const serpApi = await this.buscarViaSerpApi(hardware);
+      const validadaSerpApi = await this.validarCandidatos(
+        hardware,
+        'SERPAPI',
+        serpApi,
+      );
+      if (validadaSerpApi) return validadaSerpApi;
 
-      const resposta = await this.requisitarGoogle(url);
-      if (!resposta?.ok) return null;
-
-      let payload: unknown;
-      try {
-        payload = JSON.parse(resposta.corpo.toString('utf8'));
-      } catch {
-        return null;
-      }
-      if (!this.ehRegistro(payload) || !Array.isArray(payload.items)) return null;
-
-      const candidatos = payload.items
-        .filter((item): item is Registro => this.ehRegistro(item))
-        .map((item) => this.pontuar(hardware, item))
-        .filter((item): item is CandidatoGoogle => Boolean(item))
-        .sort((a, b) => b.score - a.score);
-
-      for (const candidato of candidatos) {
-        try {
-          const validada = await validarUrlPublica(candidato.imagemUrl);
-          return {
-            imagemUrl: validada.url.toString(),
-            fonte: 'GOOGLE_IMAGENS',
-            urlOrigem: candidato.urlOrigem,
-            nome: candidato.titulo || hardware.nome,
-            marca: hardware.marca,
-            modelo: hardware.modelo,
-            score: candidato.score,
-            criterio: candidato.criterio,
-          };
-        } catch {
-          continue;
-        }
-      }
-
-      return null;
+      const googleCustomSearch = await this.buscarViaGoogleCustomSearch(hardware);
+      return await this.validarCandidatos(
+        hardware,
+        'GOOGLE_CUSTOM_SEARCH',
+        googleCustomSearch,
+      );
     } finally {
       this.liberarVaga();
     }
