@@ -2,12 +2,14 @@ import {
   BadGatewayException,
   BadRequestException,
   Injectable,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { validarUrlPublica } from '../common/security/external-http-security';
 import { CategoriaHardware } from '../generated/prisma/enums';
 import { HardwaresService } from '../hardwares/hardwares.service';
 import { postProdutoIa } from '../ia/produto-ia-http';
+import { GoogleImageSearchService } from './google-image-search.service';
 
 const CATEGORIAS_COM_BUSCA_TECNICA = new Set<CategoriaHardware>([
   CategoriaHardware.PROCESSADOR,
@@ -47,7 +49,33 @@ type ImagemEncontrada = {
 
 @Injectable()
 export class HardwareImageSearchService {
-  constructor(private readonly hardwaresService: HardwaresService) {}
+  private readonly maxBuscasSimultaneas = 10;
+  private buscasAtivas = 0;
+  private filaBuscas: Array<() => void> = [];
+
+  constructor(
+    private readonly hardwaresService: HardwaresService,
+    private readonly googleImages: GoogleImageSearchService,
+  ) {}
+
+  private adquirirVagaBusca(): Promise<void> {
+    if (this.buscasAtivas < this.maxBuscasSimultaneas) {
+      this.buscasAtivas += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.filaBuscas.push(() => {
+        this.buscasAtivas += 1;
+        resolve();
+      });
+    });
+  }
+
+  private liberarVagaBusca(): void {
+    this.buscasAtivas = Math.max(0, this.buscasAtivas - 1);
+    const proxima = this.filaBuscas.shift();
+    if (proxima) proxima();
+  }
 
   private ehRegistro(valor: unknown): valor is Registro {
     return Boolean(valor) && typeof valor === 'object' && !Array.isArray(valor);
@@ -334,12 +362,17 @@ export class HardwareImageSearchService {
     };
   }
 
-  async buscarESalvar(hardwareId: number) {
+  private async buscarESalvarSemFila(hardwareId: number) {
     const hardware = await this.hardwaresService.buscarPorIdAdmin(hardwareId);
     if (!CATEGORIAS_COM_BUSCA_TECNICA.has(hardware.categoria)) {
       throw new BadRequestException(
         `A busca automática de imagem ainda não está disponível para ${hardware.categoria}.`,
       );
+    }
+
+    const imagemGoogle = await this.googleImages.buscar(hardware).catch(() => null);
+    if (imagemGoogle) {
+      return this.salvarImagem(hardwareId, imagemGoogle);
     }
 
     const consulta = [hardware.marca, hardware.modelo, hardware.nome]
@@ -399,10 +432,19 @@ export class HardwareImageSearchService {
       return this.salvarImagem(hardwareId, imagemOferta);
     }
 
-    throw new BadGatewayException(
+    throw new NotFoundException(
       candidatos.length
-        ? 'Encontrei o hardware, mas as fontes técnicas e as ofertas idênticas não retornaram uma imagem válida.'
-        : 'Não encontrei uma correspondência forte com imagem para este hardware.',
+        ? 'Nenhuma imagem confiável foi encontrada no Google Imagens, nas fontes técnicas ou nas ofertas idênticas.'
+        : 'Nenhuma imagem confiável foi encontrada para este hardware.',
     );
+  }
+
+  async buscarESalvar(hardwareId: number) {
+    await this.adquirirVagaBusca();
+    try {
+      return await this.buscarESalvarSemFila(hardwareId);
+    } finally {
+      this.liberarVagaBusca();
+    }
   }
 }
