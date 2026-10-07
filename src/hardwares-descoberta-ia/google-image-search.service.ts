@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  obterCabecalhoHttp,
   requisitarUrlPublicaUmaVez,
   validarUrlPublica,
 } from '../common/security/external-http-security';
@@ -29,13 +30,18 @@ type CandidatoGoogle = {
   imagemUrl: string;
   urlOrigem: string | null;
   titulo: string;
-  texto: string;
   score: number;
   criterio: string;
 };
 
 @Injectable()
 export class GoogleImageSearchService {
+  private readonly concorrenciaMaxima = 10;
+  private concorrenciaAtual = 10;
+  private ativas = 0;
+  private fila: Array<() => void> = [];
+  private concorrenciaReduzidaAte = 0;
+
   private texto(valor: unknown): string {
     return typeof valor === 'string' ? valor.trim() : '';
   }
@@ -65,6 +71,53 @@ export class GoogleImageSearchService {
     const configurado = Number(process.env.GOOGLE_IMAGE_SEARCH_TIMEOUT_MS);
     if (!Number.isFinite(configurado)) return 10_000;
     return Math.min(Math.max(Math.trunc(configurado), 2_000), 20_000);
+  }
+
+  private restaurarConcorrenciaSeNecessario(): void {
+    if (
+      this.concorrenciaAtual < this.concorrenciaMaxima &&
+      Date.now() >= this.concorrenciaReduzidaAte
+    ) {
+      this.concorrenciaAtual = this.concorrenciaMaxima;
+    }
+  }
+
+  private reduzirConcorrenciaTemporariamente(): void {
+    this.concorrenciaAtual = Math.max(
+      2,
+      Math.floor(this.concorrenciaAtual / 2),
+    );
+    this.concorrenciaReduzidaAte = Date.now() + 60_000;
+  }
+
+  private drenarFila(): void {
+    this.restaurarConcorrenciaSeNecessario();
+    while (this.ativas < this.concorrenciaAtual && this.fila.length) {
+      const proxima = this.fila.shift();
+      if (!proxima) break;
+      this.ativas += 1;
+      proxima();
+    }
+  }
+
+  private adquirirVaga(): Promise<void> {
+    this.restaurarConcorrenciaSeNecessario();
+    if (this.ativas < this.concorrenciaAtual) {
+      this.ativas += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.fila.push(resolve);
+    });
+  }
+
+  private liberarVaga(): void {
+    this.ativas = Math.max(0, this.ativas - 1);
+    this.drenarFila();
+  }
+
+  private async aguardar(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private tokensRelevantes(valor: string, minimo = 2): string[] {
@@ -141,7 +194,6 @@ export class GoogleImageSearchService {
       imagemUrl,
       urlOrigem,
       titulo,
-      texto: contexto,
       score,
       criterio: criterios.join('+'),
     };
@@ -159,6 +211,42 @@ export class GoogleImageSearchService {
     return [...new Set(partes)].join(' ').slice(0, 220);
   }
 
+  private async requisitarGoogle(url: URL) {
+    const tentativas = 2;
+    for (let tentativa = 1; tentativa <= tentativas; tentativa += 1) {
+      try {
+        const resposta = await requisitarUrlPublicaUmaVez(url, {
+          timeoutMs: this.timeoutMs(),
+          limiteRespostaBytes: 1_500_000,
+          headers: { Accept: 'application/json' },
+        });
+
+        if (resposta.status === 429) {
+          this.reduzirConcorrenciaTemporariamente();
+          if (tentativa < tentativas) {
+            const retryAfter = Number(obterCabecalhoHttp(resposta, 'retry-after'));
+            const espera = Number.isFinite(retryAfter)
+              ? Math.min(Math.max(retryAfter * 1000, 500), 3_000)
+              : 1_000;
+            await this.aguardar(espera);
+            continue;
+          }
+        }
+
+        if (resposta.status >= 500 && tentativa < tentativas) {
+          await this.aguardar(500);
+          continue;
+        }
+
+        return resposta;
+      } catch {
+        if (tentativa >= tentativas) return null;
+        await this.aguardar(500);
+      }
+    }
+    return null;
+  }
+
   async buscar(
     hardware: HardwareBuscaImagemGoogle,
   ): Promise<ImagemGoogleEncontrada | null> {
@@ -166,62 +254,58 @@ export class GoogleImageSearchService {
     const cx = process.env.GOOGLE_IMAGE_SEARCH_CX?.trim();
     if (!apiKey || !cx) return null;
 
-    const url = new URL('https://customsearch.googleapis.com/customsearch/v1');
-    url.searchParams.set('key', apiKey);
-    url.searchParams.set('cx', cx);
-    url.searchParams.set('q', this.consulta(hardware));
-    url.searchParams.set('searchType', 'image');
-    url.searchParams.set('num', '10');
-    url.searchParams.set('safe', 'active');
-    url.searchParams.set('filter', '1');
-    url.searchParams.set('imgType', 'photo');
-    url.searchParams.set('gl', 'br');
-    url.searchParams.set('hl', 'pt-BR');
-
-    let resposta;
+    await this.adquirirVaga();
     try {
-      resposta = await requisitarUrlPublicaUmaVez(url, {
-        timeoutMs: this.timeoutMs(),
-        limiteRespostaBytes: 1_500_000,
-        headers: { Accept: 'application/json' },
-      });
-    } catch {
-      return null;
-    }
-    if (!resposta.ok) return null;
+      const url = new URL('https://customsearch.googleapis.com/customsearch/v1');
+      url.searchParams.set('key', apiKey);
+      url.searchParams.set('cx', cx);
+      url.searchParams.set('q', this.consulta(hardware));
+      url.searchParams.set('searchType', 'image');
+      url.searchParams.set('num', '10');
+      url.searchParams.set('safe', 'active');
+      url.searchParams.set('filter', '1');
+      url.searchParams.set('imgType', 'photo');
+      url.searchParams.set('gl', 'br');
+      url.searchParams.set('hl', 'pt-BR');
 
-    let payload: unknown;
-    try {
-      payload = JSON.parse(resposta.corpo.toString('utf8'));
-    } catch {
-      return null;
-    }
-    if (!this.ehRegistro(payload) || !Array.isArray(payload.items)) return null;
+      const resposta = await this.requisitarGoogle(url);
+      if (!resposta?.ok) return null;
 
-    const candidatos = payload.items
-      .filter((item): item is Registro => this.ehRegistro(item))
-      .map((item) => this.pontuar(hardware, item))
-      .filter((item): item is CandidatoGoogle => Boolean(item))
-      .sort((a, b) => b.score - a.score);
-
-    for (const candidato of candidatos) {
+      let payload: unknown;
       try {
-        const validada = await validarUrlPublica(candidato.imagemUrl);
-        return {
-          imagemUrl: validada.url.toString(),
-          fonte: 'GOOGLE_IMAGENS',
-          urlOrigem: candidato.urlOrigem,
-          nome: candidato.titulo || hardware.nome,
-          marca: hardware.marca,
-          modelo: hardware.modelo,
-          score: candidato.score,
-          criterio: candidato.criterio,
-        };
+        payload = JSON.parse(resposta.corpo.toString('utf8'));
       } catch {
-        continue;
+        return null;
       }
-    }
+      if (!this.ehRegistro(payload) || !Array.isArray(payload.items)) return null;
 
-    return null;
+      const candidatos = payload.items
+        .filter((item): item is Registro => this.ehRegistro(item))
+        .map((item) => this.pontuar(hardware, item))
+        .filter((item): item is CandidatoGoogle => Boolean(item))
+        .sort((a, b) => b.score - a.score);
+
+      for (const candidato of candidatos) {
+        try {
+          const validada = await validarUrlPublica(candidato.imagemUrl);
+          return {
+            imagemUrl: validada.url.toString(),
+            fonte: 'GOOGLE_IMAGENS',
+            urlOrigem: candidato.urlOrigem,
+            nome: candidato.titulo || hardware.nome,
+            marca: hardware.marca,
+            modelo: hardware.modelo,
+            score: candidato.score,
+            criterio: candidato.criterio,
+          };
+        } catch {
+          continue;
+        }
+      }
+
+      return null;
+    } finally {
+      this.liberarVaga();
+    }
   }
 }
