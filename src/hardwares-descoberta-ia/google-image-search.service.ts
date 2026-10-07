@@ -248,14 +248,6 @@ export class GoogleImageSearchService {
     return null;
   }
 
-  private candidatosDoGoogleCustomSearch(payload: Registro): CandidatoGoogle[] {
-    if (!Array.isArray(payload.items)) return [];
-    return payload.items
-      .filter((item): item is Registro => this.ehRegistro(item))
-      .map((item) => this.pontuar({ nome: '', marca: '', modelo: '' }, item))
-      .filter((item): item is CandidatoGoogle => Boolean(item));
-  }
-
   private normalizarItemSerpApi(item: Registro): Registro {
     return {
       title: this.texto(item.title),
