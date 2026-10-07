@@ -530,6 +530,58 @@ export class VerificadorPrecosOfertasService {
     return null;
   }
 
+  private extrairPrecoAmazon(html: string): number | null {
+    // A Amazon frequentemente não expõe um JSON-LD de preço utilizável para
+    // datacenters, mas mantém o preço selecionado em priceToPay/a-offscreen.
+    // Limitamos a leitura aos contêineres principais para não confundir preço
+    // antigo, parcelas, recomendações ou outros vendedores.
+    const ancoraPadroes = [
+      /class=["'][^"']*priceToPay[^"']*["']/gi,
+      /id=["']price_inside_buybox["']/gi,
+      /id=["']priceblock_(?:ourprice|dealprice|saleprice)["']/gi,
+      /id=["']corePriceDisplay_desktop_feature_div["']/gi,
+      /id=["']corePrice_feature_div["']/gi,
+      /id=["']apex_desktop["']/gi,
+    ];
+
+    for (const ancora of ancoraPadroes) {
+      for (const match of html.matchAll(ancora)) {
+        const inicio = match.index ?? -1;
+        if (inicio < 0) continue;
+        const trecho = html.slice(inicio, inicio + 4_000);
+
+        const offscreen =
+          /class=["'][^"']*a-offscreen[^"']*["'][^>]*>\s*R\$\s*([0-9.]+(?:,[0-9]{1,2})?)/i.exec(
+            trecho,
+          )?.[1];
+        const precoOffscreen = this.normalizarPreco(offscreen);
+        if (precoOffscreen !== null) return precoOffscreen;
+
+        const inteiro =
+          /class=["'][^"']*a-price-whole[^"']*["'][^>]*>\s*([0-9.]+)/i.exec(
+            trecho,
+          )?.[1];
+        if (inteiro) {
+          const fracao =
+            /class=["'][^"']*a-price-fraction[^"']*["'][^>]*>\s*([0-9]{1,2})/i.exec(
+              trecho,
+            )?.[1];
+          const preco = this.normalizarPreco(
+            fracao ? `${inteiro},${fracao.padEnd(2, '0')}` : inteiro,
+          );
+          if (preco !== null) return preco;
+        }
+
+        const texto = this.textoVisivel(trecho);
+        const direto = /R\$\s*([0-9.]+(?:,[0-9]{1,2})?)/i.exec(texto)?.[1];
+        const precoDireto = this.normalizarPreco(direto);
+        if (precoDireto !== null) return precoDireto;
+      }
+    }
+
+    return null;
+  }
+
   private extrairPrecoShopee(html: string): number | null {
     const texto = this.textoVisivel(html).slice(0, 80_000);
     const ocorrencias = Array.from(
@@ -567,6 +619,9 @@ export class VerificadorPrecosOfertasService {
     }
     if (host.includes('magazineluiza.')) {
       return this.extrairPrecoMagalu(html);
+    }
+    if (host.includes('amazon.')) {
+      return this.extrairPrecoAmazon(html);
     }
     if (host.includes('shopee.')) {
       return this.extrairPrecoShopee(html);

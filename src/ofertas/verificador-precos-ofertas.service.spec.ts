@@ -133,6 +133,49 @@ describe('VerificadorPrecosOfertasService', () => {
     });
   });
 
+  it('extrai o preço selecionado da Amazon em priceToPay', () => {
+    const html = `
+      <div id="corePriceDisplay_desktop_feature_div">
+        <span class="a-price a-text-price"><span class="a-offscreen">R$ 2.399,90</span></span>
+        <span class="a-price priceToPay">
+          <span class="a-offscreen">R$ 1.999,90</span>
+          <span class="a-price-whole">1.999</span><span class="a-price-fraction">90</span>
+        </span>
+      </div>`;
+
+    expect(
+      extrator.extrairPrecoEstruturado(
+        html,
+        new URL('https://www.amazon.com.br/dp/B0ABC12345'),
+      ),
+    ).toEqual({
+      preco: 1999.9,
+      origem: 'HTML_MARKETPLACE',
+      indisponivel: false,
+    });
+  });
+
+  it('não escolhe preço antigo da Amazon quando priceToPay existe', () => {
+    const html = `
+      <span class="a-price a-text-price"><span class="a-offscreen">R$ 3.199,90</span></span>
+      <div id="apex_desktop">
+        <span class="a-price priceToPay">
+          <span class="a-offscreen">R$ 2.799,00</span>
+        </span>
+      </div>`;
+
+    expect(
+      extrator.extrairPrecoEstruturado(
+        html,
+        new URL('https://www.amazon.com.br/dp/B0XYZ12345'),
+      ),
+    ).toEqual({
+      preco: 2799,
+      origem: 'HTML_MARKETPLACE',
+      indisponivel: false,
+    });
+  });
+
   it('converte preço escalado da Shopee em JSON embutido', () => {
     const html = `
       <script type="application/json" id="__NEXT_DATA__">
