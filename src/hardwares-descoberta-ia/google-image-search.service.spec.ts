@@ -11,13 +11,15 @@ jest.mock('../common/security/external-http-security', () => ({
 }));
 
 describe('GoogleImageSearchService', () => {
-  const originalKey = process.env.GOOGLE_IMAGE_SEARCH_API_KEY;
-  const originalCx = process.env.GOOGLE_IMAGE_SEARCH_CX;
+  const originalSerpApi = process.env.SERPAPI_API_KEY;
+  const originalGoogleKey = process.env.GOOGLE_IMAGE_SEARCH_API_KEY;
+  const originalGoogleCx = process.env.GOOGLE_IMAGE_SEARCH_CX;
   const originalTimeout = process.env.GOOGLE_IMAGE_SEARCH_TIMEOUT_MS;
 
   beforeEach(() => {
-    process.env.GOOGLE_IMAGE_SEARCH_API_KEY = 'teste-key';
-    process.env.GOOGLE_IMAGE_SEARCH_CX = 'teste-cx';
+    process.env.SERPAPI_API_KEY = 'serpapi-test';
+    delete process.env.GOOGLE_IMAGE_SEARCH_API_KEY;
+    delete process.env.GOOGLE_IMAGE_SEARCH_CX;
     process.env.GOOGLE_IMAGE_SEARCH_TIMEOUT_MS = '8000';
     jest.mocked(validarUrlPublica).mockImplementation(async (url) => ({
       url: new URL(url),
@@ -29,34 +31,34 @@ describe('GoogleImageSearchService', () => {
   afterEach(() => {
     jest.resetAllMocks();
 
-    if (originalKey === undefined) delete process.env.GOOGLE_IMAGE_SEARCH_API_KEY;
-    else process.env.GOOGLE_IMAGE_SEARCH_API_KEY = originalKey;
+    if (originalSerpApi === undefined) delete process.env.SERPAPI_API_KEY;
+    else process.env.SERPAPI_API_KEY = originalSerpApi;
 
-    if (originalCx === undefined) delete process.env.GOOGLE_IMAGE_SEARCH_CX;
-    else process.env.GOOGLE_IMAGE_SEARCH_CX = originalCx;
+    if (originalGoogleKey === undefined) delete process.env.GOOGLE_IMAGE_SEARCH_API_KEY;
+    else process.env.GOOGLE_IMAGE_SEARCH_API_KEY = originalGoogleKey;
+
+    if (originalGoogleCx === undefined) delete process.env.GOOGLE_IMAGE_SEARCH_CX;
+    else process.env.GOOGLE_IMAGE_SEARCH_CX = originalGoogleCx;
 
     if (originalTimeout === undefined) delete process.env.GOOGLE_IMAGE_SEARCH_TIMEOUT_MS;
     else process.env.GOOGLE_IMAGE_SEARCH_TIMEOUT_MS = originalTimeout;
   });
 
-  it('busca no Google Imagens e aceita correspondência forte de marca/modelo', async () => {
+  it('busca no Google Imagens via SerpApi e aceita correspondência forte', async () => {
     jest.mocked(requisitarUrlPublicaUmaVez).mockResolvedValue({
       status: 200,
       ok: true,
-      url: new URL('https://customsearch.googleapis.com/customsearch/v1'),
+      url: new URL('https://serpapi.com/search.json'),
       headers: {},
       corpo: Buffer.from(
         JSON.stringify({
-          items: [
+          images_results: [
             {
               title: 'ASUS GeForce RTX 4060 DUAL OC 8GB',
-              snippet: 'Placa de vídeo ASUS RTX 4060 Dual OC',
-              displayLink: 'asus.com',
-              link: 'https://cdn.exemplo.com/asus-rtx4060.jpg',
-              image: {
-                contextLink:
-                  'https://www.asus.com/br/motherboards-components/graphics-cards/dual/dual-rtx4060-o8g/',
-              },
+              source: 'ASUS',
+              link:
+                'https://www.asus.com/br/motherboards-components/graphics-cards/dual/dual-rtx4060-o8g/',
+              original: 'https://cdn.exemplo.com/asus-rtx4060.jpg',
             },
           ],
         }),
@@ -75,15 +77,15 @@ describe('GoogleImageSearchService', () => {
     expect(resultado).toMatchObject({
       imagemUrl: 'https://cdn.exemplo.com/asus-rtx4060.jpg',
       fonte: 'GOOGLE_IMAGENS',
+      provedor: 'SERPAPI',
       marca: 'ASUS',
       modelo: 'RTX 4060 Dual OC',
     });
 
     const chamada = jest.mocked(requisitarUrlPublicaUmaVez).mock.calls[0]?.[0];
     const url = chamada instanceof URL ? chamada : new URL(String(chamada));
-    expect(url.searchParams.get('searchType')).toBe('image');
-    expect(url.searchParams.get('num')).toBe('10');
-    expect(url.searchParams.get('safe')).toBe('active');
+    expect(url.hostname).toBe('serpapi.com');
+    expect(url.searchParams.get('engine')).toBe('google_images');
     expect(url.searchParams.get('q')).toContain('ASUS');
     expect(url.searchParams.get('q')).toContain('RTX 4060 Dual OC');
   });
@@ -92,17 +94,16 @@ describe('GoogleImageSearchService', () => {
     jest.mocked(requisitarUrlPublicaUmaVez).mockResolvedValue({
       status: 200,
       ok: true,
-      url: new URL('https://customsearch.googleapis.com/customsearch/v1'),
+      url: new URL('https://serpapi.com/search.json'),
       headers: {},
       corpo: Buffer.from(
         JSON.stringify({
-          items: [
+          images_results: [
             {
               title: 'Placa de vídeo genérica',
-              snippet: 'GPU para jogos',
-              displayLink: 'exemplo.com',
-              link: 'https://cdn.exemplo.com/generica.jpg',
-              image: { contextLink: 'https://exemplo.com/generica' },
+              source: 'Loja genérica',
+              link: 'https://exemplo.com/generica',
+              original: 'https://cdn.exemplo.com/generica.jpg',
             },
           ],
         }),
@@ -120,7 +121,47 @@ describe('GoogleImageSearchService', () => {
     expect(validarUrlPublica).not.toHaveBeenCalled();
   });
 
-  it('não consulta o Google sem API key e cx', async () => {
+  it('mantém a API Google antiga como fallback para clientes já habilitados', async () => {
+    delete process.env.SERPAPI_API_KEY;
+    process.env.GOOGLE_IMAGE_SEARCH_API_KEY = 'google-test';
+    process.env.GOOGLE_IMAGE_SEARCH_CX = 'cx-test';
+
+    jest.mocked(requisitarUrlPublicaUmaVez).mockResolvedValue({
+      status: 200,
+      ok: true,
+      url: new URL('https://customsearch.googleapis.com/customsearch/v1'),
+      headers: {},
+      corpo: Buffer.from(
+        JSON.stringify({
+          items: [
+            {
+              title: 'ASUS RTX 4060 Dual OC',
+              snippet: 'ASUS RTX 4060 Dual OC',
+              displayLink: 'asus.com',
+              link: 'https://cdn.exemplo.com/google-rtx4060.jpg',
+              image: { contextLink: 'https://asus.com/rtx4060' },
+            },
+          ],
+        }),
+      ),
+    });
+
+    const service = new GoogleImageSearchService();
+    await expect(
+      service.buscar({
+        nome: 'ASUS RTX 4060 Dual OC',
+        marca: 'ASUS',
+        modelo: 'RTX 4060 Dual OC',
+      }),
+    ).resolves.toMatchObject({
+      fonte: 'GOOGLE_IMAGENS',
+      provedor: 'GOOGLE_CUSTOM_SEARCH',
+      imagemUrl: 'https://cdn.exemplo.com/google-rtx4060.jpg',
+    });
+  });
+
+  it('não consulta o Google sem nenhum provedor configurado', async () => {
+    delete process.env.SERPAPI_API_KEY;
     delete process.env.GOOGLE_IMAGE_SEARCH_API_KEY;
     delete process.env.GOOGLE_IMAGE_SEARCH_CX;
 
@@ -136,19 +177,19 @@ describe('GoogleImageSearchService', () => {
     expect(requisitarUrlPublicaUmaVez).not.toHaveBeenCalled();
   });
 
-  it('faz somente um retry controlado quando o Google retorna 429', async () => {
+  it('faz somente um retry controlado quando o provedor retorna 429', async () => {
     jest.mocked(requisitarUrlPublicaUmaVez)
       .mockResolvedValueOnce({
         status: 429,
         ok: false,
-        url: new URL('https://customsearch.googleapis.com/customsearch/v1'),
+        url: new URL('https://serpapi.com/search.json'),
         headers: {},
         corpo: Buffer.from('{}'),
       })
       .mockResolvedValueOnce({
         status: 429,
         ok: false,
-        url: new URL('https://customsearch.googleapis.com/customsearch/v1'),
+        url: new URL('https://serpapi.com/search.json'),
         headers: {},
         corpo: Buffer.from('{}'),
       });
