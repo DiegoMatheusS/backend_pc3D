@@ -14,7 +14,7 @@ export class CriarNotebookDto {
   @IsString() @MinLength(2) @MaxLength(200) nome!: string;
   @IsString() @MinLength(1) @MaxLength(100) marca!: string;
   @IsString() @MinLength(1) @MaxLength(150) modelo!: string;
-  @IsOptional() @IsString() @MaxLength(4000) descricao?: string;
+  @IsOptional() @IsString() @MaxLength(30000) descricao?: string;
   @IsOptional() @IsString() @MaxLength(150) mpn?: string;
   @IsOptional() @IsString() @MaxLength(32) gtin?: string;
   @IsOptional()

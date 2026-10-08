@@ -7,7 +7,11 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { validarUrlPublica } from '../common/security/external-http-security';
 import { HardwaresService } from '../hardwares/hardwares.service';
-import { CategoriaHardware, StatusOferta } from '../generated/prisma/enums';
+import {
+  CategoriaHardware,
+  StatusOferta,
+  TipoProduto,
+} from '../generated/prisma/enums';
 import { IaProvider } from './ia.provider';
 import { ProdutoIaPythonService } from './produto-ia-python.service';
 import { ChatIaDto, UsoPC } from './dtos/chat-ia.dto';
@@ -4338,6 +4342,9 @@ Ao final retorne também:
       }
     }
 
+    const escopoProduto =
+      categoriaEscolhida === 'PC_MONTADO' ? { tipo: TipoProduto.BUILD } : {};
+
     let produtoExistente = hardwareExistente?.produtoId
       ? await this.prisma.produto.findUnique({
           where: { id: hardwareExistente.produtoId },
@@ -4345,7 +4352,7 @@ Ao final retorne também:
         })
       : gtin
         ? await this.prisma.produto.findFirst({
-            where: { gtin },
+            where: { ...escopoProduto, gtin },
             include: { hardware: true },
           })
         : null;
@@ -4353,7 +4360,11 @@ Ao final retorne também:
       produtoExistente ? (criterioHardware ?? 'GTIN') : null;
     if (!produtoExistente && mpn && marca) {
       produtoExistente = await this.prisma.produto.findFirst({
-        where: { mpn, marca: { equals: marca, mode: 'insensitive' } },
+        where: {
+          ...escopoProduto,
+          mpn,
+          marca: { equals: marca, mode: 'insensitive' },
+        },
         include: { hardware: true },
       });
       if (produtoExistente) criterioProduto = 'MPN_MARCA';
@@ -4361,6 +4372,7 @@ Ao final retorne também:
     if (!produtoExistente && marca && modelo) {
       produtoExistente = await this.prisma.produto.findFirst({
         where: {
+          ...escopoProduto,
           marca: { equals: marca, mode: 'insensitive' },
           modelo: { equals: modelo, mode: 'insensitive' },
         },

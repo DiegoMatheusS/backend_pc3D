@@ -75,7 +75,7 @@ export class IaAdminController {
   /**
    * A Affiliate API da Shopee é mantida como fonte de preço/link, porém ela não
    * entrega a descrição completa. No fluxo do ADMIN buscamos os detalhes da
-   * página e só preenchemos lacunas da prévia retornada pela Produto IA.
+   * página e preservamos a descrição do vendedor na prévia da Produto IA.
    */
   private async complementarDetalhesShopee(
     url: string,
@@ -113,12 +113,6 @@ export class IaAdminController {
       if (detalhes.ok !== true) return resultado;
 
       const descricao = texto(detalhes.descricao);
-      const atributosTexto = texto(detalhes.atributosTexto);
-      const textoPagina = [descricao, atributosTexto]
-        .filter(Boolean)
-        .filter((valor, indice, itens) => itens.indexOf(valor) === indice)
-        .join('\n\n');
-
       const normalizacao = ehRegistro(resultado.normalizacao)
         ? resultado.normalizacao
         : {};
@@ -130,8 +124,8 @@ export class IaAdminController {
       if (!texto(camposCompletos.nome) && texto(detalhes.titulo)) {
         camposCompletos.nome = texto(detalhes.titulo);
       }
-      if (!texto(camposCompletos.descricao) && textoPagina) {
-        camposCompletos.descricao = textoPagina;
+      if (descricao) {
+        camposCompletos.descricao = descricao;
       }
       if (!texto(camposCompletos.imagemUrl) && texto(detalhes.imagemUrl)) {
         camposCompletos.imagemUrl = texto(detalhes.imagemUrl);
@@ -143,6 +137,7 @@ export class IaAdminController {
           ...normalizacao,
           camposNormalizados: camposCompletos,
         },
+        descricaoAnuncio: descricao || undefined,
         detalhesPaginaShopee: detalhes,
       };
     } catch {

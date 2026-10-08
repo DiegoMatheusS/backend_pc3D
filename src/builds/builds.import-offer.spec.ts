@@ -53,6 +53,10 @@ describe('cadastro de PC com oferta', () => {
     expect(create.data.produto?.create).toMatchObject({
       ofertas: { create: body.oferta },
     });
+    expect(prisma.produto.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tipo: 'BUILD' } }),
+    );
+    expect(prisma.hardware.findMany).not.toHaveBeenCalled();
   });
   it('não cria o PC quando a loja é inativa ou inexistente', async () => {
     const { prisma, service } = setup();
@@ -81,6 +85,13 @@ describe('cadastro de PC com oferta', () => {
 });
 
 describe('contrato de anúncio comercial com vínculos opcionais', () => {
+  it('aceita descrição longa sem o antigo corte em 4000 caracteres', () => {
+    const dto = plainToInstance(CriarBuildDto, {
+      nome: 'PC Gamer',
+      descricao: 'Configuração, acessórios e garantia.\n'.repeat(400),
+    });
+    expect(validateSync(dto)).toHaveLength(0);
+  });
   it('aceita PC/kit com descrição e sem lista de hardwares', () => {
     const dto = plainToInstance(CriarBuildDto, {
       nome: 'Kit upgrade',

@@ -109,12 +109,18 @@ const selectIdentity = {
 export async function assertCatalogIdentityAvailable(
   tx: Prisma.TransactionClient,
   identity: CatalogIdentity,
-  options: { hardwareOriginId?: number } = {},
+  options: { hardwareOriginId?: number; tipoProduto?: 'BUILD' } = {},
 ) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(734291, 1)`;
   const [products, hardwares] = await Promise.all([
-    tx.produto.findMany({ select: selectIdentity }),
-    tx.hardware.findMany({ select: selectIdentity }),
+    tx.produto.findMany({
+      select: selectIdentity,
+      ...(options.tipoProduto ? { where: { tipo: options.tipoProduto } } : {}),
+    }),
+    // Um computador é um produto próprio: seus componentes não são duplicatas.
+    options.tipoProduto === 'BUILD'
+      ? Promise.resolve([])
+      : tx.hardware.findMany({ select: selectIdentity }),
   ]);
   const product = products.find((item) =>
     possibleCatalogIdentity(identity, item),

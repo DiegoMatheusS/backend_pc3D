@@ -21,7 +21,7 @@ export class CriarProdutoDeHardwareDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(4000)
+  @MaxLength(30000)
   descricao?: string;
 
   @IsOptional()

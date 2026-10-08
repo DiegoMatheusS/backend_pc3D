@@ -30,7 +30,7 @@ export class AtualizarNotebookDto {
   @MaxLength(150)
   modelo?: string;
 
-  @IsOptional() @IsString() @MaxLength(4000) descricao?: string | null;
+  @IsOptional() @IsString() @MaxLength(30000) descricao?: string | null;
   @IsOptional() @IsString() @MaxLength(150) mpn?: string | null;
   @IsOptional() @IsString() @MaxLength(32) gtin?: string | null;
   @IsOptional()
