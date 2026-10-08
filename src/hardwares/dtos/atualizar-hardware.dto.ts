@@ -69,7 +69,7 @@ export class AtualizarHardwareDto {
   @IsString({
     message: 'A descrição deve ser um texto.',
   })
-  @MaxLength(5000)
+  @MaxLength(30000)
   descricao?: string;
 
   @IsOptional()

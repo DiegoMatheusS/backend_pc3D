@@ -125,7 +125,7 @@ export class BuildsCatalogoService {
     const categoria = await this.categoriaComercial(dados.categoria);
     const slug = await this.slugUnico(dados.nome);
     const criado = await this.prisma.$transaction(async (tx) => {
-      await assertCatalogIdentityAvailable(tx, dados);
+      await assertCatalogIdentityAvailable(tx, dados, { tipoProduto: 'BUILD' });
       return tx.build.create({
         data: {
           produto: {

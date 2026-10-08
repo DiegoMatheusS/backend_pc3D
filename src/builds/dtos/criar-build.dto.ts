@@ -64,7 +64,7 @@ export class CriarBuildDto {
   @IsString() @MinLength(2) @MaxLength(200) nome!: string;
   @IsOptional() @IsString() @MaxLength(100) marca?: string;
   @IsOptional() @IsString() @MaxLength(150) modelo?: string;
-  @IsOptional() @IsString() @MaxLength(4000) descricao?: string;
+  @IsOptional() @IsString() @MaxLength(30000) descricao?: string;
   @IsOptional()
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
   @MaxLength(500)

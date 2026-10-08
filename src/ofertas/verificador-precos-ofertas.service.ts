@@ -611,7 +611,7 @@ export class VerificadorPrecosOfertasService {
   private extrairPrecoAfiliadoGenerico(html: string): number | null {
     const candidatos: number[] = [];
     const ancoras =
-      /(?:id|class|data-testid)=["'][^"']*(?:price|preco|preço|pix|avista|a-vista|sale|final)[^"']*["']/gi;
+      /(?:id|class|data-testid)=["'][^"']*(?:price|preco|preço|pix|avista|a-vista|valor-promocional|valvista|sale|final)[^"']*["']/gi;
 
     for (const match of Array.from(html.matchAll(ancoras)).slice(0, 80)) {
       const atributo = (match[0] ?? '').toLowerCase();

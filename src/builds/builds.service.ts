@@ -902,7 +902,7 @@ export class BuildsService {
     const slug = await this.criarSlugUnico(dados.nome);
 
     return this.prisma.$transaction(async (tx) => {
-      await assertCatalogIdentityAvailable(tx, dados);
+      await assertCatalogIdentityAvailable(tx, dados, { tipoProduto: 'BUILD' });
       return tx.build.create({
         data: {
           produto: {

@@ -164,3 +164,58 @@ describe('identidade do catálogo', () => {
     ).rejects.toMatchObject({ response: { produtoExistenteId: 42 } });
   });
 });
+
+describe('identidade de PC montado separada dos componentes', () => {
+  const cpu = {
+    id: 180,
+    tipo: 'HARDWARE',
+    nome: 'Ryzen 5 5500',
+    marca: 'AMD',
+    modelo: 'Ryzen 5 5500',
+  };
+  const pc = {
+    nome: 'PC Gamer AMD Ryzen 5 5500',
+    marca: 'AMD',
+    modelo: 'Ryzen 5 5500',
+  };
+  function txWith(products: Array<typeof cpu>) {
+    return {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      produto: {
+        findMany: jest
+          .fn()
+          .mockImplementation(({ where }) =>
+            Promise.resolve(
+              products.filter((p) => !where?.tipo || p.tipo === where.tipo),
+            ),
+          ),
+      },
+      hardware: { findMany: jest.fn().mockResolvedValue([cpu]) },
+    };
+  }
+  it('permite cadastrar PC que usa o Produto 180 como componente', async () => {
+    const tx = txWith([cpu]);
+    await expect(
+      assertCatalogIdentityAvailable(
+        tx as unknown as Prisma.TransactionClient,
+        pc,
+        { tipoProduto: 'BUILD' },
+      ),
+    ).resolves.toBeUndefined();
+    expect(tx.produto.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tipo: 'BUILD' } }),
+    );
+    expect(tx.hardware.findMany).not.toHaveBeenCalled();
+    expect(tx.$executeRaw).toHaveBeenCalled();
+  });
+  it('continua rejeitando duplicação de outro PC montado', async () => {
+    const tx = txWith([{ ...cpu, ...pc, tipo: 'BUILD', id: 200 }]);
+    await expect(
+      assertCatalogIdentityAvailable(
+        tx as unknown as Prisma.TransactionClient,
+        pc,
+        { tipoProduto: 'BUILD' },
+      ),
+    ).rejects.toMatchObject({ response: { produtoExistenteId: 200 } });
+  });
+});

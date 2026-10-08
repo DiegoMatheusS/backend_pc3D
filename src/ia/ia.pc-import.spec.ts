@@ -9,6 +9,7 @@ jest.mock('../common/security/external-http-security', () => ({
 describe('importação de PC pelo ProjetoIA', () => {
   function setup(matches: object[]) {
     const prisma = {
+      produto: { findFirst: jest.fn().mockResolvedValue(null) },
       hardware: {
         findMany: jest
           .fn<Promise<object[]>, [{ where: { publicado: boolean } }]>()
@@ -68,5 +69,28 @@ describe('importação de PC pelo ProjetoIA', () => {
     expect(
       result.cadastroSugerido?.componentesDetectados?.[0].hardwareId,
     ).toBeNull();
+  });
+  it('reconcilia o PC apenas com outros BUILD, nunca com o processador', async () => {
+    const { service, prisma, python } = setup([]);
+    python.importarUrl.mockResolvedValue({
+      categoriaDetectada: 'PC_MONTADO',
+      payloadParcialBackend: {
+        nome: 'PC Gamer AMD Ryzen 5 5500',
+        marca: 'AMD',
+        modelo: 'Ryzen 5 5500',
+      },
+      especificacoesEncontradas: { componentes: [] },
+      ofertaColetada: { preco: 3999.9 },
+    } as never);
+    const result = await service.importarLinkAdmin({
+      url: 'https://shopee.com.br/product/123/456',
+      categoriaEsperada: 'PC_MONTADO',
+    });
+    expect(prisma.produto.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ tipo: 'BUILD' }),
+      }),
+    );
+    expect(result.reconciliacao.produtoExistente).toBeNull();
   });
 });
