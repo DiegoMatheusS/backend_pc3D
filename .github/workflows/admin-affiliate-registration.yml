@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "src/chatbot-admin/**"
+      - "src/builds/**"
       - "src/main.ts"
       - "src/ia/produto-ia-python.service.ts"
       - "src/ia/produto-ia-python.service.spec.ts"
@@ -18,6 +19,8 @@ on:
     branches: [main]
     paths:
       - "src/chatbot-admin/**"
+      - "src/builds/**"
+      - "src/produto-ia-integracao-interna/**"
       - "src/main.ts"
       - "src/ia/produto-ia-python.service.ts"
       - "src/ia/produto-ia-python.service.spec.ts"
@@ -44,3 +47,5 @@ jobs:
         run: npm test -- --runInBand chatbot-admin/dtos/analisar-cadastro-chatbot.dto.spec.ts chatbot-admin/dtos/confirmar-cadastro-chatbot.dto.spec.ts chatbot-admin/chatbot-admin.gpu-clock.spec.ts chatbot-admin/chatbot-admin.hardware-import.spec.ts chatbot-admin/chatbot-admin.ram-category.spec.ts chatbot-admin/chatbot-admin.shopee-partner.spec.ts chatbot-admin/chatbot-admin.page-collection.spec.ts chatbot-admin/marketplace-domains.spec.ts ia/produto-ia-python.service.spec.ts ia/dtos/categoria-importacao-ia.spec.ts produto-ia-integracao-interna/produto-ia-integracao-interna.service.spec.ts produto-ia-integracao-interna/produto-ia-integracao-interna.controller.spec.ts produto-ia-integracao-interna/prebusca-processador-modelo.spec.ts
       - name: Compilar backend
         run: npm run build
+      - name: Testar cadastro de PC pela extensão
+        run: npm test -- --runInBand produto-ia-integracao-interna/dtos/build-oferta-extensao.dto.spec.ts builds/builds.import-offer.spec.ts
