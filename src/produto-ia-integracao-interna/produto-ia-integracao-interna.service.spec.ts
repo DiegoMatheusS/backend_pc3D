@@ -197,14 +197,10 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     expect(descoberta.cadastrar).not.toHaveBeenCalled();
     expect(produtos.atualizar).toHaveBeenCalledWith(
       50,
-      expect.objectContaining({
+      {
         publicado: true,
         ativo: true,
-        nome: 'Monitor LG UltraGear 24',
-        especificacaoMonitor: expect.objectContaining({
-          taxaAtualizacaoHz: 144,
-        }),
-      }),
+      },
     );
     expect(ofertas.criarOferta).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -338,5 +334,77 @@ describe('ProdutoIaIntegracaoInternaService', () => {
         preco: 349.9,
       }),
     );
+  });
+
+  it('mantém dois vendedores do mesmo catálogo Mercado Livre no mesmo Produto e reenvio atualiza só a oferta', async () => {
+    const catalogo = 'https://www.mercadolivre.com.br/monitor/p/MLB37817321';
+    const anuncioAnterior = {
+      id: 90, produtoId: 50, parceiroId: 2,
+      urlOriginal: `${catalogo}?wid=MLB5953835688`,
+      // Código legado de catálogo: não identifica o vendedor.
+      codigoMarketplace: 'MLB37817321',
+      vendedorIdentificador: '100', vendedorNome: 'Loja A',
+      urlAfiliada: 'https://meli.la/loja-a', preco: 899.9,
+    };
+    const anuncios = [anuncioAnterior];
+    const { service, ofertas, produtos } = setup(anuncios, [{
+      id: 50, tipo: 'GENERICO', categoriaId: 12,
+      marca: 'LG', modelo: '24GN60R-B',
+    }]);
+    ofertas.criarOferta.mockImplementation(async (dados) => {
+      const oferta = { id: 91, ...dados };
+      anuncios.push(oferta);
+      return oferta;
+    });
+    const novo = {
+      ...produtoPayload,
+      oferta: {
+        urlOriginal: `${catalogo}?item_id=MLB6740306774`,
+        urlAfiliada: 'https://meli.la/loja-b', preco: 899.9,
+        codigoMarketplace: 'MLB37817321',
+        vendedorIdentificador: '200', vendedorNome: 'Loja B',
+      },
+    } as ImportarOfertaExtensaoProdutoIaDto;
+
+    const criado = await service.importarOfertaExtensao(novo);
+    expect(criado.status).toBe('NOVA_OFERTA_CRIADA');
+    expect(criado.produto?.id).toBe(50);
+    expect(anuncios).toHaveLength(2);
+    expect(anuncios[0]).toEqual(anuncioAnterior);
+    expect(anuncios[1]).toMatchObject({ produtoId: 50, urlAfiliada: 'https://meli.la/loja-b' });
+    expect(ofertas.atualizarOferta).not.toHaveBeenCalled();
+    expect(produtos.criar).not.toHaveBeenCalled();
+    expect(produtos.atualizar).toHaveBeenCalledWith(50, { publicado: true, ativo: true });
+
+    const reenviado = await service.importarOfertaExtensao({
+      produtoExistenteId: 50,
+      parceiro: novo.parceiro,
+      oferta: { ...novo.oferta, preco: 850 },
+    } as ImportarOfertaExtensaoProdutoIaDto);
+    expect(reenviado.status).toBe('OFERTA_ATUALIZADA');
+    expect(ofertas.atualizarOferta).toHaveBeenCalledWith(91, expect.objectContaining({ preco: 850 }));
+    expect(ofertas.criarOferta).toHaveBeenCalledTimes(1);
+    expect(anuncios).toHaveLength(2);
+  });
+
+  it('anúncios diferentes vinculam a oferta ao Hardware existente sem recadastrar', async () => {
+    const { service, ofertas, descoberta } = setup([{
+      id: 90, hardwareId: 42, parceiroId: 2,
+      urlOriginal: 'https://www.mercadolivre.com.br/fonte/p/MLB37817321?wid=MLB5953835688',
+      codigoMarketplace: 'MLB37817321',
+    }]);
+    const result = await service.importarOfertaExtensao({
+      hardwareExistenteId: 42,
+      parceiro: hardwarePayload.parceiro,
+      oferta: {
+        urlOriginal: 'https://www.mercadolivre.com.br/fonte/p/MLB37817321#pdp_filters=item_id:MLB6740306774',
+        urlAfiliada: 'https://meli.la/outra-loja', preco: 199.9,
+        codigoMarketplace: 'MLB37817321',
+      },
+    } as ImportarOfertaExtensaoProdutoIaDto);
+    expect(result.status).toBe('ITEM_EXISTENTE_OFERTA_CRIADA');
+    expect(ofertas.criarOferta).toHaveBeenCalledWith(expect.objectContaining({ hardwareId: 42 }));
+    expect(ofertas.atualizarOferta).not.toHaveBeenCalled();
+    expect(descoberta.cadastrar).not.toHaveBeenCalled();
   });
 });
