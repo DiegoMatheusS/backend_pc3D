@@ -7,6 +7,7 @@ import {
 import { HardwaresDescobertaIaService } from '../hardwares-descoberta-ia/hardwares-descoberta-ia.service';
 import { HardwaresService } from '../hardwares/hardwares.service';
 import { OfertasService } from '../ofertas/ofertas.service';
+import { mesmaPublicacaoMarketplace } from '../ofertas/utils/identidade-publicacao';
 import { ProdutosService } from '../produtos/produtos.service';
 import { BuscarItemExtensaoProdutoIaDto } from './dtos/buscar-item-extensao-produto-ia.dto';
 import {
@@ -35,17 +36,6 @@ export class ProdutoIaIntegracaoInternaService {
       .toLowerCase()
       .replace(/[^a-z0-9]+/gu, '')
       .trim();
-  }
-
-  private urlCanonica(valor: unknown): string {
-    try {
-      const url = new URL(String(valor ?? '').trim());
-      if (!['http:', 'https:'].includes(url.protocol)) return '';
-      const path = url.pathname.replace(/\/+$/u, '') || '/';
-      return `${url.protocol}//${url.host.toLowerCase()}${path}`;
-    } catch {
-      return '';
-    }
   }
 
   private metadados(valor: unknown): Registro {
@@ -109,16 +99,14 @@ export class ProdutoIaIntegracaoInternaService {
     parceiroId: number,
     urlOriginal: string,
     codigoMarketplace?: string | null,
+    vendedorIdentificador?: string | null,
   ): boolean {
     if (this.idParceiroOferta(oferta) !== parceiroId) return false;
-
-    const codigoAtual = this.normalizar(oferta.codigoMarketplace);
-    const codigoNovo = this.normalizar(codigoMarketplace);
-    if (codigoAtual && codigoNovo && codigoAtual === codigoNovo) return true;
-
-    const atual = this.urlCanonica(oferta.urlOriginal);
-    const nova = this.urlCanonica(urlOriginal);
-    return Boolean(atual && nova && atual === nova);
+    return mesmaPublicacaoMarketplace(oferta, {
+      urlOriginal,
+      codigoMarketplace,
+      vendedorIdentificador,
+    });
   }
 
   private mesmaOfertaHardware(
@@ -127,10 +115,17 @@ export class ProdutoIaIntegracaoInternaService {
     parceiroId: number,
     urlOriginal: string,
     codigoMarketplace?: string | null,
+    vendedorIdentificador?: string | null,
   ): boolean {
     return (
       this.idHardwareOferta(oferta) === hardwareId &&
-      this.mesmaPublicacao(oferta, parceiroId, urlOriginal, codigoMarketplace)
+      this.mesmaPublicacao(
+        oferta,
+        parceiroId,
+        urlOriginal,
+        codigoMarketplace,
+        vendedorIdentificador,
+      )
     );
   }
 
@@ -178,36 +173,8 @@ export class ProdutoIaIntegracaoInternaService {
     );
   }
 
-  private async publicarProdutoExistente(
-    produtoId: number,
-    dados?: ProdutoOfertaExtensaoDto,
-  ) {
-    if (!dados) {
-      return this.produtosService.atualizar(produtoId, {
-        publicado: true,
-        ativo: true,
-      });
-    }
-
-    const atual = await this.produtosService.buscarAdmin(produtoId);
-    const {
-      categoriaSlug: _categoriaSlug,
-      asin,
-      metadados,
-      ...atualizacao
-    } = dados;
-    void _categoriaSlug;
-
-    const metadadosAtuais = this.metadados((atual as unknown as Registro).metadados);
-    const metadadosNovos = {
-      ...metadadosAtuais,
-      ...(metadados ?? {}),
-      ...(asin ? { asin: asin.trim().toUpperCase() } : {}),
-    };
-
+  private async publicarProdutoExistente(produtoId: number) {
     return this.produtosService.atualizar(produtoId, {
-      ...atualizacao,
-      ...(Object.keys(metadadosNovos).length ? { metadados: metadadosNovos } : {}),
       publicado: true,
       ativo: true,
     });
@@ -414,6 +381,7 @@ export class ProdutoIaIntegracaoInternaService {
           parceiro.id,
           dados.oferta.urlOriginal,
           codigoMarketplace,
+          dados.oferta.vendedorIdentificador,
         ),
       );
       const oferta = existente
@@ -444,6 +412,7 @@ export class ProdutoIaIntegracaoInternaService {
         parceiro.id,
         dados.oferta.urlOriginal,
         codigoMarketplace,
+        dados.oferta.vendedorIdentificador,
       ),
     );
     if (existente) {
@@ -500,13 +469,14 @@ export class ProdutoIaIntegracaoInternaService {
         parceiro.id,
         dados.oferta.urlOriginal,
         codigoMarketplace,
+        dados.oferta.vendedorIdentificador,
       ),
     );
 
     if (anuncioExistente) {
       const produtoId = this.idProdutoOferta(anuncioExistente as unknown as Registro);
       if (produtoId) {
-        const produto = await this.publicarProdutoExistente(produtoId, produtoPayload);
+        const produto = await this.publicarProdutoExistente(produtoId);
         const atualizada = await this.atualizarOferta(anuncioExistente.id, dados.oferta);
         return {
           status: 'OFERTA_ATUALIZADA' as const,
@@ -539,7 +509,6 @@ export class ProdutoIaIntegracaoInternaService {
     if (produtoExistente) {
       const produtoAtualizado = await this.publicarProdutoExistente(
         produtoExistente.id,
-        produtoPayload,
       );
       const oferta = await this.ofertasService.criarOferta({
         ...ofertaBase,
@@ -606,6 +575,7 @@ export class ProdutoIaIntegracaoInternaService {
         parceiro.id,
         dados.oferta.urlOriginal,
         codigoMarketplace,
+        dados.oferta.vendedorIdentificador,
       ),
     );
 
