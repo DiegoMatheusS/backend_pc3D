@@ -8,6 +8,8 @@ import { HardwaresDescobertaIaService } from '../hardwares-descoberta-ia/hardwar
 import { HardwaresService } from '../hardwares/hardwares.service';
 import { OfertasService } from '../ofertas/ofertas.service';
 import { ProdutosService } from '../produtos/produtos.service';
+import { BuildsCatalogoService } from '../builds/builds-catalogo.service';
+import { sameCatalogIdentity } from '../common/catalog-identity';
 import { BuscarItemExtensaoProdutoIaDto } from './dtos/buscar-item-extensao-produto-ia.dto';
 import {
   ImportarOfertaExtensaoProdutoIaDto,
@@ -26,6 +28,7 @@ export class ProdutoIaIntegracaoInternaService {
     private readonly hardwaresService: HardwaresService,
     private readonly ofertasService: OfertasService,
     private readonly produtosService: ProdutosService,
+    private readonly buildsCatalogoService: BuildsCatalogoService,
   ) {}
 
   private normalizar(valor: unknown): string {
@@ -101,7 +104,11 @@ export class ProdutoIaIntegracaoInternaService {
   }
 
   private codigoOferta(dados: OfertaExtensaoDto): string | null {
-    return dados.codigoMarketplace?.trim() || dados.asin?.trim().toUpperCase() || null;
+    return (
+      dados.codigoMarketplace?.trim() ||
+      dados.asin?.trim().toUpperCase() ||
+      null
+    );
   }
 
   private mesmaPublicacao(
@@ -173,8 +180,12 @@ export class ProdutoIaIntegracaoInternaService {
     const modeloAtual = this.normalizar(produto.modelo);
     const modeloNovo = this.normalizar(dados.modelo);
     return Boolean(
-      marcaAtual && marcaNova && modeloAtual && modeloNovo &&
-      marcaAtual === marcaNova && modeloAtual === modeloNovo
+      marcaAtual &&
+      marcaNova &&
+      modeloAtual &&
+      modeloNovo &&
+      marcaAtual === marcaNova &&
+      modeloAtual === modeloNovo,
     );
   }
 
@@ -198,7 +209,9 @@ export class ProdutoIaIntegracaoInternaService {
     } = dados;
     void _categoriaSlug;
 
-    const metadadosAtuais = this.metadados((atual as unknown as Registro).metadados);
+    const metadadosAtuais = this.metadados(
+      (atual as unknown as Registro).metadados,
+    );
     const metadadosNovos = {
       ...metadadosAtuais,
       ...(metadados ?? {}),
@@ -207,7 +220,9 @@ export class ProdutoIaIntegracaoInternaService {
 
     return this.produtosService.atualizar(produtoId, {
       ...atualizacao,
-      ...(Object.keys(metadadosNovos).length ? { metadados: metadadosNovos } : {}),
+      ...(Object.keys(metadadosNovos).length
+        ? { metadados: metadadosNovos }
+        : {}),
       publicado: true,
       ativo: true,
     });
@@ -220,7 +235,8 @@ export class ProdutoIaIntegracaoInternaService {
 
     const parceiroEncontrado = parceirosResultado.parceiros.find((item) => {
       const mesmoNome = this.normalizar(item.nome) === nomeParceiro;
-      const mesmoDominio = Boolean(dominioParceiro) &&
+      const mesmoDominio =
+        Boolean(dominioParceiro) &&
         this.normalizar(item.dominio) === dominioParceiro;
       return mesmoNome || mesmoDominio;
     });
@@ -240,7 +256,8 @@ export class ProdutoIaIntegracaoInternaService {
       dominio: dados.dominio ?? null,
       site: dados.site ?? null,
       programaAfiliados: true,
-      observacao: 'Criado automaticamente pela integração interna da extensão Criabyte.',
+      observacao:
+        'Criado automaticamente pela integração interna da extensão Criabyte.',
     });
     return { id: criado.id, nome: criado.nome };
   }
@@ -252,10 +269,14 @@ export class ProdutoIaIntegracaoInternaService {
       urlOriginal: dados.urlOriginal,
       urlAfiliada: dados.urlAfiliada,
       preco: dados.preco,
-      ...(dados.precoAnterior !== undefined && { precoAnterior: dados.precoAnterior }),
+      ...(dados.precoAnterior !== undefined && {
+        precoAnterior: dados.precoAnterior,
+      }),
       ...(codigoMarketplace && { codigoMarketplace }),
       ...(dados.vendedorNome && { vendedorNome: dados.vendedorNome }),
-      ...(dados.vendedorIdentificador && { vendedorIdentificador: dados.vendedorIdentificador }),
+      ...(dados.vendedorIdentificador && {
+        vendedorIdentificador: dados.vendedorIdentificador,
+      }),
     };
   }
 
@@ -271,7 +292,10 @@ export class ProdutoIaIntegracaoInternaService {
     });
   }
 
-  private criterioRegistro(registro: Registro, dados: BuscarItemExtensaoProdutoIaDto): CriterioBusca | null {
+  private criterioRegistro(
+    registro: Registro,
+    dados: BuscarItemExtensaoProdutoIaDto,
+  ): CriterioBusca | null {
     const asin = this.normalizar(dados.asin);
     if (asin && this.asinProduto(registro) === asin) return 'ASIN';
 
@@ -284,24 +308,33 @@ export class ProdutoIaIntegracaoInternaService {
     const marca = this.normalizar(dados.marca);
     const modelo = this.normalizar(dados.modelo);
     if (
-      marca && modelo &&
+      marca &&
+      modelo &&
       this.normalizar(registro.marca) === marca &&
       this.normalizar(registro.modelo) === modelo
-    ) return 'MARCA_MODELO';
+    )
+      return 'MARCA_MODELO';
 
     const nome = this.normalizar(dados.nome);
     if (
-      nome && marca &&
+      nome &&
+      marca &&
       this.normalizar(registro.nome) === nome &&
       this.normalizar(registro.marca) === marca
-    ) return 'NOME_MARCA';
+    )
+      return 'NOME_MARCA';
 
     return null;
   }
 
   async buscarItemExtensao(dados: BuscarItemExtensaoProdutoIaDto) {
-    const temIdentidade = [dados.asin, dados.gtin, dados.mpn, dados.modelo, dados.nome]
-      .some((item) => this.normalizar(item));
+    const temIdentidade = [
+      dados.asin,
+      dados.gtin,
+      dados.mpn,
+      dados.modelo,
+      dados.nome,
+    ].some((item) => this.normalizar(item));
     if (!temIdentidade) {
       return { status: 'DADOS_INSUFICIENTES' as const };
     }
@@ -322,7 +355,9 @@ export class ProdutoIaIntegracaoInternaService {
       NOME_MARCA: 1,
     };
 
-    candidatosProduto.sort((a, b) => prioridade[b.criterio!] - prioridade[a.criterio!]);
+    candidatosProduto.sort(
+      (a, b) => prioridade[b.criterio!] - prioridade[a.criterio!],
+    );
     if (candidatosProduto.length) {
       const melhor = candidatosProduto[0];
       const mesmaPrioridade = candidatosProduto.filter(
@@ -332,7 +367,9 @@ export class ProdutoIaIntegracaoInternaService {
         return {
           status: 'AMBIGUO' as const,
           candidatos: mesmaPrioridade.slice(0, 5).map(({ produto }) => ({
-            tipo: 'PRODUTO', id: produto.id, nome: produto.nome,
+            tipo: 'PRODUTO',
+            id: produto.id,
+            nome: produto.nome,
           })),
         };
       }
@@ -348,7 +385,9 @@ export class ProdutoIaIntegracaoInternaService {
           modelo: melhor.produto.modelo,
           gtin: melhor.produto.gtin,
           mpn: melhor.produto.mpn,
-          asin: this.metadados((melhor.produto as unknown as Registro).metadados).asin ?? null,
+          asin:
+            this.metadados((melhor.produto as unknown as Registro).metadados)
+              .asin ?? null,
           publicado: melhor.produto.publicado,
         },
       };
@@ -375,7 +414,9 @@ export class ProdutoIaIntegracaoInternaService {
         return {
           status: 'AMBIGUO' as const,
           candidatos: mesmaPrioridade.slice(0, 5).map(({ hardware }) => ({
-            tipo: 'HARDWARE', id: hardware.id, nome: hardware.nome,
+            tipo: 'HARDWARE',
+            id: hardware.id,
+            nome: hardware.nome,
           })),
         };
       }
@@ -400,21 +441,27 @@ export class ProdutoIaIntegracaoInternaService {
     return { status: 'NAO_ENCONTRADO' as const };
   }
 
-  private async importarExistenteExtensao(dados: ImportarOfertaExtensaoProdutoIaDto) {
+  private async importarExistenteExtensao(
+    dados: ImportarOfertaExtensaoProdutoIaDto,
+  ) {
     const parceiro = await this.resolverParceiro(dados.parceiro);
     const ofertasResultado = await this.ofertasService.listarOfertas();
     const codigoMarketplace = this.codigoOferta(dados.oferta);
 
     if (dados.produtoExistenteId) {
-      const produto = await this.publicarProdutoExistente(dados.produtoExistenteId);
-      const existente = ofertasResultado.ofertas.find((item) =>
-        this.idProdutoOferta(item as unknown as Registro) === dados.produtoExistenteId &&
-        this.mesmaPublicacao(
-          item as unknown as Registro,
-          parceiro.id,
-          dados.oferta.urlOriginal,
-          codigoMarketplace,
-        ),
+      const produto = await this.publicarProdutoExistente(
+        dados.produtoExistenteId,
+      );
+      const existente = ofertasResultado.ofertas.find(
+        (item) =>
+          this.idProdutoOferta(item as unknown as Registro) ===
+            dados.produtoExistenteId &&
+          this.mesmaPublicacao(
+            item as unknown as Registro,
+            parceiro.id,
+            dados.oferta.urlOriginal,
+            codigoMarketplace,
+          ),
       );
       const oferta = existente
         ? await this.atualizarOferta(existente.id, dados.oferta)
@@ -423,7 +470,9 @@ export class ProdutoIaIntegracaoInternaService {
             produtoId: dados.produtoExistenteId,
           });
       return {
-        status: existente ? 'OFERTA_ATUALIZADA' as const : 'ITEM_EXISTENTE_OFERTA_CRIADA' as const,
+        status: existente
+          ? ('OFERTA_ATUALIZADA' as const)
+          : ('ITEM_EXISTENTE_OFERTA_CRIADA' as const),
         produto: { id: produto.id, nome: produto.nome },
         parceiro,
         publicado: true,
@@ -488,7 +537,9 @@ export class ProdutoIaIntegracaoInternaService {
     };
   }
 
-  private async importarProdutoExtensao(dados: ImportarOfertaExtensaoProdutoIaDto) {
+  private async importarProdutoExtensao(
+    dados: ImportarOfertaExtensaoProdutoIaDto,
+  ) {
     const produtoPayload = dados.produtoPayload!;
     const parceiro = await this.resolverParceiro(dados.parceiro);
     const ofertasResultado = await this.ofertasService.listarOfertas();
@@ -504,10 +555,18 @@ export class ProdutoIaIntegracaoInternaService {
     );
 
     if (anuncioExistente) {
-      const produtoId = this.idProdutoOferta(anuncioExistente as unknown as Registro);
+      const produtoId = this.idProdutoOferta(
+        anuncioExistente as unknown as Registro,
+      );
       if (produtoId) {
-        const produto = await this.publicarProdutoExistente(produtoId, produtoPayload);
-        const atualizada = await this.atualizarOferta(anuncioExistente.id, dados.oferta);
+        const produto = await this.publicarProdutoExistente(
+          produtoId,
+          produtoPayload,
+        );
+        const atualizada = await this.atualizarOferta(
+          anuncioExistente.id,
+          dados.oferta,
+        );
         return {
           status: 'OFERTA_ATUALIZADA' as const,
           produto: { id: produto.id, nome: produto.nome },
@@ -532,7 +591,11 @@ export class ProdutoIaIntegracaoInternaService {
 
     const produtos = await this.produtosService.listarAdmin();
     const produtoExistente = produtos.find((item) =>
-      this.mesmoProdutoGenerico(item as unknown as Registro, categoria.id, produtoPayload),
+      this.mesmoProdutoGenerico(
+        item as unknown as Registro,
+        categoria.id,
+        produtoPayload,
+      ),
     );
 
     const ofertaBase = this.ofertaBase(parceiro.id, dados.oferta);
@@ -566,7 +629,12 @@ export class ProdutoIaIntegracaoInternaService {
     const produto = await this.produtosService.criar({
       ...dadosProduto,
       ...(metadados || asin
-        ? { metadados: { ...(metadados ?? {}), ...(asin ? { asin: asin.trim().toUpperCase() } : {}) } }
+        ? {
+            metadados: {
+              ...(metadados ?? {}),
+              ...(asin ? { asin: asin.trim().toUpperCase() } : {}),
+            },
+          }
         : {}),
       categoriaId: categoria.id,
       publicado: true,
@@ -581,11 +649,109 @@ export class ProdutoIaIntegracaoInternaService {
       publicado: true,
       oferta: produto.ofertas?.[0] ?? null,
       completouComIa: true,
-      observacao: 'Novo Produto criado e publicado automaticamente pela extensão.',
+      observacao:
+        'Novo Produto criado e publicado automaticamente pela extensão.',
     };
   }
 
-  private async importarHardwareExtensao(dados: ImportarOfertaExtensaoProdutoIaDto) {
+  private async importarBuildExtensao(
+    dados: ImportarOfertaExtensaoProdutoIaDto,
+  ) {
+    const buildPayload = dados.buildPayload;
+    if (!buildPayload) throw new BadRequestException('Informe o PC montado.');
+    if (!buildPayload.descricao?.trim()) {
+      throw new BadRequestException(
+        'Informe a descrição do anúncio do PC montado.',
+      );
+    }
+    const parceiro = await this.resolverParceiro(dados.parceiro);
+    const ofertasResultado = await this.ofertasService.listarOfertas();
+    const produtos = await this.produtosService.listarAdmin();
+    const anuncioExistente = ofertasResultado.ofertas.find((item) =>
+      this.mesmaPublicacao(
+        item as unknown as Registro,
+        parceiro.id,
+        dados.oferta.urlOriginal,
+        this.codigoOferta(dados.oferta),
+      ),
+    );
+    const produtoAnuncioId = anuncioExistente
+      ? this.idProdutoOferta(anuncioExistente)
+      : null;
+    const produtoAnuncio = produtos.find(
+      (item) => item.id === produtoAnuncioId,
+    );
+    if (
+      anuncioExistente &&
+      (!produtoAnuncio || produtoAnuncio.tipo !== 'BUILD')
+    ) {
+      throw new ConflictException(
+        'Este anúncio já está vinculado a outro tipo de Produto. Revise o cadastro existente.',
+      );
+    }
+    const correspondentes = produtos.filter(
+      (item) =>
+        item.tipo === 'BUILD' &&
+        !/^KIT[_ -]?UPGRADE$/i.test(item.build?.categoria ?? '') &&
+        // O modelo extraído pode ser apenas a CPU. Exigimos a identidade do
+        // anúncio inteiro para não unir PCs de configurações diferentes.
+        sameCatalogIdentity(
+          { ...item, modelo: null },
+          { ...buildPayload, modelo: null },
+        ),
+    );
+    if (!produtoAnuncio && correspondentes.length > 1) {
+      throw new ConflictException(
+        'Mais de um PC montado corresponde ao anúncio. Revise os cadastros existentes.',
+      );
+    }
+    const existente = produtoAnuncio || correspondentes[0];
+    if (existente) {
+      const produto = await this.publicarProdutoExistente(existente.id);
+      const oferta = anuncioExistente
+        ? await this.atualizarOferta(anuncioExistente.id, dados.oferta)
+        : await this.ofertasService.criarOferta({
+            ...this.ofertaBase(parceiro.id, dados.oferta),
+            produtoId: existente.id,
+          });
+      return {
+        status: anuncioExistente
+          ? ('OFERTA_ATUALIZADA' as const)
+          : ('NOVA_OFERTA_CRIADA' as const),
+        produto: { id: produto.id, nome: produto.nome },
+        parceiro,
+        publicado: true,
+        oferta,
+        completouComIa: true,
+      };
+    }
+
+    // O anúncio comercial pode informar peças sem modelo. A descrição é
+    // preservada; a extensão não inventa vínculos com Hardwares do catálogo.
+    const build = await this.buildsCatalogoService.criar({
+      ...buildPayload,
+      categoria: 'PC_MONTADO',
+      componentes: [],
+      publicado: true,
+      ativo: true,
+      oferta: this.ofertaBase(parceiro.id, dados.oferta),
+    });
+    return {
+      status: 'BUILD_E_OFERTA_CRIADOS' as const,
+      build: { id: build.id },
+      produto: { id: build.produtoId, nome: build.produto.nome },
+      parceiro,
+      publicado: true,
+      oferta: build.produto.ofertas?.[0] ?? null,
+      completouComIa: true,
+      observacao:
+        'PC montado cadastrado, publicado e oferta criada pela extensão.',
+    };
+  }
+
+  private async importarHardwareExtensao(
+    dados: ImportarOfertaExtensaoProdutoIaDto,
+  ) {
     const registroHardware = await this.descobertaHardware.cadastrar({
       payload: dados.hardwarePayload!,
     });
@@ -624,7 +790,10 @@ export class ProdutoIaIntegracaoInternaService {
 
     const ofertaBase = this.ofertaBase(parceiro.id, dados.oferta);
     if (hardware.produtoId) {
-      const oferta = await this.ofertasService.criarOferta({ ...ofertaBase, hardwareId });
+      const oferta = await this.ofertasService.criarOferta({
+        ...ofertaBase,
+        hardwareId,
+      });
       return {
         status: 'NOVA_OFERTA_CRIADA' as const,
         hardwareStatus: registroHardware.status,
@@ -651,7 +820,8 @@ export class ProdutoIaIntegracaoInternaService {
       publicado: true,
       oferta: produto.ofertas?.[0] ?? null,
       completouComIa: true,
-      observacao: 'Novo Hardware/Produto criado e publicado automaticamente pela extensão.',
+      observacao:
+        'Novo Hardware/Produto criado e publicado automaticamente pela extensão.',
     };
   }
 
@@ -659,13 +829,14 @@ export class ProdutoIaIntegracaoInternaService {
     const destinos = [
       Boolean(dados.hardwarePayload),
       Boolean(dados.produtoPayload),
+      Boolean(dados.buildPayload),
       Boolean(dados.hardwareExistenteId),
       Boolean(dados.produtoExistenteId),
     ].filter(Boolean).length;
 
     if (destinos !== 1) {
       throw new BadRequestException(
-        'Informe exatamente um destino: Hardware/Produto novo ou item existente.',
+        'Informe exatamente um destino: Hardware/Produto/PC montado novo ou item existente.',
       );
     }
 
@@ -674,6 +845,9 @@ export class ProdutoIaIntegracaoInternaService {
     }
     if (dados.produtoPayload) {
       return this.importarProdutoExtensao(dados);
+    }
+    if (dados.buildPayload) {
+      return this.importarBuildExtensao(dados);
     }
     return this.importarHardwareExtensao(dados);
   }

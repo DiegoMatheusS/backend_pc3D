@@ -14,6 +14,10 @@ describe('cadastro de PC com oferta', () => {
     oferta: {
       parceiroId: 2,
       preco: 3999.9,
+      precoAnterior: 4299.9,
+      codigoMarketplace: 'PC-123',
+      vendedorNome: 'Loja Teste',
+      vendedorIdentificador: 'V123',
       urlOriginal: 'https://www.magazineluiza.com.br/pc/p/123/',
       urlAfiliada: 'https://www.magazinevoce.com.br/loja/pc/',
     },

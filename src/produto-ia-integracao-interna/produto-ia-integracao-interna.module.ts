@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BuildsModule } from '../builds/builds.module';
 import { HardwaresDescobertaIaModule } from '../hardwares-descoberta-ia/hardwares-descoberta-ia.module';
 import { HardwaresModule } from '../hardwares/hardwares.module';
 import { OfertasModule } from '../ofertas/ofertas.module';
@@ -12,6 +13,7 @@ import { ProdutoIaIntegracaoInternaService } from './produto-ia-integracao-inter
     HardwaresModule,
     OfertasModule,
     ProdutosModule,
+    BuildsModule,
   ],
   controllers: [ProdutoIaIntegracaoInternaController],
   providers: [ProdutoIaIntegracaoInternaService],

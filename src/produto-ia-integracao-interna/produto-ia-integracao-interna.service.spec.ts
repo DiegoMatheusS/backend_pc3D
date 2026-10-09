@@ -2,6 +2,8 @@ import { HardwaresDescobertaIaService } from '../hardwares-descoberta-ia/hardwar
 import { HardwaresService } from '../hardwares/hardwares.service';
 import { OfertasService } from '../ofertas/ofertas.service';
 import { ProdutosService } from '../produtos/produtos.service';
+import { BuildsCatalogoService } from '../builds/builds-catalogo.service';
+import { CriarBuildDto } from '../builds/dtos/criar-build.dto';
 import { ImportarOfertaExtensaoProdutoIaDto } from './dtos/importar-oferta-extensao-produto-ia.dto';
 import { ProdutoIaIntegracaoInternaService } from './produto-ia-integracao-interna.service';
 
@@ -113,11 +115,15 @@ describe('ProdutoIaIntegracaoInternaService', () => {
         nome: id === 70 ? 'Echo Dot 5ª geração' : 'Monitor LG UltraGear 24',
         metadados: id === 70 ? { asin: 'B0ABC12345' } : null,
       })),
-      atualizar: jest.fn().mockImplementation(async (id: number, dados: Record<string, unknown>) => ({
-        id,
-        nome: id === 70 ? 'Echo Dot 5ª geração' : 'Monitor LG UltraGear 24',
-        ...dados,
-      })),
+      atualizar: jest
+        .fn()
+        .mockImplementation(
+          async (id: number, dados: Record<string, unknown>) => ({
+            id,
+            nome: id === 70 ? 'Echo Dot 5ª geração' : 'Monitor LG UltraGear 24',
+            ...dados,
+          }),
+        ),
       criar: jest.fn().mockResolvedValue({
         id: 51,
         nome: 'Monitor LG UltraGear 24',
@@ -125,15 +131,183 @@ describe('ProdutoIaIntegracaoInternaService', () => {
       }),
     };
 
+    const builds = {
+      criar: jest.fn().mockResolvedValue({
+        id: 80,
+        produtoId: 81,
+        produto: { nome: 'PC Gamer Teste 16GB SSD 1TB', ofertas: [{ id: 82 }] },
+      }),
+    };
     const service = new ProdutoIaIntegracaoInternaService(
       descoberta as unknown as HardwaresDescobertaIaService,
       hardwares as unknown as HardwaresService,
       ofertas as unknown as OfertasService,
       produtos as unknown as ProdutosService,
+      builds as unknown as BuildsCatalogoService,
     );
 
-    return { service, descoberta, hardwares, ofertas, produtos };
+    return { service, descoberta, hardwares, ofertas, produtos, builds };
   }
+
+  const buildPayload = {
+    buildPayload: {
+      nome: 'PC Gamer Teste 16GB SSD 1TB',
+      marca: 'Teste',
+      modelo: 'Ryzen 5',
+      categoria: 'PC_MONTADO',
+      descricao: 'Ryzen 5, 16 GB RAM, SSD 1 TB. Garantia de 12 meses.',
+    },
+    parceiro: produtoPayload.parceiro,
+    oferta: { ...produtoPayload.oferta, preco: 3999.9, precoAnterior: 4299.9 },
+  } satisfies ImportarOfertaExtensaoProdutoIaDto;
+
+  it('cadastra PC comercial publicado com oferta inicial e sem inventar peças', async () => {
+    const { service, builds, produtos, descoberta, ofertas } = setup();
+    const result = await service.importarOfertaExtensao(buildPayload);
+    expect(result.status).toBe('BUILD_E_OFERTA_CRIADOS');
+    expect(result.produto?.id).toBe(81);
+    const call = (builds.criar.mock.calls as [CriarBuildDto][])[0][0];
+    expect(call).toMatchObject({
+      ...buildPayload.buildPayload,
+      publicado: true,
+      ativo: true,
+      componentes: [],
+      oferta: {
+        parceiroId: 2,
+        preco: 3999.9,
+        precoAnterior: 4299.9,
+        urlAfiliada: buildPayload.oferta.urlAfiliada,
+        codigoMarketplace: buildPayload.oferta.codigoMarketplace,
+      },
+    });
+    expect(produtos.criar).not.toHaveBeenCalled();
+    expect(descoberta.cadastrar).not.toHaveBeenCalled();
+    expect(ofertas.criarOferta).not.toHaveBeenCalled();
+  });
+
+  it('reaproveita o mesmo PC e mantém a descrição cadastrada', async () => {
+    const { service, builds, produtos, ofertas } = setup(
+      [],
+      [
+        {
+          id: 81,
+          tipo: 'BUILD',
+          ...buildPayload.buildPayload,
+        },
+      ],
+    );
+    const result = await service.importarOfertaExtensao(buildPayload);
+    expect(result.status).toBe('NOVA_OFERTA_CRIADA');
+    expect(builds.criar).not.toHaveBeenCalled();
+    expect(produtos.atualizar).toHaveBeenCalledWith(81, {
+      publicado: true,
+      ativo: true,
+    });
+    expect(ofertas.criarOferta).toHaveBeenCalledWith(
+      expect.objectContaining({ produtoId: 81 }),
+    );
+  });
+
+  it('atualiza o mesmo anúncio de PC sem criar outra oferta', async () => {
+    const { service, builds, ofertas } = setup(
+      [
+        {
+          id: 9,
+          produtoId: 81,
+          parceiro: { id: 2 },
+          urlOriginal: buildPayload.oferta.urlOriginal,
+          codigoMarketplace: buildPayload.oferta.codigoMarketplace,
+        },
+      ],
+      [{ id: 81, tipo: 'BUILD', ...buildPayload.buildPayload }],
+    );
+    expect((await service.importarOfertaExtensao(buildPayload)).status).toBe(
+      'OFERTA_ATUALIZADA',
+    );
+    expect(builds.criar).not.toHaveBeenCalled();
+    expect(ofertas.atualizarOferta).toHaveBeenCalledTimes(1);
+    expect(ofertas.criarOferta).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      id: 1,
+      tipo: 'BUILD',
+      ...buildPayload.buildPayload,
+      nome: 'PC Gamer Teste RTX 5070 16GB SSD 1TB',
+    },
+    { id: 1, tipo: 'HARDWARE', ...buildPayload.buildPayload },
+    {
+      id: 1,
+      tipo: 'BUILD',
+      ...buildPayload.buildPayload,
+      build: { categoria: 'KIT_UPGRADE' },
+    },
+  ])(
+    'não liga a oferta a outra configuração, peça ou kit',
+    async (existing) => {
+      const { service, builds, ofertas } = setup([], [existing]);
+      await service.importarOfertaExtensao(buildPayload);
+      expect(builds.criar).toHaveBeenCalledTimes(1);
+      expect(ofertas.criarOferta).not.toHaveBeenCalled();
+    },
+  );
+
+  it('recusa anúncio de PC já ligado a outro tipo de produto', async () => {
+    const { service, builds, ofertas } = setup(
+      [
+        {
+          id: 9,
+          produtoId: 81,
+          parceiro: { id: 2 },
+          urlOriginal: buildPayload.oferta.urlOriginal,
+        },
+      ],
+      [{ id: 81, tipo: 'HARDWARE' }],
+    );
+    await expect(service.importarOfertaExtensao(buildPayload)).rejects.toThrow(
+      'outro tipo',
+    );
+    expect(builds.criar).not.toHaveBeenCalled();
+    expect(ofertas.atualizarOferta).not.toHaveBeenCalled();
+  });
+
+  it('pede revisão quando há dois PCs correspondentes', async () => {
+    const { service, builds } = setup(
+      [],
+      [
+        { id: 81, tipo: 'BUILD', ...buildPayload.buildPayload },
+        { id: 82, tipo: 'BUILD', ...buildPayload.buildPayload },
+      ],
+    );
+    await expect(service.importarOfertaExtensao(buildPayload)).rejects.toThrow(
+      'Mais de um PC',
+    );
+    expect(builds.criar).not.toHaveBeenCalled();
+  });
+
+  it('recusa PC sem descrição antes de criar parceiros ou catálogo', async () => {
+    const { service, builds, ofertas } = setup();
+    await expect(
+      service.importarOfertaExtensao({
+        ...buildPayload,
+        buildPayload: { ...buildPayload.buildPayload, descricao: ' ' },
+      }),
+    ).rejects.toThrow('descrição');
+    expect(builds.criar).not.toHaveBeenCalled();
+    expect(ofertas.listarParceiros).not.toHaveBeenCalled();
+  });
+
+  it('recusa payload BUILD junto com outro destino de cadastro', async () => {
+    const { service, builds } = setup();
+    await expect(
+      service.importarOfertaExtensao({
+        ...buildPayload,
+        produtoPayload: produtoPayload.produtoPayload,
+      }),
+    ).rejects.toThrow();
+    expect(builds.criar).not.toHaveBeenCalled();
+  });
 
   it('atualiza o mesmo anúncio de Hardware em vez de duplicar', async () => {
     const { service, ofertas, produtos } = setup([
@@ -179,16 +353,19 @@ describe('ProdutoIaIntegracaoInternaService', () => {
   });
 
   it('produto da extensão não passa pelo cadastro de Hardware e é publicado', async () => {
-    const { service, descoberta, ofertas, produtos } = setup([], [
-      {
-        id: 50,
-        tipo: 'GENERICO',
-        categoriaId: 12,
-        nome: 'Monitor LG UltraGear 24',
-        marca: 'LG',
-        modelo: '24GN60R-B',
-      },
-    ]);
+    const { service, descoberta, ofertas, produtos } = setup(
+      [],
+      [
+        {
+          id: 50,
+          tipo: 'GENERICO',
+          categoriaId: 12,
+          nome: 'Monitor LG UltraGear 24',
+          marca: 'LG',
+          modelo: '24GN60R-B',
+        },
+      ],
+    );
 
     const result = await service.importarOfertaExtensao(produtoPayload);
 
@@ -270,17 +447,20 @@ describe('ProdutoIaIntegracaoInternaService', () => {
   });
 
   it('encontra Produto existente por ASIN antes de consultar Hardware', async () => {
-    const { service, hardwares } = setup([], [
-      {
-        id: 70,
-        tipo: 'GENERICO',
-        nome: 'Echo Dot 5ª geração',
-        marca: 'Amazon',
-        modelo: 'Echo Dot 5',
-        metadados: { asin: 'B0ABC12345' },
-        publicado: true,
-      },
-    ]);
+    const { service, hardwares } = setup(
+      [],
+      [
+        {
+          id: 70,
+          tipo: 'GENERICO',
+          nome: 'Echo Dot 5ª geração',
+          marca: 'Amazon',
+          modelo: 'Echo Dot 5',
+          metadados: { asin: 'B0ABC12345' },
+          publicado: true,
+        },
+      ],
+    );
 
     const result = await service.buscarItemExtensao({ asin: 'b0abc12345' });
 
@@ -296,16 +476,19 @@ describe('ProdutoIaIntegracaoInternaService', () => {
   });
 
   it('item já existente cria somente a oferta Amazon sem cadastro por IA', async () => {
-    const { service, descoberta, ofertas, produtos } = setup([], [
-      {
-        id: 70,
-        tipo: 'GENERICO',
-        nome: 'Echo Dot 5ª geração',
-        marca: 'Amazon',
-        modelo: 'Echo Dot 5',
-        metadados: { asin: 'B0ABC12345' },
-      },
-    ]);
+    const { service, descoberta, ofertas, produtos } = setup(
+      [],
+      [
+        {
+          id: 70,
+          tipo: 'GENERICO',
+          nome: 'Echo Dot 5ª geração',
+          marca: 'Amazon',
+          modelo: 'Echo Dot 5',
+          metadados: { asin: 'B0ABC12345' },
+        },
+      ],
+    );
 
     const result = await service.importarOfertaExtensao({
       produtoExistenteId: 70,

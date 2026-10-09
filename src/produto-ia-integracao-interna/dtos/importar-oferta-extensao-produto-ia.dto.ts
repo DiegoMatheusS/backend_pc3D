@@ -1,6 +1,8 @@
 import { Transform, Type } from 'class-transformer';
+import { OmitType } from '@nestjs/swagger';
 import {
   IsInt,
+  IsIn,
   IsNumber,
   IsObject,
   IsOptional,
@@ -15,6 +17,7 @@ import {
 } from 'class-validator';
 import { IsSafeJsonObject } from '../../common/validators/is-safe-json-object.validator';
 import { CriarHardwareDto } from '../../hardwares/dtos/criar-hardware.dto';
+import { CriarBuildDto } from '../../builds/dtos/criar-build.dto';
 import { normalizarUrlAmazon } from '../../ofertas/utils/normalizar-url-amazon';
 import { LIMITE_URL_OFERTA } from '../../ofertas/utils/limite-url-oferta';
 import { CriarEspecificacaoHeadsetDto } from '../../produtos/dtos/especificacoes/criar-especificacao-headset.dto';
@@ -34,19 +37,31 @@ export class ParceiroOfertaExtensaoDto {
   dominio?: string | null;
 
   @IsOptional()
-  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   site?: string | null;
 }
 
 export class OfertaExtensaoDto {
   @Transform(({ value }) => normalizarUrlAmazon(value))
-  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(LIMITE_URL_OFERTA)
   urlOriginal!: string;
 
   @Transform(({ value }) => normalizarUrlAmazon(value))
-  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(LIMITE_URL_OFERTA)
   urlAfiliada!: string;
 
@@ -61,16 +76,24 @@ export class OfertaExtensaoDto {
   @Max(100_000_000)
   precoAnterior?: number | null;
 
-  @IsOptional() @IsString() @MaxLength(160)
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
   codigoMarketplace?: string | null;
 
-  @IsOptional() @IsString() @MaxLength(20)
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
   asin?: string | null;
 
-  @IsOptional() @IsString() @MaxLength(200)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   vendedorNome?: string | null;
 
-  @IsOptional() @IsString() @MaxLength(200)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   vendedorIdentificador?: string | null;
 }
 
@@ -93,12 +116,20 @@ export class ProdutoOfertaExtensaoDto {
   @IsOptional() @IsString() @MaxLength(20) asin?: string;
 
   @IsOptional()
-  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   imagemUrl?: string;
 
   @IsOptional()
-  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, disallow_auth: true })
+  @IsUrl({
+    protocols: ['http', 'https'],
+    require_protocol: true,
+    disallow_auth: true,
+  })
   @MaxLength(500)
   imagemHoverUrl?: string;
 
@@ -107,32 +138,69 @@ export class ProdutoOfertaExtensaoDto {
   @IsSafeJsonObject({ maxDepth: 6, maxKeys: 160, maxArrayLength: 64 })
   metadados?: Record<string, unknown>;
 
-  @IsOptional() @ValidateNested() @Type(() => CriarEspecificacaoMonitorDto)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoMonitorDto)
   especificacaoMonitor?: CriarEspecificacaoMonitorDto;
-  @IsOptional() @ValidateNested() @Type(() => CriarEspecificacaoMouseDto)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoMouseDto)
   especificacaoMouse?: CriarEspecificacaoMouseDto;
-  @IsOptional() @ValidateNested() @Type(() => CriarEspecificacaoTecladoDto)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoTecladoDto)
   especificacaoTeclado?: CriarEspecificacaoTecladoDto;
-  @IsOptional() @ValidateNested() @Type(() => CriarEspecificacaoHeadsetDto)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoHeadsetDto)
   especificacaoHeadset?: CriarEspecificacaoHeadsetDto;
 }
 
+export class BuildOfertaExtensaoDto extends OmitType(CriarBuildDto, [
+  'oferta',
+  'componentes',
+  'configuracao3D',
+  'publicado',
+  'ativo',
+] as const) {
+  @IsOptional()
+  @IsIn(['PC_MONTADO'])
+  categoria?: string;
+}
+
 export class ImportarOfertaExtensaoProdutoIaDto {
-  @IsOptional() @ValidateNested() @Type(() => CriarHardwareDto)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarHardwareDto)
   hardwarePayload?: CriarHardwareDto;
 
-  @IsOptional() @ValidateNested() @Type(() => ProdutoOfertaExtensaoDto)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProdutoOfertaExtensaoDto)
   produtoPayload?: ProdutoOfertaExtensaoDto;
 
-  @IsOptional() @IsInt() @Min(1) @Max(2_147_483_647)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BuildOfertaExtensaoDto)
+  buildPayload?: BuildOfertaExtensaoDto;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(2_147_483_647)
   hardwareExistenteId?: number;
 
-  @IsOptional() @IsInt() @Min(1) @Max(2_147_483_647)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(2_147_483_647)
   produtoExistenteId?: number;
 
-  @ValidateNested() @Type(() => ParceiroOfertaExtensaoDto)
+  @ValidateNested()
+  @Type(() => ParceiroOfertaExtensaoDto)
   parceiro!: ParceiroOfertaExtensaoDto;
 
-  @ValidateNested() @Type(() => OfertaExtensaoDto)
+  @ValidateNested()
+  @Type(() => OfertaExtensaoDto)
   oferta!: OfertaExtensaoDto;
 }

@@ -149,6 +149,19 @@ export class BuildsCatalogoService {
                         preco: dados.oferta.preco,
                         urlOriginal: dados.oferta.urlOriginal,
                         urlAfiliada: dados.oferta.urlAfiliada ?? null,
+                        ...(dados.oferta.precoAnterior !== undefined && {
+                          precoAnterior: dados.oferta.precoAnterior,
+                        }),
+                        ...(dados.oferta.codigoMarketplace && {
+                          codigoMarketplace: dados.oferta.codigoMarketplace,
+                        }),
+                        ...(dados.oferta.vendedorNome && {
+                          vendedorNome: dados.oferta.vendedorNome,
+                        }),
+                        ...(dados.oferta.vendedorIdentificador && {
+                          vendedorIdentificador:
+                            dados.oferta.vendedorIdentificador,
+                        }),
                         status: StatusOferta.ATIVA,
                       },
                     },
