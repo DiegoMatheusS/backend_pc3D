@@ -55,7 +55,6 @@ function normalizarTiposMemoriaSuportados(valor: unknown): unknown {
   return [...new Set(resultado)];
 }
 
-
 function normalizarConectorVentoinha(
   valor: unknown,
   pwm: unknown,
@@ -119,6 +118,47 @@ function removerNulosTecnicos(valor: unknown): unknown {
   return valor;
 }
 
+function chaveSuporteGabinete(valor: unknown): string | null {
+  if (!ehRegistro(valor)) return null;
+
+  const posicao = typeof valor.posicao === 'string'
+    ? valor.posicao.trim().toUpperCase()
+    : '';
+  const tamanho = Number(valor.tamanhoMm);
+
+  if (!posicao || !Number.isFinite(tamanho) || tamanho <= 0) return null;
+  return `${posicao}|${tamanho}`;
+}
+
+function normalizarSuportesGabinete(valor: unknown, limite: number): unknown {
+  if (!Array.isArray(valor)) return valor;
+
+  const resultado: unknown[] = [];
+  const vistos = new Set<string>();
+
+  for (const itemOriginal of valor) {
+    if (itemOriginal === null || itemOriginal === undefined) continue;
+
+    const item = ehRegistro(itemOriginal)
+      ? removerNulosTecnicos({ ...itemOriginal })
+      : itemOriginal;
+    const chave = chaveSuporteGabinete(item);
+
+    // A IA frequentemente repete o mesmo suporte para cada fonte encontrada.
+    // Para Gabinete, posição+tamanho identifica o ponto físico; mantemos a
+    // primeira ocorrência e descartamos repetições antes do limite do DTO.
+    if (chave) {
+      if (vistos.has(chave)) continue;
+      vistos.add(chave);
+    }
+
+    resultado.push(item);
+    if (resultado.length >= limite) break;
+  }
+
+  return resultado;
+}
+
 function normalizarPayloadDescoberto(valor: unknown): unknown {
   if (!ehRegistro(valor)) return valor;
 
@@ -159,6 +199,22 @@ function normalizarPayloadDescoberto(valor: unknown): unknown {
           chavesSuportadas: [],
           tamanhosSuportadosMm: [],
         }),
+      );
+    }
+  }
+
+  const gabinete = valor.especificacaoGabinete;
+  if (ehRegistro(gabinete)) {
+    if (gabinete.suportesFans !== undefined) {
+      gabinete.suportesFans = normalizarSuportesGabinete(
+        gabinete.suportesFans,
+        32,
+      );
+    }
+    if (gabinete.suportesRadiador !== undefined) {
+      gabinete.suportesRadiador = normalizarSuportesGabinete(
+        gabinete.suportesRadiador,
+        16,
       );
     }
   }

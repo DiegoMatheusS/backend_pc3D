@@ -25,5 +25,5 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npm run build
-      - run: npm test -- glb-security.spec.ts --runInBand
+      - run: npm test -- glb-security.spec.ts cadastrar-hardware-descoberto-gabinete.dto.spec.ts --runInBand
       - run: npm run security:audit
