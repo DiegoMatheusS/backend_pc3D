@@ -1,3 +1,4 @@
+import { CriarEspecificacaoCelularDto } from '../../produtos/dtos/especificacoes/criar-especificacao-celular.dto';
 import { Transform, Type } from 'class-transformer';
 import { OmitType } from '@nestjs/swagger';
 import {
@@ -154,6 +155,11 @@ export class ProdutoOfertaExtensaoDto {
   @ValidateNested()
   @Type(() => CriarEspecificacaoHeadsetDto)
   especificacaoHeadset?: CriarEspecificacaoHeadsetDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoCelularDto)
+  especificacaoCelular?: CriarEspecificacaoCelularDto;
 }
 
 export class BuildOfertaExtensaoDto extends OmitType(CriarBuildDto, [

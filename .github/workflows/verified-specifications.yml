@@ -1,10 +1,10 @@
 name: Verified specifications integration
 on:
   pull_request:
-    paths: ['src/builds/build-listing-analysis*', 'src/builds/dtos/analisar-anuncio-build.dto.ts', 'src/hardwares-descoberta-ia/**', 'src/ia/**', '.github/workflows/verified-specifications.yml']
+    paths: ['src/builds/build-listing-analysis*', 'src/builds/dtos/analisar-anuncio-build.dto.ts', 'src/hardwares-descoberta-ia/**', 'src/ia/**', 'src/produtos/**', 'src/produto-ia-integracao-interna/**', '.github/workflows/verified-specifications.yml']
   push:
     branches: [main]
-    paths: ['src/builds/build-listing-analysis*', 'src/builds/dtos/analisar-anuncio-build.dto.ts', 'src/hardwares-descoberta-ia/**', 'src/ia/**']
+    paths: ['src/builds/build-listing-analysis*', 'src/builds/dtos/analisar-anuncio-build.dto.ts', 'src/hardwares-descoberta-ia/**', 'src/ia/**', 'src/produtos/**', 'src/produto-ia-integracao-interna/**']
 permissions:
   contents: read
 jobs:
@@ -21,5 +21,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
-      - run: npm test -- --runInBand builds/build-listing-analysis.service.spec.ts ia/ia.pc-import.spec.ts ia/produto-ia-python.service.spec.ts hardwares-descoberta-ia/hardwares-descoberta-ia.service.spec.ts
+      - run: npm test -- --runInBand produtos/produto-especificacoes.service.spec.ts produtos/produtos.celular.spec.ts produto-ia-integracao-interna/produto-ia-integracao-interna.service.spec.ts builds/build-listing-analysis.service.spec.ts ia/ia.pc-import.spec.ts ia/produto-ia-python.service.spec.ts hardwares-descoberta-ia/hardwares-descoberta-ia.service.spec.ts
       - run: npm run build
