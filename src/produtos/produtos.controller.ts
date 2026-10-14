@@ -1,3 +1,5 @@
+import { ProdutoEspecificacoesService } from './produto-especificacoes.service';
+import { BuscarEspecificacoesProdutoDto } from './dtos/buscar-especificacoes-produto.dto';
 import {
   BadRequestException,
   Body,
@@ -85,6 +87,7 @@ export class ProdutosAdminController {
     private readonly produtosService: ProdutosService,
     private readonly auditoriaService: AuditoriaService,
     private readonly prisma: PrismaService,
+    private readonly especificacoesService: ProdutoEspecificacoesService,
   ) {}
 
   @Get()
@@ -97,6 +100,31 @@ export class ProdutosAdminController {
   @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR, PapelUsuario.REVISOR)
   listarImportacoes() {
     return this.produtosService.listarImportacoes();
+  }
+
+  @Post(':id/buscar-especificacoes')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { limit: 4, ttl: 60_000 } })
+  @Papeis(PapelUsuario.ADMIN, PapelUsuario.EDITOR)
+  async buscarEspecificacoes(
+    @Param('id', ParsePositiveIntPipe) id: number,
+    @Body() dados: BuscarEspecificacoesProdutoDto,
+    @UsuarioAtual() usuario: UsuarioReq,
+    @Req() req: Request,
+  ) {
+    const resultado = await this.especificacoesService.buscar(id, dados);
+    void this.auditoriaService.registrar({
+      usuarioId: usuario?.id,
+      acao: AcaoAuditoria.IA_ADMIN_UTILIZADA,
+      entidade: 'Produto',
+      entidadeId: id,
+      dadosNovos: {
+        operacao: 'BUSCAR_ESPECIFICACOES',
+        nenhumRegistroAlterado: true,
+      },
+      ip: req.ip,
+    });
+    return resultado;
   }
 
   @Post('importar')

@@ -216,3 +216,9 @@ Consulte também:
 
 - `BACKEND_API_CONTRACT.md`
 - `CHECKLIST_FINAL_BACKEND.md`
+
+### Busca de especificações de Produtos
+
+`POST /api/admin/produtos/:id/buscar-especificacoes` recebe `{ "usarIa": true }` (ADMIN/EDITOR, quatro buscas por minuto). Usa até duas ofertas vinculadas, pesquisa fontes técnicas e reutiliza a IA técnica existente para as lacunas quando habilitada. Retorna uma prévia com campos novos, fontes e avisos sem alterar registros. Modelos/códigos divergentes são ignorados.
+
+`especificacaoCelular` é aceita nos DTOs de criação, edição e extensão; a ficha validada fica em `metadados.especificacoes`, preservando metadados anteriores. A resposta pública também expõe fichas antigas em `metadados.especificacoesEncontradas`. Sem migração de banco. Atualize o backend antes do frontend e do ProjetoIA, que passam a enviar a ficha de celular.

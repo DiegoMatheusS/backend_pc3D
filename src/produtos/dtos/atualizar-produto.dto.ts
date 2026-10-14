@@ -1,3 +1,4 @@
+import { CriarEspecificacaoCelularDto } from './especificacoes/criar-especificacao-celular.dto';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -86,4 +87,8 @@ export class AtualizarProdutoDto {
   @ValidateNested()
   @Type(() => CriarEspecificacaoHeadsetDto)
   especificacaoHeadset?: CriarEspecificacaoHeadsetDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CriarEspecificacaoCelularDto)
+  especificacaoCelular?: CriarEspecificacaoCelularDto;
 }

@@ -4260,6 +4260,9 @@ Ao final retorne também:
             ...(categoriaProduto ? { categoriaId: categoriaProduto.id } : {}),
             ...payloadParcial,
             metadados: {
+              ...(this.ehRegistro(payloadParcial.metadados)
+                ? payloadParcial.metadados
+                : {}),
               origem: origemProdutoIa,
               integracao: integracaoProdutoIa,
               versao: servicoProdutoIa?.versao ?? null,

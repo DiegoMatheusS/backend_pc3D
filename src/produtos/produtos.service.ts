@@ -1,3 +1,7 @@
+import {
+  especificacoesMetadados,
+  metadadosComCelular,
+} from './especificacoes-produto';
 import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import { createHash } from 'node:crypto';
 import {
@@ -194,6 +198,7 @@ export class ProdutosService {
       dados.especificacaoMouse,
       dados.especificacaoTeclado,
       dados.especificacaoHeadset,
+      dados.especificacaoCelular,
     ].filter(Boolean).length;
 
     if (quantidade > 1) {
@@ -212,6 +217,7 @@ export class ProdutosService {
       { presente: dados.especificacaoMouse !== undefined, slug: 'mouses' },
       { presente: dados.especificacaoTeclado !== undefined, slug: 'teclados' },
       { presente: dados.especificacaoHeadset !== undefined, slug: 'headsets' },
+      { presente: dados.especificacaoCelular !== undefined, slug: 'celulares' },
     ];
 
     const informada = regras.find((regra) => regra.presente);
@@ -703,6 +709,9 @@ export class ProdutosService {
             consumoEstimadoWatts: produto.build.consumoEstimadoWatts,
             fonteRecomendadaWatts: produto.build.fonteRecomendadaWatts,
           }
+        : null) ??
+      (Object.keys(especificacoesMetadados(produto.metadados)).length
+        ? especificacoesMetadados(produto.metadados)
         : null);
 
     const { usuarioOrigem, usuarioOrigemId, ofertas, ...produtoPublico } =
@@ -972,7 +981,12 @@ export class ProdutosService {
             gtin: dados.gtin?.trim() || null,
             imagemUrl: dados.imagemUrl?.trim() ?? null,
             imagemHoverUrl: dados.imagemHoverUrl?.trim() ?? null,
-            metadados: dados.metadados as Prisma.InputJsonValue | undefined,
+            metadados: dados.especificacaoCelular
+              ? (metadadosComCelular(
+                  dados.metadados,
+                  dados.especificacaoCelular,
+                ) as Prisma.InputJsonValue)
+              : (dados.metadados as Prisma.InputJsonValue | undefined),
             publicado: dados.publicado ?? false,
             ativo: dados.ativo ?? true,
             especificacaoMonitor: dados.especificacaoMonitor
@@ -1028,6 +1042,7 @@ export class ProdutosService {
         marca: true,
         modelo: true,
         publicado: true,
+        metadados: true,
         categoria: { select: { id: true, slug: true } },
         especificacaoMonitor: { select: { id: true } },
         especificacaoMouse: { select: { id: true } },
@@ -1077,7 +1092,10 @@ export class ProdutosService {
           ? 'teclados'
           : atual.especificacaoHeadset
             ? 'headsets'
-            : null;
+            : atual.categoria.slug === 'celulares' &&
+                Object.keys(especificacoesMetadados(atual.metadados)).length
+              ? 'celulares'
+              : null;
 
     if (
       dados.categoriaId !== undefined &&
@@ -1176,8 +1194,12 @@ export class ProdutosService {
                 ? null
                 : dados.imagemHoverUrl.trim() || null,
           }),
-          ...(dados.metadados !== undefined && {
-            metadados: dados.metadados as Prisma.InputJsonValue,
+          ...((dados.metadados !== undefined ||
+            dados.especificacaoCelular !== undefined) && {
+            metadados: metadadosComCelular(
+              dados.metadados ?? atual.metadados,
+              dados.especificacaoCelular,
+            ) as Prisma.InputJsonValue,
           }),
           ...(dados.publicado !== undefined && { publicado: dados.publicado }),
           ...(dados.ativo !== undefined && { ativo: dados.ativo }),

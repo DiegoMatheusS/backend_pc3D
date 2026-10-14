@@ -420,6 +420,46 @@ describe('ProdutoIaIntegracaoInternaService', () => {
     );
   });
 
+  it('completa a ficha do celular existente ao adicionar outra oferta sem sobrescrever dados', async () => {
+    const { service, produtos } = setup(
+      [],
+      [
+        {
+          id: 50,
+          tipo: 'GENERICO',
+          categoriaId: 12,
+          nome: 'Galaxy S24',
+          marca: 'Samsung',
+          modelo: 'S24',
+        },
+      ],
+    );
+    produtos.listarCategoriasAdmin.mockResolvedValue([
+      { id: 12, nome: 'Celulares', slug: 'celulares', ativo: true },
+    ]);
+    produtos.buscarAdmin.mockResolvedValue({
+      id: 50,
+      nome: 'Galaxy S24',
+      categoria: { slug: 'celulares' },
+      metadados: { especificacoes: { nfc: false, ramGb: 8 } },
+    } as unknown as Awaited<ReturnType<typeof produtos.buscarAdmin>>);
+    const result = await service.importarOfertaExtensao({
+      ...produtoPayload,
+      produtoPayload: {
+        categoriaSlug: 'celulares',
+        nome: 'Galaxy S24',
+        marca: 'Samsung',
+        modelo: 'S24',
+        especificacaoCelular: { nfc: true, ramGb: 12, bateriaMah: 5000 },
+      },
+    });
+    expect(result.status).toBe('NOVA_OFERTA_CRIADA');
+    expect(produtos.atualizar).toHaveBeenCalledWith(50, {
+      especificacaoCelular: { nfc: false, ramGb: 8, bateriaMah: 5000 },
+    });
+    expect(produtos.criar).not.toHaveBeenCalled();
+  });
+
   it('cria Produto genérico publicado quando ainda não existe', async () => {
     const { service, produtos, descoberta } = setup([], []);
 

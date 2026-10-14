@@ -1,4 +1,8 @@
 import {
+  especificacoesMetadados,
+  preencherLacunas,
+} from '../produtos/especificacoes-produto';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -404,6 +408,23 @@ export class ProdutoIaIntegracaoInternaService {
     return { status: 'NAO_ENCONTRADO' as const };
   }
 
+  private async completarCelularExistente(
+    produtoId: number,
+    payload: ImportarOfertaExtensaoProdutoIaDto['produtoPayload'],
+  ) {
+    if (payload?.categoriaSlug !== 'celulares' || !payload.especificacaoCelular)
+      return;
+    const atual = await this.produtosService.buscarAdmin(produtoId);
+    if (atual.categoria.slug !== 'celulares') return;
+    const mesclada = preencherLacunas(
+      especificacoesMetadados(atual.metadados),
+      payload.especificacaoCelular as Record<string, unknown>,
+    );
+    await this.produtosService.atualizar(produtoId, {
+      especificacaoCelular: mesclada,
+    });
+  }
+
   private async importarExistenteExtensao(
     dados: ImportarOfertaExtensaoProdutoIaDto,
   ) {
@@ -525,6 +546,7 @@ export class ProdutoIaIntegracaoInternaService {
         anuncioExistente as unknown as Registro,
       );
       if (produtoId) {
+        await this.completarCelularExistente(produtoId, produtoPayload);
         const produto = await this.publicarProdutoExistente(produtoId);
         const atualizada = await this.atualizarOferta(
           anuncioExistente.id,
@@ -563,6 +585,7 @@ export class ProdutoIaIntegracaoInternaService {
 
     const ofertaBase = this.ofertaBase(parceiro.id, dados.oferta);
     if (produtoExistente) {
+      await this.completarCelularExistente(produtoExistente.id, produtoPayload);
       const produtoAtualizado = await this.publicarProdutoExistente(
         produtoExistente.id,
       );

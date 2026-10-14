@@ -1,3 +1,5 @@
+import { ProdutoIaPythonService } from '../ia/produto-ia-python.service';
+import { ProdutoEspecificacoesService } from './produto-especificacoes.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { PapelGuard } from '../auth/papel.guard';
@@ -26,6 +28,8 @@ import { ProdutoImagemService } from './produto-imagem.service';
   ],
   providers: [
     ProdutosService,
+    ProdutoEspecificacoesService,
+    ProdutoIaPythonService,
     ProdutoLikesService,
     ProdutoImagemService,
     PapelGuard,
