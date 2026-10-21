@@ -22,6 +22,11 @@ export class DescobrirHardwaresDto {
   marca?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  consulta?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

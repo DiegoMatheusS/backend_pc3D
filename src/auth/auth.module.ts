@@ -1,3 +1,4 @@
+import { AccountSecurityService } from './account-security.service';
 import { Module } from '@nestjs/common';
 import { AdminGuard } from './admin.guard';
 import { AuthController } from './auth.controller';
@@ -11,6 +12,7 @@ import { SessaoCleanupService } from './sessao-cleanup.service';
   controllers: [AuthController],
   providers: [
     AuthService,
+    AccountSecurityService,
     GoogleIdentityService,
     AuthGuard,
     AuthGuardOpcional,

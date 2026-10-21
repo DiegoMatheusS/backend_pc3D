@@ -63,6 +63,36 @@ describe('proxy de enriquecimento técnico', () => {
     expect(body).not.toHaveProperty('detalharPagina');
   });
 
+  it('encaminha busca por modelo, 100 resultados e os modelos já cadastrados à descoberta', async () => {
+    process.env.PRODUTO_IA_URL = 'https://ia.example.test';
+    process.env.PRODUTO_IA_API_KEY = 'test';
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response('{"itens":[],"temMais":true}', { status: 200 }),
+      );
+    const hardwaresCadastrados = [
+      { nome: 'Intel Core i5-9400F', marca: 'Intel', modelo: 'Core i5-9400F' },
+    ];
+    await new ProdutoIaPythonService().descobrirHardwares({
+      categoria: 'PROCESSADOR',
+      consulta: 'i5-9500',
+      limite: 100,
+      hardwaresCadastrados,
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://ia.example.test/descobrir-hardwares',
+    );
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body).toMatchObject({
+      consulta: 'i5-9500',
+      limite: 100,
+      hardwaresCadastrados,
+      detalhar: false,
+      enriquecer: false,
+    });
+  });
+
   it('preserva a mensagem estruturada da API Python', async () => {
     process.env.PRODUTO_IA_URL = 'https://ia.example.test';
     process.env.PRODUTO_IA_API_KEY = 'test';

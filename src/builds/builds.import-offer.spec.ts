@@ -55,12 +55,59 @@ describe('cadastro de PC com oferta', () => {
     const calls = prisma.build.create.mock.calls as [Prisma.BuildCreateArgs][];
     const create = calls[0][0];
     expect(create.data.produto?.create).toMatchObject({
-      ofertas: { create: body.oferta },
+      ofertas: { create: [body.oferta] },
     });
     expect(prisma.produto.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { tipo: 'BUILD' } }),
     );
     expect(prisma.hardware.findMany).not.toHaveBeenCalled();
+  });
+  it('cria PC completo sem vínculos com múltiplas ofertas de forma atômica', async () => {
+    const { service, prisma } = setup();
+    await service.criar({
+      nome: 'PC completo Ryzen 5600G 16GB',
+      publicado: true,
+      descricao: '16 GB RAM, SSD 512 GB, teclado e mouse.',
+      ofertas: [
+        body.oferta,
+        { ...body.oferta, preco: 3899, vendedorIdentificador: 'outro' },
+      ],
+    });
+    expect(prisma.build.create.mock.calls[0][0]).toMatchObject({
+      data: {
+        componentes: { create: [] },
+        produto: {
+          create: {
+            publicado: true,
+            ofertas: {
+              create: [
+                body.oferta,
+                { ...body.oferta, preco: 3899, vendedorIdentificador: 'outro' },
+              ],
+            },
+          },
+        },
+      },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+  it('não confunde dois computadores com o mesmo modelo de CPU', async () => {
+    const { prisma, service } = setup();
+    prisma.produto.findMany.mockResolvedValue([
+      {
+        id: 42,
+        nome: 'PC Escritório Ryzen 5600G 16GB',
+        marca: 'AMD',
+        modelo: 'Ryzen 5600G',
+      },
+    ] as never);
+    await service.criar({
+      ...body,
+      nome: 'PC Gamer Ryzen 5600G 16GB RGB',
+      marca: 'AMD',
+      modelo: 'Ryzen 5600G',
+    });
+    expect(prisma.build.create).toHaveBeenCalled();
   });
   it('não cria o PC quando a loja é inativa ou inexistente', async () => {
     const { prisma, service } = setup();

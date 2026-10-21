@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsDateString,
   IsPositive,
   IsObject,
   IsOptional,
@@ -86,9 +87,23 @@ export class BuildOfertaDto {
   @IsString()
   @MaxLength(200)
   vendedorIdentificador?: string | null;
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99_999_999.99)
+  frete?: number | null;
+  @IsOptional()
+  @IsDateString()
+  validoAte?: string | null;
 }
 
 export class CriarBuildDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(25)
+  @ValidateNested({ each: true })
+  @Type(() => BuildOfertaDto)
+  ofertas?: BuildOfertaDto[];
   @IsOptional()
   @ValidateNested()
   @Type(() => BuildOfertaDto)

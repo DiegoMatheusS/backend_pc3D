@@ -1,10 +1,15 @@
+import { IsString, MinLength, MaxLength } from 'class-validator';
 import {
+  BadGatewayException,
+  ServiceUnavailableException,
   Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
   Post,
+  Param,
+  ParseUUIDPipe,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -27,6 +32,10 @@ import {
 import { ChatAdminIaDto } from './dtos/chat-admin-ia.dto';
 import { ImportarLinkIaDto } from './dtos/importar-link-ia.dto';
 
+class CriarChaveExtensaoDto {
+  @IsString() @MinLength(2) @MaxLength(80) nome!: string;
+}
+
 type UsuarioReq = { id: number; papel: string } | null;
 type Registro = Record<string, unknown>;
 
@@ -47,6 +56,60 @@ export class IaAdminController {
     private readonly iaService: IaService,
     private readonly auditoriaService: AuditoriaService,
   ) {}
+
+  @Get('operacoes/resumo')
+  @Papeis(PapelUsuario.ADMIN)
+  async operacoesResumo() {
+    const base = process.env.PRODUTO_IA_URL?.replace(/\/+$/, '');
+    const key = process.env.PRODUTO_IA_API_KEY;
+    if (!base || !key)
+      throw new ServiceUnavailableException('ProjetoIA não configurado.');
+    const response = await fetch(`${base}/admin/operacoes/resumo`, {
+      headers: { 'X-API-Key': key },
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok)
+      throw new BadGatewayException(
+        'Não foi possível consultar as métricas do agente.',
+      );
+    return response.json() as Promise<unknown>;
+  }
+
+  private async chaveExtensao(path: string, method: string, body?: object) {
+    const base = process.env.PRODUTO_IA_URL?.replace(/\/+$/, '');
+    const key = process.env.PRODUTO_IA_API_KEY;
+    if (!base || !key)
+      throw new ServiceUnavailableException('ProjetoIA não configurado.');
+    const response = await fetch(`${base}/admin/extensao/chaves${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+      ...(body && { body: JSON.stringify(body) }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok)
+      throw new BadGatewayException(
+        'Não foi possível gerenciar a chave da extensão.',
+      );
+    return response.json() as Promise<unknown>;
+  }
+  @Get('extensao/chaves')
+  @Papeis(PapelUsuario.ADMIN)
+  listarChavesExtensao() {
+    return this.chaveExtensao('', 'GET');
+  }
+  @Post('extensao/chaves')
+  @Papeis(PapelUsuario.ADMIN)
+  @Throttle({ global: { limit: 3, ttl: 60000 } })
+  criarChaveExtensao(@Body() body: CriarChaveExtensaoDto) {
+    return this.chaveExtensao('', 'POST', body);
+  }
+  @Post('extensao/chaves/:id/revogar')
+  @Papeis(PapelUsuario.ADMIN)
+  revogarChaveExtensao(@Param('id', ParseUUIDPipe) id: string) {
+    return this.chaveExtensao(`/${id}/revogar`, 'POST');
+  }
 
   private registrarUso(
     usuarioId: number | undefined,

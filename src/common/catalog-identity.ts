@@ -123,7 +123,14 @@ export async function assertCatalogIdentityAvailable(
       : tx.hardware.findMany({ select: selectIdentity }),
   ]);
   const product = products.find((item) =>
-    possibleCatalogIdentity(identity, item),
+    options.tipoProduto === 'BUILD'
+      ? // O modelo pode descrever apenas a CPU do anúncio. Dois PCs com esse
+        // processador não têm necessariamente a mesma configuração comercial.
+        sameCatalogIdentity(
+          { ...identity, modelo: null },
+          { ...item, modelo: null },
+        )
+      : possibleCatalogIdentity(identity, item),
   );
   if (product) {
     throw new ConflictException({

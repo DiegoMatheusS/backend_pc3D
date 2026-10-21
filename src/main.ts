@@ -69,13 +69,14 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Accept',
       'Authorization',
       'X-Requested-With',
       'X-CSRF-Token',
+      'X-CriaByte-Account',
       'Cache-Control',
     ],
     optionsSuccessStatus: 204,
@@ -102,12 +103,12 @@ async function bootstrap(): Promise<void> {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader(
       'Access-Control-Allow-Methods',
-      'GET,POST,PATCH,DELETE,OPTIONS',
+      'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     );
     res.setHeader(
       'Access-Control-Allow-Headers',
       req.get('access-control-request-headers') ||
-        'Content-Type, Accept, Authorization, X-Requested-With, X-CSRF-Token, Cache-Control',
+        'Content-Type, Accept, Authorization, X-Requested-With, X-CSRF-Token, X-CriaByte-Account, Cache-Control',
     );
     res.setHeader('Access-Control-Max-Age', '600');
     res.vary('Origin');

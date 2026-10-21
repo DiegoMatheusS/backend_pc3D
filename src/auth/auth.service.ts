@@ -1,3 +1,6 @@
+import { Optional } from '@nestjs/common';
+import { AccountSecurityService } from './account-security.service';
+import { PersistentLimits } from './persistent-limits.module';
 import {
   ConflictException,
   HttpException,
@@ -32,13 +35,23 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly googleIdentityService: GoogleIdentityService,
+    @Optional() private readonly accountSecurity?: AccountSecurityService,
+    @Optional() private readonly persistentLimits?: PersistentLimits,
   ) {}
 
   private chaveContaLogin(email: string): string {
     return createHash('sha256').update(email).digest('hex');
   }
 
-  private verificarLimiteLoginConta(email: string): void {
+  private async verificarLimiteLoginConta(email: string): Promise<void> {
+    if (this.persistentLimits) {
+      if (await this.persistentLimits.blocked(`login:${email}`))
+        throw new HttpException(
+          'Muitas tentativas de login. Tente novamente mais tarde.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      return;
+    }
     const chave = this.chaveContaLogin(email);
     const agora = Date.now();
     const registro = this.tentativasLoginPorConta.get(chave);
@@ -57,7 +70,16 @@ export class AuthService {
     }
   }
 
-  private registrarFalhaLoginConta(email: string): void {
+  private async registrarFalhaLoginConta(email: string): Promise<void> {
+    if (this.persistentLimits) {
+      await this.persistentLimits.increment(
+        `login:${email}`,
+        this.janelaTentativasLoginMs,
+        11,
+        this.janelaTentativasLoginMs,
+      );
+      return;
+    }
     const chave = this.chaveContaLogin(email);
     const agora = Date.now();
     const atual = this.tentativasLoginPorConta.get(chave);
@@ -84,7 +106,11 @@ export class AuthService {
     }
   }
 
-  private limparFalhasLoginConta(email: string): void {
+  private async limparFalhasLoginConta(email: string): Promise<void> {
+    if (this.persistentLimits) {
+      await this.persistentLimits.clear(`login:${email}`);
+      return;
+    }
     this.tentativasLoginPorConta.delete(this.chaveContaLogin(email));
   }
 
@@ -176,7 +202,7 @@ export class AuthService {
 
   async login(dados: LoginDto) {
     const email = dados.email.trim().toLowerCase();
-    this.verificarLimiteLoginConta(email);
+    await this.verificarLimiteLoginConta(email);
 
     const usuario = await this.prisma.usuario.findUnique({
       where: {
@@ -195,12 +221,13 @@ export class AuthService {
     }
 
     if (!usuario || !usuario.ativo || !senhaCorreta) {
-      this.registrarFalhaLoginConta(email);
+      await this.registrarFalhaLoginConta(email);
       throw new UnauthorizedException('E-mail ou senha incorretos.');
     }
 
-    this.limparFalhasLoginConta(email);
-    return this.criarSessao(usuario);
+    await this.limparFalhasLoginConta(email);
+    const challenge = await this.accountSecurity?.challenge(usuario.id);
+    return challenge || this.criarSessao(usuario);
   }
 
   async autenticarComGoogle(dados: GoogleAuthDto) {
@@ -312,12 +339,23 @@ export class AuthService {
       throw new UnauthorizedException('Esta conta está desativada.');
     }
 
+    const challenge = await this.accountSecurity?.challenge(usuario.id);
+    if (challenge) return challenge;
     const sessao = await this.criarSessao(usuario);
 
     return {
       ...sessao,
       novoUsuario,
     };
+  }
+
+  async login2fa(desafio: string, codigo: string) {
+    if (!this.accountSecurity)
+      throw new UnauthorizedException('Autenticação indisponível.');
+    const id = await this.accountSecurity.complete(desafio, codigo);
+    const user = await this.prisma.usuario.findUnique({ where: { id } });
+    if (!user?.ativo) throw new UnauthorizedException('Conta indisponível.');
+    return this.criarSessao(user);
   }
 
   async reautenticarParaAcaoSensivel(

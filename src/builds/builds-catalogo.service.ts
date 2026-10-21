@@ -104,9 +104,17 @@ export class BuildsCatalogoService {
   }
 
   async criar(dados: CriarBuildDto) {
-    if (dados.oferta) {
+    if (dados.oferta && dados.ofertas?.length) {
+      throw new BadRequestException(
+        'Envie oferta ou ofertas, sem combinar os dois campos.',
+      );
+    }
+    const ofertas = dados.ofertas ?? (dados.oferta ? [dados.oferta] : []);
+    for (const parceiroId of new Set(
+      ofertas.map((oferta) => oferta.parceiroId),
+    )) {
       const parceiro = await this.prisma.parceiro.findFirst({
-        where: { id: dados.oferta.parceiroId, ativo: true },
+        where: { id: parceiroId, ativo: true },
         select: { id: true },
       });
       if (!parceiro)
@@ -141,29 +149,36 @@ export class BuildsCatalogoService {
               imagemHoverUrl: dados.imagemHoverUrl?.trim() || null,
               publicado: dados.publicado ?? false,
               ativo: dados.ativo ?? true,
-              ...(dados.oferta
+              ...(ofertas.length
                 ? {
                     ofertas: {
-                      create: {
-                        parceiroId: dados.oferta.parceiroId,
-                        preco: dados.oferta.preco,
-                        urlOriginal: dados.oferta.urlOriginal,
-                        urlAfiliada: dados.oferta.urlAfiliada ?? null,
-                        ...(dados.oferta.precoAnterior !== undefined && {
-                          precoAnterior: dados.oferta.precoAnterior,
+                      create: ofertas.map((oferta) => ({
+                        parceiroId: oferta.parceiroId,
+                        preco: oferta.preco,
+                        urlOriginal: oferta.urlOriginal,
+                        urlAfiliada: oferta.urlAfiliada ?? null,
+                        ...(oferta.frete !== undefined && {
+                          frete: oferta.frete,
                         }),
-                        ...(dados.oferta.codigoMarketplace && {
-                          codigoMarketplace: dados.oferta.codigoMarketplace,
+                        ...(oferta.validoAte !== undefined && {
+                          validoAte: oferta.validoAte
+                            ? new Date(oferta.validoAte)
+                            : null,
                         }),
-                        ...(dados.oferta.vendedorNome && {
-                          vendedorNome: dados.oferta.vendedorNome,
+                        ...(oferta.precoAnterior !== undefined && {
+                          precoAnterior: oferta.precoAnterior,
                         }),
-                        ...(dados.oferta.vendedorIdentificador && {
-                          vendedorIdentificador:
-                            dados.oferta.vendedorIdentificador,
+                        ...(oferta.codigoMarketplace && {
+                          codigoMarketplace: oferta.codigoMarketplace,
+                        }),
+                        ...(oferta.vendedorNome && {
+                          vendedorNome: oferta.vendedorNome,
+                        }),
+                        ...(oferta.vendedorIdentificador && {
+                          vendedorIdentificador: oferta.vendedorIdentificador,
                         }),
                         status: StatusOferta.ATIVA,
-                      },
+                      })),
                     },
                   }
                 : {}),

@@ -25,7 +25,8 @@
     "db:test:studio": "node scripts/prisma-test.mjs studio",
     "verify": "npm run lint && npm run build && npm test && npm run test:e2e",
     "security:audit": "npm audit --omit=dev --audit-level=high",
-    "verify:security": "npm run verify && npm run security:audit"
+    "verify:security": "npm run verify && npm run security:audit",
+    "prestart:prod": "prisma migrate deploy"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1111.0",
@@ -49,7 +50,10 @@
     "google-auth-library": "^10.9.1",
     "helmet": "^8.3.0",
     "multer": "2.4.0",
+    "nodemailer": "^10.1.7",
+    "otpauth": "^9.5.2",
     "pg": "^8.22.0",
+    "prisma": "^7.9.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
@@ -66,6 +70,7 @@
     "@types/jest": "^30.0.0",
     "@types/multer": "^2.2.0",
     "@types/node": "^24.0.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.0.0",
     "eslint": "^9.18.0",
@@ -74,7 +79,6 @@
     "globals": "^17.0.0",
     "jest": "^30.4.2",
     "prettier": "^3.4.2",
-    "prisma": "^7.9.1",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.4.12",
