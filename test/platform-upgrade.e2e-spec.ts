@@ -82,6 +82,48 @@ describe('cadastro de PC, builds na conta e autenticação', () => {
     await prisma.parceiro.delete({ where: { id: partner.id } });
   });
 
+  it('cadastro e edição persistem o nome técnico sem o texto promocional', async () => {
+    const existing = await prisma.categoriaProduto.findUnique({
+      where: { slug: 'mouses' },
+    });
+    const category =
+      existing ??
+      (await prisma.categoriaProduto.create({
+        data: { nome: 'Mouses', slug: 'mouses', ativo: true },
+      }));
+    let productId: number | undefined;
+    try {
+      const created = await request(app.getHttpServer())
+        .post('/api/admin/produtos')
+        .set('Cookie', cookies[0])
+        .send({
+          categoriaId: category.id,
+          nome: 'Mouse Logitech G502 HERO foi desenvolvido para vencer.',
+          marca: 'Logitech',
+          modelo: `G502 HERO QA ${suffix}`,
+          descricao: 'DPI máximo: 25600; conexão USB.',
+          publicado: false,
+        })
+        .expect(201);
+      productId = created.body.id as number;
+      expect(created.body.nome).toBe('Mouse Logitech G502 HERO');
+      await request(app.getHttpServer())
+        .patch(`/api/admin/produtos/${productId}`)
+        .set('Cookie', cookies[0])
+        .send({ nome: 'Mouse Logitech G502 HERO. Descubra toda a história.' })
+        .expect(200);
+      const saved = await prisma.produto.findUniqueOrThrow({
+        where: { id: productId },
+      });
+      expect(saved.nome).toBe('Mouse Logitech G502 HERO');
+      expect(saved.descricao).toBe('DPI máximo: 25600; conexão USB.');
+    } finally {
+      if (productId) await prisma.produto.delete({ where: { id: productId } });
+      if (!existing)
+        await prisma.categoriaProduto.delete({ where: { id: category.id } });
+    }
+  });
+
   it('build salva pertence à conta, aparece em nova sessão e recusa sobrescrita antiga', async () => {
     const path = '/api/builds-pessoais/build-qa';
     const body = {

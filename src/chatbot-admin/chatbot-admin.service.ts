@@ -1,3 +1,7 @@
+import {
+  exigirNomeTecnico,
+  normalizarNomeTecnico,
+} from '../common/catalog-content';
 import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import { randomUUID } from 'node:crypto';
 import {
@@ -431,7 +435,7 @@ export class ChatbotAdminService {
     const mpn = this.texto(payload.mpn);
     const marca = this.texto(payload.marca);
     const modelo = this.texto(payload.modelo);
-    const nome = this.texto(payload.nome);
+    const nome = normalizarNomeTecnico(payload.nome, payload) || null;
     const select = {
       id: true,
       produtoId: true,
@@ -548,7 +552,7 @@ export class ChatbotAdminService {
     const mpn = this.texto(payload.mpn);
     const marca = this.texto(payload.marca);
     const modelo = this.texto(payload.modelo);
-    const nome = this.texto(payload.nome);
+    const nome = normalizarNomeTecnico(payload.nome, payload) || null;
 
     if (gtin) {
       const registro = await this.prisma.produto.findFirst({
@@ -1309,7 +1313,10 @@ export class ChatbotAdminService {
         ativo: true,
       },
     });
-    const nome = this.texto(payload.nome) ?? hardware.nome;
+    const nome = exigirNomeTecnico(payload.nome || hardware.nome, {
+      ...hardware,
+      ...payload,
+    });
     const marca = this.texto(payload.marca) ?? hardware.marca;
     const modelo = this.texto(payload.modelo) ?? hardware.modelo;
     await assertCatalogIdentityAvailable(
@@ -1364,7 +1371,7 @@ export class ChatbotAdminService {
       throw new NotFoundException(
         'Categoria de Produto não encontrada ou inativa.',
       );
-    const nome = this.texto(payload.nome);
+    const nome = exigirNomeTecnico(payload.nome, payload);
     if (!nome)
       throw new BadRequestException('O nome do Produto é obrigatório.');
     const marca = this.texto(payload.marca);

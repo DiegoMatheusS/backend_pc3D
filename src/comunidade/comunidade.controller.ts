@@ -15,6 +15,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { AuthGuardOpcional } from '../auth/auth-guard-opcional.guard';
 import { AuthGuard } from '../auth/auth.guard';
 import { UsuarioAtual } from '../auth/usuario-atual.decorator';
+import { ComunidadeNotificacoesService } from './comunidade-notificacoes.service';
 import { ComunidadeService } from './comunidade.service';
 import type { UsuarioComunidade } from './comunidade.service';
 import { AtualizarBuildComunidadeDto } from './dtos/atualizar-build-comunidade.dto';
@@ -26,7 +27,10 @@ import { FiltrarBuildsComunidadeDto } from './dtos/filtrar-builds-comunidade.dto
 @ApiTags('Comunidade')
 @Controller('comunidade/builds')
 export class ComunidadeController {
-  constructor(private readonly comunidadeService: ComunidadeService) {}
+  constructor(
+    private readonly comunidadeService: ComunidadeService,
+    private readonly comunidadeNotificacoes: ComunidadeNotificacoesService,
+  ) {}
 
   private exigirUsuario(usuario: UsuarioComunidade) {
     if (!usuario) {
@@ -94,18 +98,27 @@ export class ComunidadeController {
 
   @Post(':id/comentarios')
   @UseGuards(AuthGuard)
-  criarComentario(
+  async criarComentario(
     @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
     @Body() dados: CriarComentarioBuildDto,
   ) {
     const autenticado = this.exigirUsuario(usuario);
-    return this.comunidadeService.criarComentario(
+    const comentario = await this.comunidadeService.criarComentario(
       id,
       autenticado.id,
       autenticado,
       dados,
     );
+
+    await this.comunidadeNotificacoes.comentarioCriado(
+      id,
+      comentario.id,
+      autenticado.id,
+      dados.comentarioPaiId,
+    );
+
+    return comentario;
   }
 
   @Get(':id')
@@ -119,20 +132,38 @@ export class ComunidadeController {
 
   @Patch(':id')
   @UseGuards(AuthGuard)
-  atualizar(
+  async atualizar(
     @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
     @Body() dados: AtualizarBuildComunidadeDto,
   ) {
-    return this.comunidadeService.atualizar(id, usuario, dados);
+    const autenticado = this.exigirUsuario(usuario);
+    const resultado = await this.comunidadeService.atualizar(
+      id,
+      autenticado,
+      dados,
+    );
+    await this.comunidadeNotificacoes.buildAlteradaPorAdmin(
+      id,
+      autenticado,
+      'ALTERADA',
+    );
+    return resultado;
   }
 
   @Delete(':id')
   @UseGuards(AuthGuard)
-  remover(
+  async remover(
     @Param('id', ParsePositiveIntPipe) id: number,
     @UsuarioAtual() usuario: UsuarioComunidade,
   ) {
-    return this.comunidadeService.remover(id, usuario);
+    const autenticado = this.exigirUsuario(usuario);
+    const resultado = await this.comunidadeService.remover(id, autenticado);
+    await this.comunidadeNotificacoes.buildAlteradaPorAdmin(
+      id,
+      autenticado,
+      'REMOVIDA',
+    );
+    return resultado;
   }
 }
