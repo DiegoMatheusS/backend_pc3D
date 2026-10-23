@@ -1,8 +1,12 @@
+import { CATEGORIAS_PRODUTO_POR_SLUG } from '../common/catalog-categories';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ProdutoIaPythonService } from '../ia/produto-ia-python.service';
-import { CategoriaImportacaoIa } from '../ia/dtos/categoria-importacao-ia';
 import { ProdutosService } from './produtos.service';
 import { BuscarEspecificacoesProdutoDto } from './dtos/buscar-especificacoes-produto.dto';
+import {
+  descricaoTecnica,
+  normalizarNomeTecnico,
+} from '../common/catalog-content';
 import {
   especificacoesMetadados,
   preencherLacunas,
@@ -26,20 +30,7 @@ const FICHAS: Record<string, string> = {
   COOLER: 'especificacaoCooler',
   VENTOINHA: 'especificacaoVentoinha',
 };
-const CATEGORIAS: Record<string, CategoriaImportacaoIa> = {
-  celulares: 'CELULAR',
-  monitores: 'MONITOR',
-  mouses: 'MOUSE',
-  teclados: 'TECLADO',
-  headsets: 'HEADSET',
-  fones: 'FONE',
-  microfones: 'MICROFONE',
-  webcams: 'WEBCAM',
-  mousepads: 'MOUSEPAD',
-  cadeiras: 'CADEIRA',
-  mesas: 'MESA',
-  tablets: 'TABLET',
-};
+const CATEGORIAS = CATEGORIAS_PRODUTO_POR_SLUG;
 
 @Injectable()
 export class ProdutoEspecificacoesService {
@@ -99,8 +90,12 @@ export class ProdutoEspecificacoesService {
         const divergente = ['gtin', 'mpn', 'modelo'].some((chave) => {
           const valorAtual = alvo[chave];
           const valorNovo = payload[chave];
-          const atual = typeof valorAtual === 'string' ? valorAtual.trim().toLowerCase() : '';
-          const novo = typeof valorNovo === 'string' ? valorNovo.trim().toLowerCase() : '';
+          const atual =
+            typeof valorAtual === 'string'
+              ? valorAtual.trim().toLowerCase()
+              : '';
+          const novo =
+            typeof valorNovo === 'string' ? valorNovo.trim().toLowerCase() : '';
           return atual && novo && atual !== novo;
         });
         if (divergente) {
@@ -132,14 +127,23 @@ export class ProdutoEspecificacoesService {
     }
 
     let pesquisa: Record<string, unknown> = {};
-    if (categoria && campo) {
+    if (categoria) {
       const seed = {
         nome: produto.nome,
         marca: alvo.marca ?? produto.marca,
         modelo: alvo.modelo ?? produto.modelo,
         mpn: alvo.mpn ?? produto.mpn,
         gtin: alvo.gtin ?? produto.gtin,
-        [campo]: preencherLacunas(atuais, encontradas),
+        ...(campo
+          ? { [campo]: preencherLacunas(atuais, encontradas) }
+          : {
+              metadados: {
+                especificacoesEncontradas: preencherLacunas(
+                  atuais,
+                  encontradas,
+                ),
+              },
+            }),
       };
       try {
         // O fluxo existente pesquisa fontes técnicas antes de usar a IA nas lacunas.
@@ -152,7 +156,9 @@ export class ProdutoEspecificacoesService {
         });
         encontradas = preencherLacunas(
           encontradas,
-          registro(registro(pesquisa.payload)[campo]),
+          campo
+            ? registro(registro(pesquisa.payload)[campo])
+            : especificacoesMetadados(registro(pesquisa.payload).metadados),
         );
         origemPorCampo = {
           ...origemPorCampo,
@@ -181,7 +187,16 @@ export class ProdutoEspecificacoesService {
       categoria,
       campoEspecificacao: campo ?? null,
       especificacoes,
-      descricao: vazio(produto.descricao) ? descricao : '',
+      nomeTecnico: normalizarNomeTecnico(produto.nome, alvo),
+      descricao: vazio(produto.descricao)
+        ? descricaoTecnica(final, normalizarNomeTecnico(produto.nome, alvo)) ||
+          descricao
+        : '',
+      descricaoTecnica:
+        descricaoTecnica(final, normalizarNomeTecnico(produto.nome, alvo)) ||
+        (typeof pesquisa.descricaoTecnica === 'string'
+          ? pesquisa.descricaoTecnica
+          : ''),
       camposPreenchidos,
       origemPorCampo: Object.fromEntries(
         camposPreenchidos.map((chave) => [chave, origemPorCampo[chave] ?? {}]),

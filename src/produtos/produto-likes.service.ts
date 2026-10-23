@@ -49,7 +49,7 @@ export class ProdutoLikesService {
   private async contar(produtoId: number): Promise<number> {
     const linhas = await this.prisma.$queryRaw<Array<{ likesCount: number }>>(
       Prisma.sql`
-        SELECT COUNT(*)::integer AS "likesCount"
+        SELECT COUNT(DISTINCT "usuario_id")::integer AS "likesCount"
         FROM "produto_likes"
         WHERE "produto_id" = ${produtoId}
       `,
@@ -72,7 +72,7 @@ export class ProdutoLikesService {
       Prisma.sql`
         SELECT
           p."id" AS "produtoId",
-          COUNT(pl."id")::integer AS "likesCount",
+          COUNT(DISTINCT pl."usuario_id")::integer AS "likesCount",
           COALESCE(BOOL_OR(pl."usuario_id" = ${usuarioAtualId}), false) AS "likedByUser"
         FROM "produtos" p
         INNER JOIN "categorias_produtos" cp

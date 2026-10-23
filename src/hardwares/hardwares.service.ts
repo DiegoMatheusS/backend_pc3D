@@ -1,3 +1,4 @@
+import { exigirNomeTecnico } from '../common/catalog-content';
 import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import {
   obterCabecalhoHttp,
@@ -602,7 +603,8 @@ export class HardwaresService {
     this.validarEspecificacaoDaCategoria(dados);
     this.validarCoerenciaEspecificacoes(dados);
 
-    const nome = dados.nome.trim();
+    const nome = exigirNomeTecnico(dados.nome, dados);
+    dados = { ...dados, nome };
     const marca = dados.marca.trim();
     const modelo = dados.modelo.trim();
 
@@ -848,7 +850,10 @@ export class HardwaresService {
       );
     }
 
-    const nome = dados.nome?.trim() ?? hardwareAtual.nome;
+    const nome = exigirNomeTecnico(dados.nome ?? hardwareAtual.nome, {
+      ...hardwareAtual,
+      ...dados,
+    });
     const marca = dados.marca?.trim() ?? hardwareAtual.marca;
     const modelo = dados.modelo?.trim() ?? hardwareAtual.modelo;
 

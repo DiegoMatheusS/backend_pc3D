@@ -1,3 +1,7 @@
+## Nomes e descrições técnicas
+
+As melhorias de cadastro, pesquisa de especificações e extensão estão no [guia do catálogo técnico](docs/technical-catalog-20261023.md).
+
 # CriaByte Backend
 
 A atualização de cadastro de PC, builds pessoais sincronizadas, limites persistentes e segurança da conta está no [guia de implantação](docs/platform-upgrade-20261021.md). Aplique a migração e configure criptografia/SMTP antes de habilitar as funções correspondentes.

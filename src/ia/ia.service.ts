@@ -1,4 +1,8 @@
 import {
+  descricaoTecnica,
+  normalizarNomeTecnico,
+} from '../common/catalog-content';
+import {
   BadRequestException,
   Injectable,
   Logger,
@@ -4768,25 +4772,31 @@ finalidade, resolucaoRecomendada, componentes. Cada item de componentes deve usa
   ): Promise<{ descricao: string }> {
     const produto = await this.carregarProdutoParaIa(dados);
 
-    const instrucao = `
-Gere uma descrição concisa e técnica em português para o seguinte produto:
-
-${JSON.stringify(produto, null, 2)}
-
-REGRAS:
-- Máximo de 3 frases.
-- Mencione somente características presentes nos dados.
-- Linguagem clara, útil para uma ficha de produto.
-- Não invente especificações, preço, estoque ou compatibilidade.
-- Não use superlativos como "melhor", "incrível" ou "revolucionário".
-`;
-
-    const descricao = await this.gerarRespostaChat(
-      PROMPT_SISTEMA_ADMIN,
-      [],
-      instrucao,
+    const registros = [produto, produto.hardware, produto.notebook].filter(
+      (valor): valor is NonNullable<typeof valor> => valor != null,
     );
-
-    return { descricao: descricao.trim() };
+    const especificacoes: Record<string, unknown> = {};
+    for (const registro of registros) {
+      for (const [chave, valor] of Object.entries(registro)) {
+        if (chave.startsWith('especificacao') && this.ehRegistro(valor))
+          Object.assign(especificacoes, valor);
+      }
+    }
+    const metadados = this.ehRegistro(produto.metadados)
+      ? produto.metadados
+      : {};
+    for (const chave of ['especificacoesEncontradas', 'especificacoes']) {
+      if (this.ehRegistro(metadados[chave]))
+        Object.assign(especificacoes, metadados[chave]);
+    }
+    const descricao = descricaoTecnica(
+      especificacoes,
+      normalizarNomeTecnico(produto.nome, produto),
+    );
+    if (!descricao)
+      throw new BadRequestException(
+        'Busque ou preencha as especificações antes de gerar a descrição técnica.',
+      );
+    return { descricao };
   }
 }

@@ -1,3 +1,4 @@
+import { exigirNomeTecnico } from '../common/catalog-content';
 import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import {
   BadRequestException,
@@ -104,6 +105,7 @@ export class BuildsCatalogoService {
   }
 
   async criar(dados: CriarBuildDto) {
+    dados = { ...dados, nome: exigirNomeTecnico(dados.nome, dados) };
     if (dados.oferta && dados.ofertas?.length) {
       throw new BadRequestException(
         'Envie oferta ou ofertas, sem combinar os dois campos.',
@@ -221,7 +223,11 @@ export class BuildsCatalogoService {
     const totalVinculos = dados.componentes?.length ?? atual._count.componentes;
     this.validarDescricaoParaPublicar(publicado, descricao, totalVinculos);
 
-    const nome = dados.nome?.trim() ?? atual.produto.nome;
+    const nome = exigirNomeTecnico(dados.nome ?? atual.produto.nome, {
+      marca: dados.marca ?? atual.produto.marca,
+      modelo: dados.modelo ?? atual.produto.modelo,
+      categoria: 'PC_MONTADO',
+    });
     const slug =
       dados.nome !== undefined
         ? await this.slugUnico(nome, atual.produtoId)

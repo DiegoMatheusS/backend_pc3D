@@ -25,33 +25,29 @@ describe('Busca de especificações do Produto', () => {
       atualizar: jest.fn(),
     };
     const ia = {
-      importarUrl: jest
-        .fn()
-        .mockResolvedValue({
-          categoriaDetectada: 'CELULAR',
-          payloadParcialBackend: {
-            modelo: 'Galaxy Teste',
-            descricao: 'Descrição da página',
-            especificacaoCelular: { ramGb: 12, bateriaMah: 5000 },
+      importarUrl: jest.fn().mockResolvedValue({
+        categoriaDetectada: 'CELULAR',
+        payloadParcialBackend: {
+          modelo: 'Galaxy Teste',
+          descricao: 'Descrição da página',
+          especificacaoCelular: { ramGb: 12, bateriaMah: 5000 },
+        },
+      }),
+      enriquecerIaTecnica: jest.fn().mockResolvedValue({
+        payload: {
+          especificacaoCelular: {
+            nfc: true,
+            ramGb: 12,
+            armazenamentoGb: 256,
           },
-        }),
-      enriquecerIaTecnica: jest
-        .fn()
-        .mockResolvedValue({
-          payload: {
-            especificacaoCelular: {
-              nfc: true,
-              ramGb: 12,
-              armazenamentoGb: 256,
-            },
+        },
+        origemPorCampo: {
+          armazenamentoGb: {
+            fonte: 'FABRICANTE_OFICIAL',
+            url: 'https://samsung.com/modelo',
           },
-          origemPorCampo: {
-            armazenamentoGb: {
-              fonte: 'FABRICANTE_OFICIAL',
-              url: 'https://samsung.com/modelo',
-            },
-          },
-        }),
+        },
+      }),
     };
     const service = new ProdutoEspecificacoesService(
       produtos as unknown as ProdutosService,
@@ -69,7 +65,10 @@ describe('Busca de especificações do Produto', () => {
       bateriaMah: 5000,
       armazenamentoGb: 256,
     });
-    expect(result.descricao).toBe('Descrição da página');
+    expect(result.descricao).toContain('5000 mAh');
+    expect(result.descricao).toContain('256 GB');
+    expect(result.descricao).toContain('Não');
+    expect(result.descricao).not.toContain('Descrição da página');
     expect(ia.enriquecerIaTecnica).toHaveBeenCalledWith(
       expect.objectContaining({
         provedor: 'OPENAI',

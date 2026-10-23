@@ -1,3 +1,4 @@
+import { exigirNomeTecnico } from '../common/catalog-content';
 import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import {
   BadRequestException,
@@ -148,6 +149,7 @@ export class NotebooksService {
   }
 
   async criar(dados: CriarNotebookDto) {
+    dados = { ...dados, nome: exigirNomeTecnico(dados.nome, dados) };
     if (dados.especificacao) {
       this.validarEspecificacao(dados.especificacao);
     }
@@ -401,7 +403,11 @@ export class NotebooksService {
       });
     }
 
-    const nome = dados.nome?.trim() ?? atual.produto.nome;
+    const nome = exigirNomeTecnico(dados.nome ?? atual.produto.nome, {
+      marca: dados.marca ?? atual.produto.marca,
+      modelo: dados.modelo ?? atual.produto.modelo,
+      categoria: 'NOTEBOOK',
+    });
     const marca = dados.marca?.trim() ?? atual.produto.marca ?? '';
     const modelo = dados.modelo?.trim() ?? atual.produto.modelo ?? '';
     const slug =

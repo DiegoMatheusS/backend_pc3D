@@ -1,3 +1,4 @@
+import { exigirNomeTecnico } from '../common/catalog-content';
 import { assertCatalogIdentityAvailable } from '../common/catalog-identity';
 import { randomUUID } from 'node:crypto';
 import {
@@ -431,7 +432,7 @@ export class ChatbotAdminService {
     const mpn = this.texto(payload.mpn);
     const marca = this.texto(payload.marca);
     const modelo = this.texto(payload.modelo);
-    const nome = this.texto(payload.nome);
+    const nome = exigirNomeTecnico(payload.nome, payload);
     const select = {
       id: true,
       produtoId: true,
@@ -548,7 +549,7 @@ export class ChatbotAdminService {
     const mpn = this.texto(payload.mpn);
     const marca = this.texto(payload.marca);
     const modelo = this.texto(payload.modelo);
-    const nome = this.texto(payload.nome);
+    const nome = exigirNomeTecnico(payload.nome, payload);
 
     if (gtin) {
       const registro = await this.prisma.produto.findFirst({
@@ -1364,7 +1365,7 @@ export class ChatbotAdminService {
       throw new NotFoundException(
         'Categoria de Produto não encontrada ou inativa.',
       );
-    const nome = this.texto(payload.nome);
+    const nome = exigirNomeTecnico(payload.nome, payload);
     if (!nome)
       throw new BadRequestException('O nome do Produto é obrigatório.');
     const marca = this.texto(payload.marca);

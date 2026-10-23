@@ -1,3 +1,4 @@
+import { exigirNomeTecnico } from '../common/catalog-content';
 import {
   especificacoesMetadados,
   metadadosComCelular,
@@ -852,7 +853,7 @@ export class ProdutosService {
     const categoriaProduto = this.dadosCategoriaProdutoHardware(
       hardware.categoria,
     );
-    const nome = dados.nome?.trim() || hardware.nome;
+    const nome = exigirNomeTecnico(dados.nome || hardware.nome, hardware);
     const slug = await this.criarSlugUnico(
       `${hardware.marca} ${hardware.modelo} ${nome}`,
     );
@@ -934,6 +935,7 @@ export class ProdutosService {
   }
 
   async criar(dados: CriarProdutoDto) {
+    dados = { ...dados, nome: exigirNomeTecnico(dados.nome, dados) };
     this.validarEspecificacaoUnica(dados);
     const categoria = await this.prisma.categoriaProduto.findFirst({
       where: { id: dados.categoriaId, ativo: true },
@@ -1138,7 +1140,10 @@ export class ProdutosService {
       );
     }
 
-    const nome = dados.nome?.trim() ?? atual.nome;
+    const nome = exigirNomeTecnico(dados.nome ?? atual.nome, {
+      marca: dados.marca ?? atual.marca,
+      modelo: dados.modelo ?? atual.modelo,
+    });
     const marca =
       dados.marca === undefined
         ? atual.marca
