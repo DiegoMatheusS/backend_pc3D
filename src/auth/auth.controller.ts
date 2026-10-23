@@ -7,6 +7,7 @@ import {
   Post,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -16,6 +17,15 @@ import { AuthService } from './auth.service';
 import { CadastroDto } from './dtos/cadastro.dto';
 import { GoogleAuthDto } from './dtos/google-auth.dto';
 import { LoginDto } from './dtos/login.dto';
+import {
+  RecoverDto,
+  PasswordDto,
+  MfaDto,
+  DisableMfaDto,
+  ResetDto,
+} from './dtos/account-security.dto';
+import { AccountSecurityService } from './account-security.service';
+import { AuthGuard } from './auth.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -23,6 +33,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly accountSecurity: AccountSecurityService,
   ) {}
 
   private obterNomeCookie(): string {
@@ -82,6 +93,8 @@ export class AuthController {
   ) {
     const resultado = await this.authService.login(dados);
 
+    if ('requires2fa' in resultado) return resultado;
+
     this.definirCookieSessao(resposta, resultado.token, resultado.expiraEm);
 
     return {
@@ -104,6 +117,8 @@ export class AuthController {
   ) {
     const resultado = await this.authService.autenticarComGoogle(dados);
 
+    if ('requires2fa' in resultado) return resultado;
+
     this.definirCookieSessao(resposta, resultado.token, resultado.expiraEm);
 
     return {
@@ -111,6 +126,70 @@ export class AuthController {
       expiraEm: resultado.expiraEm,
       novoUsuario: resultado.novoUsuario,
     };
+  }
+
+  @Post('login-2fa')
+  @Throttle({ global: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  async login2fa(
+    @Body() body: MfaDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.login2fa(body.desafio, body.codigo);
+    this.definirCookieSessao(response, result.token, result.expiraEm);
+    return { usuario: result.usuario, expiraEm: result.expiraEm };
+  }
+  @Post('recuperar-senha')
+  @Throttle({ global: { limit: 3, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  recover(@Body() body: RecoverDto) {
+    return this.accountSecurity.recover(body.email);
+  }
+  @Post('redefinir-senha')
+  @Throttle({ global: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  reset(@Body() body: ResetDto) {
+    return this.accountSecurity.reset(body.token, body.senha);
+  }
+  @Get('2fa')
+  @UseGuards(AuthGuard)
+  status2fa(@Req() req: Request & { usuario: { id: number } }) {
+    return this.accountSecurity.status(req.usuario.id);
+  }
+  @Post('2fa/configurar')
+  @UseGuards(AuthGuard)
+  @Throttle({ global: { limit: 3, ttl: 60000 } })
+  setup2fa(
+    @Req() req: Request & { usuario: { id: number } },
+    @Body() body: PasswordDto,
+  ) {
+    return this.accountSecurity.setup(req.usuario.id, body.senha);
+  }
+  @Post('2fa/ativar')
+  @UseGuards(AuthGuard)
+  @Throttle({ global: { limit: 5, ttl: 60000 } })
+  activate2fa(
+    @Req() req: Request & { usuario: { id: number } },
+    @Body() body: MfaDto,
+  ) {
+    return this.accountSecurity.activate(
+      req.usuario.id,
+      body.desafio,
+      body.codigo,
+    );
+  }
+  @Post('2fa/desativar')
+  @UseGuards(AuthGuard)
+  @Throttle({ global: { limit: 5, ttl: 60000 } })
+  disable2fa(
+    @Req() req: Request & { usuario: { id: number } },
+    @Body() body: DisableMfaDto,
+  ) {
+    return this.accountSecurity.disable(
+      req.usuario.id,
+      body.senha,
+      body.codigo,
+    );
   }
 
   @ApiOperation({

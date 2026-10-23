@@ -276,8 +276,53 @@ model Usuario {
   ofertasOrigem                Oferta[]         @relation("OfertasUsuarioOrigem")
   notificacoes                 Notificacao[]
   tokensChatbotCadastro        ChatbotCadastroToken[]
+  buildsPessoais               BuildPessoal[]
+  segurancaConta               SegurancaConta?
+  tokensAcesso                 TokenAcesso[]
 
   @@map("usuarios")
+}
+
+model BuildPessoal {
+  usuarioId Int @map("usuario_id")
+  clienteId String @map("cliente_id") @db.VarChar(100)
+  dados Json
+  revisao Int @default(1)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@id([usuarioId, clienteId])
+  @@map("builds_pessoais")
+}
+
+model SegurancaConta {
+  usuarioId Int @id @map("usuario_id")
+  segredo String? @db.Text
+  ultimoPasso BigInt? @map("ultimo_passo")
+  recuperacao String[] @default([])
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@map("seguranca_conta")
+}
+
+model TokenAcesso {
+  hash String @id @db.VarChar(64)
+  usuarioId Int @map("usuario_id")
+  finalidade String @db.VarChar(30)
+  dados String? @db.Text
+  tentativas Int @default(0)
+  expiraEm DateTime @map("expira_em") @db.Timestamptz(3)
+  usadoEm DateTime? @map("usado_em") @db.Timestamptz(3)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@index([expiraEm])
+  @@map("tokens_acesso")
+}
+
+model LimiteRequisicao {
+  chave String @id @db.VarChar(64)
+  total Int @default(0)
+  expiraEm DateTime @map("expira_em") @db.Timestamptz(3)
+  bloqueadoAte DateTime? @map("bloqueado_ate") @db.Timestamptz(3)
+  @@index([expiraEm])
+  @@map("limites_requisicao")
 }
 
 model Sessao {

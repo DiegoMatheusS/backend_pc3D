@@ -1,5 +1,7 @@
 # CriaByte Backend
 
+A atualização de cadastro de PC, builds pessoais sincronizadas, limites persistentes e segurança da conta está no [guia de implantação](docs/platform-upgrade-20261021.md). Aplique a migração e configure criptografia/SMTP antes de habilitar as funções correspondentes.
+
 Backend da plataforma CriaByte, construído com NestJS, TypeScript, Prisma e PostgreSQL.
 
 ## Estado atual

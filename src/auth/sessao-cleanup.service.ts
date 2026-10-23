@@ -41,6 +41,15 @@ export class SessaoCleanupService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
+      await this.prisma.tokenAcesso.deleteMany({
+        where: { expiraEm: { lt: revogadasAntesDe } },
+      });
+      await this.prisma.limiteRequisicao.deleteMany({
+        where: {
+          expiraEm: { lt: revogadasAntesDe },
+          OR: [{ bloqueadoAte: null }, { bloqueadoAte: { lt: agora } }],
+        },
+      });
       if (resultado.count > 0) {
         this.logger.log(
           `${resultado.count} sessão(ões) antiga(s) removida(s).`,

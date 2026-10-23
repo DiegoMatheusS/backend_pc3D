@@ -1,3 +1,8 @@
+import { BuildsPessoaisModule } from './builds-pessoais/builds-pessoais.module';
+import {
+  PersistentLimits,
+  PersistentLimitsModule,
+} from './auth/persistent-limits.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -35,13 +40,21 @@ import { validarVariaveisAmbiente } from './config/env.validation';
     }),
     // Rate limiting global: 120 requisições por minuto por IP.
     // Rotas sensíveis/caras sobrescrevem esse limite com @Throttle.
-    ThrottlerModule.forRoot([
-      {
-        name: 'global',
-        ttl: 60_000,
-        limit: 120,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      imports: [PersistentLimitsModule],
+      inject: [PersistentLimits],
+      useFactory: (storage: PersistentLimits) => ({
+        storage,
+        throttlers: [
+          {
+            name: 'global',
+            ttl: 60_000,
+            limit: 120,
+          },
+        ],
+      }),
+    }),
+    BuildsPessoaisModule,
     PrismaModule,
     HealthModule,
     UsuariosModule,
