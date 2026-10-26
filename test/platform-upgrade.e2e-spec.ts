@@ -47,6 +47,52 @@ describe('cadastro de PC, builds na conta e autenticação', () => {
     }
   });
 
+  it('preço médio do Hardware persiste, aceita atualização e pode ser removido', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/hardwares')
+      .set('Cookie', cookies[0])
+      .send({
+        nome: `Fonte QA ${suffix}`,
+        marca: 'QA',
+        modelo: `650W ${suffix}`,
+        categoria: 'FONTE',
+        mediaPrecoHardware: 299.9,
+        especificacaoFonte: { formato: 'ATX', potenciaWatts: 650 },
+      })
+      .expect(201);
+    const id = created.body.id as number;
+    try {
+      expect(Number(created.body.mediaPrecoHardware)).toBe(299.9);
+      await request(app.getHttpServer())
+        .patch(`/api/admin/hardwares/${id}`)
+        .set('Cookie', cookies[0])
+        .send({ mediaPrecoHardware: -1 })
+        .expect(400);
+      await request(app.getHttpServer())
+        .patch(`/api/admin/hardwares/${id}`)
+        .set('Cookie', cookies[0])
+        .send({ mediaPrecoHardware: 349.99 })
+        .expect(200);
+      expect(
+        Number(
+          (await prisma.hardware.findUniqueOrThrow({ where: { id } }))
+            .mediaPrecoHardware,
+        ),
+      ).toBe(349.99);
+      await request(app.getHttpServer())
+        .patch(`/api/admin/hardwares/${id}`)
+        .set('Cookie', cookies[0])
+        .send({ mediaPrecoHardware: null })
+        .expect(200);
+      expect(
+        (await prisma.hardware.findUniqueOrThrow({ where: { id } }))
+          .mediaPrecoHardware,
+      ).toBeNull();
+    } finally {
+      await prisma.hardware.delete({ where: { id } });
+    }
+  });
+
   it('PC completo cadastra a oferta mesmo sem peças vinculadas', async () => {
     const partner = await prisma.parceiro.create({
       data: {

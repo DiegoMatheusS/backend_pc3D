@@ -643,6 +643,7 @@ export class HardwaresService {
           nome,
           slug,
           categoria: dados.categoria,
+          mediaPrecoHardware: dados.mediaPrecoHardware,
           marca,
           modelo,
           descricao: dados.descricao?.trim(),
@@ -914,6 +915,7 @@ export class HardwaresService {
           slug,
           marca,
           modelo,
+          mediaPrecoHardware: dados.mediaPrecoHardware,
           descricao:
             dados.descricao === undefined ? undefined : dados.descricao.trim(),
           imagemUrl:
