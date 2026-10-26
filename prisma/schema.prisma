@@ -391,6 +391,7 @@ model Hardware {
   categoria                  CategoriaHardware
   marca                      String                      @db.VarChar(100)
   modelo                     String                      @db.VarChar(150)
+  mediaPrecoHardware         Decimal?                    @map("media_preco_hardware") @db.Decimal(12, 2)
   descricao                  String?                     @db.Text
   mpn                        String?                     @unique @db.VarChar(150)
   gtin                       String?                     @unique @db.VarChar(32)

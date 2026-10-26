@@ -1,6 +1,9 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsNumber,
+  Min,
+  Max,
   IsEnum,
   IsObject,
   IsOptional,
@@ -64,6 +67,12 @@ export class AtualizarHardwareDto {
     message: 'O modelo deve ter no máximo 150 caracteres.',
   })
   modelo?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(100_000_000)
+  mediaPrecoHardware?: number | null;
 
   @IsOptional()
   @IsString({
