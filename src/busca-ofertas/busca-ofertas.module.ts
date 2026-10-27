@@ -1,3 +1,5 @@
+import { DescobrirOfertasController } from './descobrir-ofertas.controller';
+import { DescobrirOfertasService } from './descobrir-ofertas.service';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { HardwaresModule } from '../hardwares/hardwares.module';
@@ -15,11 +17,13 @@ import { ShopeeProjetoIaService } from './shopee-projeto-ia.service';
 @Module({
   imports: [AuthModule, HardwaresModule, IaModule],
   controllers: [
+    DescobrirOfertasController,
     BuscaOfertasController,
     ShopeeBuscaOfertasController,
     MercadoLivreBuscaOfertasController,
   ],
   providers: [
+    DescobrirOfertasService,
     BuscaOfertasService,
     ClassificadorOfertasService,
     FichaTecnicaOfertasService,
