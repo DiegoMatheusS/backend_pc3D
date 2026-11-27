@@ -13,7 +13,7 @@ export class DescobrirOfertasService {
         process.env.PRODUTO_IA_URL?.trim() &&
         process.env.PRODUTO_IA_API_KEY?.trim(),
       ),
-      lojas: ['SHOPEE', 'MERCADO_LIVRE', 'MAGALU'],
+      lojas: ['SHOPEE', 'MERCADO_LIVRE', 'MAGALU', 'AMAZON'],
     };
   }
   async buscar(dados: DescobrirOfertasDto) {
