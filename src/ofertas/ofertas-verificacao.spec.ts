@@ -107,7 +107,7 @@ describe('integração de verificação individual de ofertas', () => {
 
     checker.confirmarComProdutoIa.mockResolvedValue({
       status: 'SUCESSO',
-      preco: 90,
+      preco: null,
       disponivel: false,
       identidade: {
         mpn: null,
@@ -120,6 +120,23 @@ describe('integração de verificação individual de ofertas', () => {
     const result = await service.verificarPrecoOferta(42);
 
     expect(result.status).toBe('INDISPONIVEL');
+    expect(prisma.historicoPrecoOferta.create).not.toHaveBeenCalled();
+  });
+
+  it('mantém o preço salvo quando a confirmação coincide com ele', async () => {
+    const { service, prisma, checker } = setup('HTML_MARKETPLACE');
+    checker.verificarOferta.mockResolvedValue({
+      status: 'SUCESSO', preco: 99, origemPreco: 'HTML_MARKETPLACE',
+      urlFinal: 'https://loja.com/item',
+    });
+    checker.confirmarComProdutoIa.mockResolvedValue({
+      status: 'SUCESSO', preco: 100, precoAnterior: null, disponivel: true,
+      identidade: { mpn: null, gtin: null, marca: null, modelo: null },
+    });
+
+    const result = await service.verificarPrecoOferta(42);
+
+    expect(result).toMatchObject({ status: 'SEM_ALTERACAO', precoEncontrado: 100 });
     expect(prisma.historicoPrecoOferta.create).not.toHaveBeenCalled();
   });
 });

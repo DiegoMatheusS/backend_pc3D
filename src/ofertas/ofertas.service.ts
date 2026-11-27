@@ -719,13 +719,21 @@ export class OfertasService {
     return resultado.resultados[0];
   }
 
-  async verificarPrecosOfertas(limiteInformado?: number, ofertaId?: number, excluirIds: number[] = []) {
+  async verificarPrecosOfertas(
+    limiteInformado?: number,
+    ofertaId?: number,
+    excluirIds: number[] = [],
+  ) {
     const limite = Math.min(Math.max(limiteInformado ?? 20, 1), 50);
     const agora = new Date();
     const limiteVariacaoPercentual = 35;
 
     const baseWhere: Prisma.OfertaWhereInput = {
-      ...(ofertaId !== undefined ? { id: ofertaId } : excluirIds.length ? { id: { notIn: excluirIds } } : {}),
+      ...(ofertaId !== undefined
+        ? { id: ofertaId }
+        : excluirIds.length
+          ? { id: { notIn: excluirIds } }
+          : {}),
       status: { in: [StatusOferta.ATIVA, StatusOferta.INDISPONIVEL] },
       parceiro: { ativo: true },
       produto: { ativo: true },
@@ -855,10 +863,13 @@ export class OfertasService {
             precoAnteriorBanco: precoSalvo,
             precoEncontrado: confirmacaoIa.preco,
             precoAnteriorEncontrado: confirmacaoIa.precoAnterior,
-            variacaoPercentual: this.calcularVariacaoPercentual(
-              precoSalvo,
-              confirmacaoIa.preco,
-            ),
+            variacaoPercentual:
+              confirmacaoIa.preco === null
+                ? null
+                : this.calcularVariacaoPercentual(
+                    precoSalvo,
+                    confirmacaoIa.preco,
+                  ),
             fontePreco: confirmacaoIa.fontePreco,
             urlConsultada: verificacao.urlConsultada ?? null,
             urlFinal: confirmacaoIa.urlFinal,
@@ -870,6 +881,39 @@ export class OfertasService {
           });
           continue;
         }
+      }
+
+      if (
+        confirmacaoIa?.status === 'SUCESSO' &&
+        confirmacaoIa.disponivel === false
+      ) {
+        await this.prisma.oferta.update({
+          where: { id: oferta.id },
+          data: {
+            status: StatusOferta.INDISPONIVEL,
+            verificadoEm: tentativaEm,
+            coletadoEm: tentativaEm,
+          },
+        });
+        resultados.push({
+          ofertaId: oferta.id,
+          produtoId: oferta.produto.id,
+          produtoNome: oferta.produto.nome,
+          parceiro: oferta.parceiro.nome,
+          precoAnteriorBanco: precoSalvo,
+          precoEncontrado: null,
+          precoAnteriorEncontrado: null,
+          variacaoPercentual: null,
+          fontePreco: null,
+          urlConsultada: verificacao.urlConsultada ?? null,
+          urlFinal: confirmacaoIa.urlFinal ?? urlFinal,
+          status: 'INDISPONIVEL',
+          revisaoNecessaria: false,
+          motivo: 'A Produto IA confirmou indisponibilidade.',
+          produtoIaUtilizada,
+          verificadoEm: tentativaEm,
+        });
+        continue;
       }
 
       if (verificacao.status === 'SUCESSO') {
@@ -939,8 +983,19 @@ export class OfertasService {
             });
             continue;
           }
+
+          if (precoHeuristico) {
+            precoEncontrado = confirmacaoIa.preco;
+            precoAnteriorEncontrado = confirmacaoIa.precoAnterior;
+            fontePreco = confirmacaoIa.fontePreco ?? 'PRODUTO_IA';
+            urlFinal = confirmacaoIa.urlFinal ?? urlFinal;
+          }
         }
-      } else if (confirmacaoIa?.status === 'SUCESSO') {
+      } else if (
+        confirmacaoIa?.status === 'SUCESSO' &&
+        (verificacao.status !== 'INDISPONIVEL' ||
+          confirmacaoIa.disponivel === true)
+      ) {
         precoEncontrado = confirmacaoIa.preco;
         precoAnteriorEncontrado = confirmacaoIa.precoAnterior;
         fontePreco = confirmacaoIa.fontePreco ?? 'PRODUTO_IA';
@@ -976,35 +1031,30 @@ export class OfertasService {
           continue;
         }
       } else if (verificacao.status === 'INDISPONIVEL') {
-        if (
-          confirmacaoIa?.status === 'BLOQUEADO' ||
-          confirmacaoIa?.status === 'ERRO'
-        ) {
-          await this.prisma.oferta.update({
-            where: { id: oferta.id },
-            data: { coletadoEm: tentativaEm },
-          });
-          resultados.push({
-            ofertaId: oferta.id,
-            produtoId: oferta.produto.id,
-            produtoNome: oferta.produto.nome,
-            parceiro: oferta.parceiro.nome,
-            precoAnteriorBanco: precoSalvo,
-            precoEncontrado: null,
-            precoAnteriorEncontrado: null,
-            variacaoPercentual: null,
-            fontePreco: null,
-            urlConsultada: verificacao.urlConsultada ?? null,
-            urlFinal: verificacao.urlFinal,
-            status: 'REVISAR',
-            revisaoNecessaria: true,
-            motivo:
-              'A página indicou indisponibilidade, mas a segunda fonte não conseguiu confirmar. O status salvo não foi alterado.',
-            produtoIaUtilizada,
-            verificadoEm: tentativaEm,
-          });
-          continue;
-        }
+        await this.prisma.oferta.update({
+          where: { id: oferta.id },
+          data: { coletadoEm: tentativaEm },
+        });
+        resultados.push({
+          ofertaId: oferta.id,
+          produtoId: oferta.produto.id,
+          produtoNome: oferta.produto.nome,
+          parceiro: oferta.parceiro.nome,
+          precoAnteriorBanco: precoSalvo,
+          precoEncontrado: null,
+          precoAnteriorEncontrado: null,
+          variacaoPercentual: null,
+          fontePreco: null,
+          urlConsultada: verificacao.urlConsultada ?? null,
+          urlFinal: verificacao.urlFinal,
+          status: 'REVISAR',
+          revisaoNecessaria: true,
+          motivo:
+            'A página indicou indisponibilidade, mas a segunda fonte não conseguiu confirmar. O status salvo não foi alterado.',
+          produtoIaUtilizada,
+          verificadoEm: tentativaEm,
+        });
+        continue;
       } else {
         await this.prisma.oferta.update({
           where: { id: oferta.id },
@@ -1028,48 +1078,9 @@ export class OfertasService {
               ? 'BLOQUEADO'
               : 'ERRO',
           revisaoNecessaria: false,
-          motivo: [verificacao.motivo, confirmacaoIa?.motivo].filter(Boolean).join(' | Produto IA: '),
-          produtoIaUtilizada,
-          verificadoEm: tentativaEm,
-        });
-        continue;
-      }
-
-      if (
-        (confirmacaoIa?.status === 'SUCESSO' &&
-          confirmacaoIa.disponivel === false) ||
-        (verificacao.status === 'INDISPONIVEL' &&
-          !(
-            confirmacaoIa?.status === 'SUCESSO' &&
-            confirmacaoIa.disponivel === true
-          ))
-      ) {
-        await this.prisma.oferta.update({
-          where: { id: oferta.id },
-          data: {
-            status: StatusOferta.INDISPONIVEL,
-            verificadoEm: tentativaEm,
-            coletadoEm: tentativaEm,
-          },
-        });
-        resultados.push({
-          ofertaId: oferta.id,
-          produtoId: oferta.produto.id,
-          produtoNome: oferta.produto.nome,
-          parceiro: oferta.parceiro.nome,
-          precoAnteriorBanco: precoSalvo,
-          precoEncontrado: null,
-          precoAnteriorEncontrado: null,
-          variacaoPercentual: null,
-          fontePreco: null,
-          urlConsultada: verificacao.urlConsultada ?? null,
-          urlFinal: verificacao.urlFinal,
-          status: 'INDISPONIVEL',
-          revisaoNecessaria: false,
-          motivo:
-            'motivo' in verificacao
-              ? verificacao.motivo
-              : 'A Produto IA confirmou indisponibilidade.',
+          motivo: [verificacao.motivo, confirmacaoIa?.motivo]
+            .filter(Boolean)
+            .join(' | Produto IA: '),
           produtoIaUtilizada,
           verificadoEm: tentativaEm,
         });
@@ -1430,4 +1441,3 @@ export class OfertasService {
     };
   }
 }
-

@@ -19,6 +19,16 @@ describe('VerificadorPrecosOfertasService', () => {
   const service = new VerificadorPrecosOfertasService(produtoIa);
   const extrator = service as unknown as ExtratorTeste;
 
+  it('aceita confirmação explícita de oferta esgotada sem preço', async () => {
+    jest.mocked(produtoIa.importarUrl).mockResolvedValueOnce({
+      ofertaColetada: { disponivel: false },
+    } as Awaited<ReturnType<ProdutoIaPythonService['importarUrl']>>);
+
+    await expect(service.confirmarComProdutoIa('https://loja.com/item')).resolves.toMatchObject({
+      status: 'SUCESSO', disponivel: false, preco: null,
+    });
+  });
+
   it('extrai preço confiável de Offer em JSON-LD', () => {
     const html = `
       <html><head>
