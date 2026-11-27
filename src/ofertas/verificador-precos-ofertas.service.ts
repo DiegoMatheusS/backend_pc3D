@@ -33,12 +33,10 @@ type ResultadoConsultaPreco =
     };
 
 export type ResultadoConfirmacaoProdutoIa =
-  | {
+  | ({
       status: 'SUCESSO';
-      preco: number;
       precoAnterior: number | null;
       fontePreco: string | null;
-      disponivel: boolean | null;
       urlFinal: string | null;
       codigoMarketplace: string | null;
       identidade: {
@@ -47,7 +45,10 @@ export type ResultadoConfirmacaoProdutoIa =
         marca: string | null;
         modelo: string | null;
       };
-    }
+    } & (
+      | { disponivel: false; preco: number | null }
+      | { disponivel: true | null; preco: number }
+    ))
   | { status: 'BLOQUEADO'; motivo: string }
   | { status: 'ERRO'; motivo: string };
 
@@ -631,9 +632,11 @@ export class VerificadorPrecosOfertasService {
         continue;
       }
       const valores = Array.from(
-        trecho.slice(0, 500).matchAll(
-          /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{1,2})|[0-9]+(?:[.,][0-9]{1,2})?)/gi,
-        ),
+        trecho
+          .slice(0, 500)
+          .matchAll(
+            /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{1,2})|[0-9]+(?:[.,][0-9]{1,2})?)/gi,
+          ),
       )
         .map((item) => this.normalizarPreco(item[1]))
         .filter((item): item is number => item !== null);
@@ -955,7 +958,9 @@ export class VerificadorPrecosOfertasService {
       if (erro) return { status: 'ERRO', motivo: erro };
 
       const preco = this.normalizarPreco(oferta.preco);
-      if (preco === null) {
+      const disponivel =
+        typeof oferta.disponivel === 'boolean' ? oferta.disponivel : null;
+      if (preco === null && disponivel !== false) {
         return {
           status: 'ERRO',
           motivo: 'A Produto IA não retornou preço confiável para esta oferta.',
@@ -964,12 +969,12 @@ export class VerificadorPrecosOfertasService {
 
       return {
         status: 'SUCESSO',
-        preco,
+        ...(disponivel === false
+          ? { disponivel, preco }
+          : { disponivel, preco: preco! }),
         precoAnterior: this.normalizarPreco(oferta.precoAnterior),
         fontePreco:
           typeof oferta.fontePreco === 'string' ? oferta.fontePreco : null,
-        disponivel:
-          typeof oferta.disponivel === 'boolean' ? oferta.disponivel : null,
         urlFinal:
           typeof oferta.urlProduto === 'string'
             ? oferta.urlProduto
