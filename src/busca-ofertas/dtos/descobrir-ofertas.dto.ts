@@ -11,7 +11,8 @@ import {
   MaxLength,
 } from 'class-validator';
 export class DescobrirOfertasDto {
-  @IsIn(['MERCADO_LIVRE', 'MAGALU']) loja!: 'MERCADO_LIVRE' | 'MAGALU';
+  @IsIn(['MERCADO_LIVRE', 'MAGALU', 'AMAZON'])
+  loja!: 'MERCADO_LIVRE' | 'MAGALU' | 'AMAZON';
   @IsString() @MinLength(2) @MaxLength(300) consulta!: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limite?: number;
   @IsOptional() @IsBoolean() somentePromocoes?: boolean;

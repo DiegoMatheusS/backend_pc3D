@@ -15,7 +15,7 @@ describe('busca em outras lojas', () => {
   afterAll(() => {
     process.env = saved;
   });
-  it.each(['MERCADO_LIVRE', 'MAGALU'] as const)(
+  it.each(['MERCADO_LIVRE', 'MAGALU', 'AMAZON'] as const)(
     'encaminha %s à integração interna sem cadastrar automaticamente',
     async (loja) => {
       post.mockResolvedValue(
